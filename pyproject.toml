@@ -1,0 +1,16 @@
+[build-system]
+requires = ["setuptools>=77"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "llm-auditkit"
+version = "0.0.0"
+description = "A toolkit for auditing large language model systems."
+readme = "README.md"
+requires-python = ">=3.10"
+license = "MIT"
+license-files = ["LICENSE"]
+dependencies = []
+
+[tool.setuptools.packages.find]
+where = ["src"]
