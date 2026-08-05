@@ -1,0 +1,12 @@
+---
+config:
+  theme: mc
+---
+flowchart LR
+    A[Dataset Loading] --> B[Template Generation]
+    B --> C[Template Population]
+    C --> D[Experiment Execution]
+    D --> E[Regression Analysis]
+    B -.-> I[Shared Inference Orchestrator]
+    D -.-> I
+    I --> F[Expected Parrot EDSL]

@@ -1,0 +1,35 @@
+---
+config:
+  theme: mc
+---
+classDiagram
+    class RegressionConfig {
+        <<YAML>>
+        +data_path: Path
+        +outcome_variable: str
+        +explanatory_variable: str
+        +control_variables: List~str~
+        +fixed_effects: List~str~
+        +cluster_variables: List~str~
+        +years: List~int~
+        +output_directory: Path
+    }
+    class RegressionRunner {
+        <<R>>
+        +run(config: RegressionConfig) void
+    }
+    class RegressionCLI {
+        <<Rscript>>
+        +run(config_path: Path) void
+    }
+    class ExperimentResults {
+        <<CSV>>
+    }
+    class RegressionOutputs {
+        +regression_results: CSV
+        +plots: List~PNG~
+    }
+    RegressionCLI --> RegressionRunner : invokes
+    RegressionRunner --> RegressionConfig
+    RegressionRunner --> ExperimentResults : reads
+    RegressionRunner --> RegressionOutputs : produces

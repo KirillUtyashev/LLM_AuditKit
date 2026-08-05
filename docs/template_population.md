@@ -1,5 +1,7 @@
 # Template Population
 
+[View the template population diagram.](architecture/template_population.mmd)
+
 ## Overview
 
 The template population stage deterministically replaces placeholders in generated resume templates. No LLM calls are made during this stage.
@@ -11,7 +13,7 @@ The template population stage deterministically replaces placeholders in generat
 
 ## Output
 
-A populated `pandas.DataFrame` containing fully instantiated resume templates ready for experiment execution.
+A populated `pandas.DataFrame` containing the same configurable number `N` of fully instantiated resume templates per scenario, ready for experiment execution.
 
 ## Configuration
 

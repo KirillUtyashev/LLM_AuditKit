@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "llm-auditkit"
 version = "0.0.0"
-description = "A toolkit for auditing large language model systems."
+description = "A toolkit for auditing large language model behavior in hiring experiments."
 readme = "README.md"
 requires-python = ">=3.10"
 license = "MIT"

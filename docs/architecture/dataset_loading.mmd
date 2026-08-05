@@ -1,0 +1,37 @@
+---
+config:
+  theme: mc
+---
+classDiagram
+    class DatasetSource {
+        <<interface>>
+        +load() DataFrame
+    }
+    class LocalDatasetSource {
+        -path: Path
+        +load() DataFrame
+    }
+    class RemoteDatasetSource {
+        -config: RemoteConfig
+        +load() DataFrame
+    }
+    class RemoteConfig {
+        +backend: str
+        +url: str
+        +credential_ref: str
+    }
+    class DatasetValidator {
+        +validate(df: DataFrame) bool
+    }
+    class TemplateGenerationValidator {
+        +validate(df: DataFrame) List~str~
+    }
+    class DataFrame {
+        <<pandas>>
+    }
+    DatasetSource <|.. LocalDatasetSource
+    DatasetSource <|.. RemoteDatasetSource
+    RemoteDatasetSource --> RemoteConfig
+    DatasetSource --> DataFrame : loads
+    DatasetValidator --> DataFrame : validates core schema
+    TemplateGenerationValidator --> DataFrame : validates optional fields

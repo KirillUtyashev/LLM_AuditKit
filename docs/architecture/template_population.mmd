@@ -1,0 +1,31 @@
+---
+config:
+  theme: mc
+---
+classDiagram
+    class TemplatePopulationConfig {
+        +placeholders: Dict~str, List~str~~
+        +strategy: PopulationStrategyConfig
+    }
+    class PopulationStrategyConfig {
+        +type: str
+    }
+    class PopulationStrategy {
+        <<interface>>
+        +populate(dataset: DataFrame, config: TemplatePopulationConfig) DataFrame
+    }
+    class DefaultPopulationStrategy {
+        +populate(dataset: DataFrame, config: TemplatePopulationConfig) DataFrame
+    }
+    class TemplatePopulator {
+        -population_strategy: PopulationStrategy
+        +populate(dataset: DataFrame, config: TemplatePopulationConfig) DataFrame
+    }
+    class DataFrame {
+        <<pandas>>
+    }
+    TemplatePopulationConfig --> PopulationStrategyConfig
+    TemplatePopulator --> TemplatePopulationConfig
+    TemplatePopulator --> PopulationStrategy : uses
+    PopulationStrategy <|.. DefaultPopulationStrategy
+    TemplatePopulator --> DataFrame : populates

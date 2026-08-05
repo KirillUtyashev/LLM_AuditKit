@@ -1,0 +1,66 @@
+---
+config:
+  theme: mc
+---
+classDiagram
+    class TemplateGenerationConfig {
+        +templates_per_job_posting: int
+        +skills: SkillConfig
+        +work_experiences: int
+        +student_experiences: int
+        +education: EducationConfig
+        +inference: InferenceConfig
+        +model_config_id: str
+        +save_after_each_result: bool
+    }
+    class SkillConfig {
+        +sections: List~SkillSection~
+    }
+    class SkillSection {
+        +type: str
+        +count: int
+    }
+    class EducationConfig {
+        +degrees: List~str~
+    }
+    class TemplateGenerator {
+        -inference_orchestrator: InferenceOrchestrator
+        -template_store: TemplateStore
+        -save_lock: asyncio.Lock
+        +generate(dataset: DataFrame, config: TemplateGenerationConfig) DataFrame
+        +generate_row(row: Series, config: TemplateGenerationConfig) List~Template~
+        -build_prompt(row: Series, config: TemplateGenerationConfig) str
+    }
+    class TemplateStore {
+        -output_path: Path
+        +initialize(dataset: DataFrame, templates_per_row: int) DataFrame
+        +save_row(output_dataset: DataFrame, scenario_id: str, templates: List~Template~) void
+        +save_error(output_dataset: DataFrame, scenario_id: str, error: str) void
+        +is_complete(output_dataset: DataFrame, scenario_id: str) bool
+    }
+    class Template {
+        +content: str
+    }
+    class InferenceConfig {
+        <<shared inference>>
+    }
+    class InferenceOrchestrator {
+        <<shared inference>>
+    }
+    class InferenceResult {
+        <<shared inference>>
+    }
+    class DataFrame {
+        <<pandas>>
+    }
+    TemplateGenerationConfig --> SkillConfig
+    SkillConfig --> SkillSection
+    TemplateGenerationConfig --> EducationConfig
+    TemplateGenerationConfig --> InferenceConfig
+    TemplateGenerator --> InferenceOrchestrator : submits requests
+    TemplateGenerator --> InferenceResult : parses
+    TemplateGenerator --> TemplateGenerationConfig : uses
+    TemplateGenerator --> TemplateStore : persists results
+    TemplateGenerator --> DataFrame : processes
+    TemplateGenerator --> Template : generates
+    TemplateStore --> DataFrame : updates and persists

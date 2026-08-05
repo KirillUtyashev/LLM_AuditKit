@@ -1,0 +1,53 @@
+---
+config:
+  theme: mc
+---
+classDiagram
+    class InferenceConfig {
+        +models: Dict~str, ModelConfig~
+        +max_concurrency: int
+        +max_retries: int
+    }
+    class ModelConfig {
+        +config_id: str
+        +provider: str
+        +model: str
+        +parameters: Dict
+    }
+    class InferenceRequest {
+        +request_id: str
+        +prompt: str
+        +system_prompt: Optional~str~
+        +model_config_id: str
+        +metadata: Dict
+    }
+    class InferenceResult {
+        +request_id: str
+        +model_config_id: str
+        +content: Any
+        +metadata: Dict
+        +error: Optional~InferenceError~
+    }
+    class InferenceError {
+        +type: str
+        +message: str
+        +retryable: bool
+    }
+    class InferenceOrchestrator {
+        -adapter: EDSLAdapter
+        +stream(requests: List~InferenceRequest~, config: InferenceConfig) AsyncIterator~InferenceResult~
+    }
+    class EDSLAdapter {
+        +execute(request: InferenceRequest, model: ModelConfig) InferenceResult
+    }
+    class EDSL {
+        <<Expected Parrot>>
+    }
+    InferenceConfig --> ModelConfig
+    InferenceOrchestrator --> InferenceConfig : uses
+    InferenceOrchestrator --> InferenceRequest : schedules
+    InferenceOrchestrator --> InferenceResult : yields
+    InferenceResult --> InferenceError
+    InferenceOrchestrator --> EDSLAdapter : delegates
+    EDSLAdapter --> ModelConfig : configures
+    EDSLAdapter --> EDSL : builds and runs jobs

@@ -1,0 +1,63 @@
+---
+config:
+  theme: mc
+---
+classDiagram
+    class ExperimentConfig {
+        +dataset_path: Path
+        +personas: List~Persona~
+        +inference: InferenceConfig
+        +save_after_each_result: bool
+    }
+    class Persona {
+        +id: str
+        +name: str
+        +description: str
+    }
+    class InferenceConfig {
+        <<shared inference>>
+    }
+    class InferenceRequest {
+        <<shared inference>>
+    }
+    class InferenceResult {
+        <<shared inference>>
+    }
+    class InferenceOrchestrator {
+        <<shared inference>>
+    }
+    class ExperimentJobKey {
+        +scenario_id: str
+        +persona_id: str
+        +model_config_id: str
+    }
+    class ExperimentRunner {
+        -inference_orchestrator: InferenceOrchestrator
+        -result_store: ExperimentResultStore
+        -save_lock: asyncio.Lock
+        +run(dataset: DataFrame, config: ExperimentConfig) DataFrame
+        +run_async(dataset: DataFrame, config: ExperimentConfig) DataFrame
+        -build_requests(dataset: DataFrame, config: ExperimentConfig) List~InferenceRequest~
+    }
+    class ExperimentResultStore {
+        -output_path: Path
+        +initialize(dataset: DataFrame) DataFrame
+        +save_result(output_dataset: DataFrame, key: ExperimentJobKey, result: InferenceResult) void
+        +save_error(output_dataset: DataFrame, key: ExperimentJobKey, error: str) void
+        +is_complete(output_dataset: DataFrame, key: ExperimentJobKey) bool
+    }
+    class DataFrame {
+        <<pandas>>
+    }
+    ExperimentConfig --> Persona
+    ExperimentConfig --> InferenceConfig
+    ExperimentRunner --> ExperimentConfig
+    ExperimentRunner --> ExperimentJobKey : identifies jobs
+    ExperimentRunner --> InferenceRequest : builds
+    ExperimentRunner --> InferenceOrchestrator : submits requests
+    InferenceOrchestrator --> InferenceResult : yields
+    ExperimentRunner --> ExperimentResultStore : persists results
+    ExperimentRunner --> DataFrame : processes
+    ExperimentResultStore --> ExperimentJobKey : indexes by
+    ExperimentResultStore --> InferenceResult : stores
+    ExperimentResultStore --> DataFrame : updates and persists
