@@ -14,13 +14,20 @@ The private [paper reference repository](docs/paper_reference.md) preserves the 
 
 ## Getting Started
 
-1. Install the package in editable mode from the repository root:
+1. Create and activate a virtual environment. For example, using Python's built-in `venv` on macOS or Linux:
+
+   ```bash
+   python -m venv .venv
+   source .venv/bin/activate
+   ```
+
+2. Install the package in editable mode from the repository root:
 
    ```bash
    python -m pip install -e .
    ```
 
-2. Sync the pinned, code-only implementation used for the earlier paper:
+3. Sync the pinned, code-only implementation used for the earlier paper:
 
    ```bash
    python scripts/sync_reference_repo.py
@@ -28,4 +35,4 @@ The private [paper reference repository](docs/paper_reference.md) preserves the 
 
    This private reference requires GitHub SSH access and is checked out under the ignored `.references/` directory. Read the [paper reference guide](docs/paper_reference.md) before using it.
 
-3. Read the [package architecture](docs/architecture.md), [engineering workflow](docs/development_workflow.md), and `AGENTS.md` before beginning development.
+4. Read the [package architecture](docs/architecture.md), [engineering workflow](docs/development_workflow.md), and `AGENTS.md` before beginning development.
