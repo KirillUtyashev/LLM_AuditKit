@@ -54,7 +54,7 @@ Place code according to responsibility. Avoid catch-all utility modules and avoi
 
 The sanitized, code-only implementation used for the earlier paper is an optional historical reference. It is not part of this package and is not an architectural authority.
 
-- Run `python scripts/sync_reference_repo.py` to clone or update the pinned revision under `.references/job_parsing-code/`.
+- As an initial setup step, run `python scripts/sync_reference_repo.py` to clone or update the pinned revision under `.references/job-parsing-code/`.
 - Treat the checkout as read-only. Do not edit it or commit it to this repository.
 - Use the current architecture documentation to decide public behavior, interfaces, and package boundaries. Do not copy legacy secrets, data paths, generated outputs, or implementation defects.
 - When a design or implementation decision is materially based on the reference, record the reference repository revision and relevant file path in the issue or pull request.

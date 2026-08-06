@@ -86,8 +86,9 @@ Before editing:
 
 1. Read the major issue and all subissues currently in scope.
 2. Read `AGENTS.md` and the linked architecture documentation.
-3. Confirm the major issue is not blocked and coordinate with anyone else working on its branch.
-4. Update the local `main` branch and create the major-issue branch from it.
+3. Run `python scripts/sync_reference_repo.py` to prepare the pinned paper reference, and read `docs/paper_reference.md` before consulting its code.
+4. Confirm the major issue is not blocked and coordinate with anyone else working on its branch.
+5. Update the local `main` branch and create the major-issue branch from it.
 
 During implementation:
 
