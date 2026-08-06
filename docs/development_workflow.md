@@ -112,7 +112,23 @@ Place tests under `tests/` and organize them to reflect the corresponding packag
 
 Documentation-only, formatting, and repository-organization commits do not require artificial unit tests. Run the checks relevant to the files they change instead.
 
-No test runner is configured yet. The first implementation work that introduces executable behavior must establish the test setup and add the exact targeted-test and full-suite commands to `AGENTS.md` and this document.
+Install the package and pytest test dependencies with:
+
+```bash
+python -m pip install -e ".[test]"
+```
+
+Run a directly affected test file with:
+
+```bash
+python -m pytest tests/path/to/test_module.py
+```
+
+Run the complete test suite with:
+
+```bash
+python -m pytest
+```
 
 ## Pull Requests
 

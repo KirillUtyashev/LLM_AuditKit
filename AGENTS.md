@@ -81,6 +81,24 @@ Install the package in editable mode:
 python -m pip install -e .
 ```
 
+Install the package with test dependencies:
+
+```bash
+python -m pip install -e ".[test]"
+```
+
+Run a directly affected test file:
+
+```bash
+python -m pytest tests/path/to/test_module.py
+```
+
+Run the complete test suite:
+
+```bash
+python -m pytest
+```
+
 Sync the optional paper reference implementation:
 
 ```bash
@@ -96,7 +114,7 @@ git diff --cached --check
 
 The first command checks unstaged tracked changes; the second checks the staged snapshot. Untracked files are not covered until they are staged or validated separately.
 
-No test runner, formatter, linter, or type checker is configured yet. Do not invent commands or add tooling solely to satisfy this document. When those tools are introduced, update this section with the exact repository commands.
+No formatter, linter, or type checker is configured yet. Do not invent commands or add tooling solely to satisfy this document. When those tools are introduced, update this section with the exact repository commands.
 
 ## Definition of Done
 
