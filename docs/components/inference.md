@@ -1,6 +1,6 @@
 # Shared Inference
 
-[View the shared inference diagram.](architecture/inference.mmd)
+[View the shared inference diagram.](../architecture/inference.mmd)
 
 ## Overview
 

@@ -1,6 +1,6 @@
 # Dataset Loading
 
-[View the dataset loading diagram.](architecture/dataset_loading.mmd)
+[View the dataset loading diagram.](../architecture/dataset_loading.mmd)
 
 ## Overview
 

@@ -14,12 +14,15 @@ LLM AuditKit is a Python package for auditing LLM behavior in hiring experiments
 
 Start with [`docs/architecture.md`](docs/architecture.md). Detailed contracts are documented in:
 
-- [`docs/dataset_loading.md`](docs/dataset_loading.md)
-- [`docs/template_generation.md`](docs/template_generation.md)
-- [`docs/template_population.md`](docs/template_population.md)
-- [`docs/inference.md`](docs/inference.md)
-- [`docs/experiment_execution.md`](docs/experiment_execution.md)
-- [`docs/regression_analysis.md`](docs/regression_analysis.md)
+- [`docs/components/dataset_loading.md`](docs/components/dataset_loading.md)
+- [`docs/components/template_generation.md`](docs/components/template_generation.md)
+- [`docs/components/template_population.md`](docs/components/template_population.md)
+- [`docs/components/inference.md`](docs/components/inference.md)
+- [`docs/components/experiment_execution.md`](docs/components/experiment_execution.md)
+- [`docs/components/regression_analysis.md`](docs/components/regression_analysis.md)
+
+Follow [`docs/development_workflow.md`](docs/development_workflow.md) for issue hierarchy, branches, pull requests, review, and agent coordination.
+Read [`docs/paper_reference.md`](docs/paper_reference.md) before consulting the earlier paper implementation.
 
 Matching Mermaid diagrams live in `docs/architecture/`.
 
@@ -47,7 +50,18 @@ docs/               Architecture and behavior documentation
 
 Place code according to responsibility. Avoid catch-all utility modules and avoid exposing internal implementation details from package `__init__.py` files without an intentional public API decision.
 
+## Paper Reference Implementation
+
+The sanitized, code-only implementation used for the earlier paper is an optional historical reference. It is not part of this package and is not an architectural authority.
+
+- Run `python scripts/sync_reference_repo.py` to clone or update the pinned revision under `.references/job_parsing-code/`.
+- Treat the checkout as read-only. Do not edit it or commit it to this repository.
+- Use the current architecture documentation to decide public behavior, interfaces, and package boundaries. Do not copy legacy secrets, data paths, generated outputs, or implementation defects.
+- When a design or implementation decision is materially based on the reference, record the reference repository revision and relevant file path in the issue or pull request.
+
 ## Development Workflow
+
+All implementation work must follow [`docs/development_workflow.md`](docs/development_workflow.md). Each major pipeline issue normally receives one branch and pull request, with its subissues represented by focused commits.
 
 - Inspect the working tree before editing and preserve unrelated contributor changes.
 - Make the smallest coherent change that satisfies the task.
@@ -63,6 +77,12 @@ Install the package in editable mode:
 
 ```bash
 python -m pip install -e .
+```
+
+Sync the optional paper reference implementation:
+
+```bash
+python scripts/sync_reference_repo.py
 ```
 
 Check patches for whitespace errors:

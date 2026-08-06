@@ -1,6 +1,6 @@
 # Template Population
 
-[View the template population diagram.](architecture/template_population.mmd)
+[View the template population diagram.](../architecture/template_population.mmd)
 
 ## Overview
 

@@ -1,6 +1,6 @@
 # Regression Analysis
 
-[View the regression analysis diagram.](architecture/regression_analysis.mmd)
+[View the regression analysis diagram.](../architecture/regression_analysis.mmd)
 
 ## Overview
 

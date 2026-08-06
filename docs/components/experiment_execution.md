@@ -1,6 +1,6 @@
 # Experiment Execution
 
-[View the experiment execution diagram.](architecture/experiment_execution.mmd)
+[View the experiment execution diagram.](../architecture/experiment_execution.mmd)
 
 ## Overview
 

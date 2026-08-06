@@ -32,3 +32,6 @@ htmlcov/
 .idea/
 .vscode/
 .DS_Store
+
+# Local checkouts of private reference repositories
+.references/

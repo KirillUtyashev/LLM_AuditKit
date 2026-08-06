@@ -1,6 +1,6 @@
 # Template Generation
 
-[View the template generation diagram.](architecture/template_generation.mmd)
+[View the template generation diagram.](../architecture/template_generation.mmd)
 
 ## Overview
 
