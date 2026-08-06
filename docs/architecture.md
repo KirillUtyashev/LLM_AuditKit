@@ -1,14 +1,15 @@
 # Package Architecture
 
-LLM AuditKit models hiring experiments as five main pipeline stages:
+LLM AuditKit is organized around six primary components: five sequential pipeline stages and one cross-cutting shared inference layer.
 
 1. [Dataset loading](components/dataset_loading.md)
-2. [Template generation](components/template_generation.md)
-3. [Template population](components/template_population.md)
-4. [Experiment execution](components/experiment_execution.md)
-5. [Regression analysis](components/regression_analysis.md)
+2. [Shared inference](components/inference.md)
+3. [Template generation](components/template_generation.md)
+4. [Template population](components/template_population.md)
+5. [Experiment execution](components/experiment_execution.md)
+6. [Regression analysis](components/regression_analysis.md)
 
-Each stage has a separate detailed Mermaid diagram under [`docs/architecture/`](architecture/).
+Each component has a separate detailed Mermaid diagram under [`docs/architecture/`](architecture/). The five pipeline stages run in this sequence:
 
 ```text
 Dataset Loading
