@@ -98,6 +98,22 @@ During implementation:
 - reference the subissue number in its commit subject, for example `Add inference configuration (#42)`;
 - record newly discovered follow-up work in separate issues instead of expanding scope silently.
 
+## Testing per Commit
+
+Every commit that introduces or changes runtime behavior must add or update unit tests covering that behavior. Keep the implementation and its tests in the same subissue commit, or in the same cohesive commit series when separating them would make the history misleading.
+
+Before committing a behavior change:
+
+1. Run the new or directly affected tests.
+2. Run the complete existing test suite.
+3. Confirm the commit intended for review does not knowingly leave tests failing.
+
+Place tests under `tests/` and organize them to reflect the corresponding package areas under `src/llm_auditkit/`. Bug fixes must include a regression test that fails without the fix. Mock Expected Parrot EDSL and external model calls; unit tests must not require credentials or network access.
+
+Documentation-only, formatting, and repository-organization commits do not require artificial unit tests. Run the checks relevant to the files they change instead.
+
+No test runner is configured yet. The first implementation work that introduces executable behavior must establish the test setup and add the exact targeted-test and full-suite commands to `AGENTS.md` and this document.
+
 ## Pull Requests
 
 Open a draft pull request early when feedback or coordination would be useful. Mark it ready for review only after the acceptance criteria are satisfied and relevant checks pass.

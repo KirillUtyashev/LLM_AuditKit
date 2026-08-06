@@ -67,7 +67,9 @@ All implementation work must follow [`docs/development_workflow.md`](docs/develo
 - Make the smallest coherent change that satisfies the task.
 - Do not add runtime or development dependencies without a concrete need in the current task.
 - Never commit credentials, tokens, private dataset contents, or generated experiment outputs. Small synthetic fixtures intentionally maintained under `tests/fixtures/` are permitted.
-- Add or update tests whenever behavior is implemented or changed.
+- Every commit that implements or changes runtime behavior must add or update unit tests under `tests/` for that behavior.
+- Before committing a behavior change, run the new or affected tests and the complete existing test suite; commits intended for review must not knowingly leave tests failing.
+- Bug fixes must include a regression test. Documentation-only, formatting, and repository-organization commits do not require artificial unit tests; run the relevant checks instead.
 - Mock EDSL and external model calls in unit tests; unit tests must not require live credentials or network inference.
 - Keep commits focused and use descriptive commit messages. Do not force-push or rewrite shared history unless explicitly requested.
 
