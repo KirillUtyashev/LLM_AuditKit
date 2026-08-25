@@ -17,12 +17,14 @@ The script reads [`references/job_parsing-code.json`](../references/job_parsing-
 The current reference is:
 
 - Repository: [`KirillUtyashev/job-parsing-code`](https://github.com/KirillUtyashev/job-parsing-code)
-- Revision: `4bd49fa2632494c600a973e6125d56c614efd7c3`
+- Revision: `588c2fba02d76f1c6d45e22f38a5b6875407bdfa`
 - Local path: `.references/job_parsing-code/`
 
 ## How to Use It
 
 Use the reference to answer questions such as how the paper scripts assembled prompts, transformed job data, launched model calls, or organized analysis. Then translate the underlying requirement into the contracts documented under `docs/`.
+
+The paper's historical output-cleaning, regression, and plotting workflow is in `analysis/paper_results_analysis.R` within the reference checkout.
 
 Do not treat legacy module boundaries, hard-coded paths, dependencies, or operational shortcuts as current design decisions. In particular:
 
