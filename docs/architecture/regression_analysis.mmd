@@ -3,33 +3,125 @@ config:
   theme: mc
 ---
 classDiagram
+    class PreparationConfig {
+        <<YAML>>
+        +input_paths: List~Path~
+        +output_path: Path
+        +top_share: float = 0.08
+        +probability_threshold: float = 0.99
+        +ranking_group_variables: List~str~
+        +scenario_covariates: List~str~
+        +candidate_covariates: List~str~
+    }
     class RegressionConfig {
         <<YAML>>
         +data_path: Path
+        +dataset_id: str
+        +model_id: str
         +outcome_variable: str
-        +explanatory_variable: str
+        +explanatory_variables: List~str~
         +control_variables: List~str~
         +fixed_effects: List~str~
         +cluster_variables: List~str~
-        +years: List~int~
+        +estimation_group_variables: List~str~ = []
         +output_directory: Path
     }
-    class RegressionRunner {
-        <<R>>
-        +run(config: RegressionConfig) void
+    class RenderConfig {
+        <<YAML>>
+        +results_paths: List~Path~
+        +output_path: Path
+        +term: str
+        +confidence_level: float
+        +period_variable: str
+        +series_variable: Optional~str~
+        +panel_variable: str
+        +outcome_by_panel: Map
+        +period_order: List
+        +series_order: List
+        +panel_order: List
+        +panel_labels: Map
+        +x_label: str
+        +y_label: str
+        +y_limits: List~float~
+        +y_break_interval: float
+        +significance_level: float
+        +panel_columns: int
+        +width: float
+        +height: float
+        +dpi: int
+    }
+    class PreparationCLI {
+        <<Rscript>>
+        +run(config_path: Path) void
     }
     class RegressionCLI {
         <<Rscript>>
         +run(config_path: Path) void
     }
-    class ExperimentResults {
+    class RenderCLI {
+        <<Rscript>>
+        +run(config_path: Path) void
+    }
+    class RegressionDataPreparation {
+        <<R>>
+        +prepare(config: PreparationConfig) RegressionReadyData
+    }
+    class FixedEffectsEstimator {
+        <<R>>
+        +estimate(config: RegressionConfig) RegressionResults
+    }
+    class PaperStyleRenderer {
+        <<R>>
+        +renderer_packages: ggplot2_patchwork
+        +render(config: RenderConfig) PaperPlot
+    }
+    class RawExperimentResults {
         <<CSV>>
+        +row_grain: experiment_job_key
+        +candidate_fields: stable
+        +probability_semantics: emitted_answer
     }
-    class RegressionOutputs {
-        +regression_results: CSV
-        +plots: List~PNG~
+    class RegressionReadyData {
+        <<CSV>>
+        +row_grain: candidate
+        +pick: int
+        +pick_top: int
+        +pick_threshold: int
+        +preparation_settings: repeated
     }
-    RegressionCLI --> RegressionRunner : invokes
-    RegressionRunner --> RegressionConfig
-    RegressionRunner --> ExperimentResults : reads
-    RegressionRunner --> RegressionOutputs : produces
+    class RegressionResults {
+        <<CSV>>
+        +row_grain: coefficient_interval
+        +estimator: fixest_feols
+        +inference_contract_id: str
+        +outcome_variable: str
+        +estimate: float
+        +std_error: float
+        +n_input: int
+        +n_complete: int
+        +n_used: int
+        +n_missing_dropped: int
+        +n_estimator_dropped: int
+        +confidence_level: float
+        +conf_low: float
+        +conf_high: float
+        +preparation_provenance: repeated
+    }
+    class PaperPlot {
+        <<PNG>>
+    }
+
+    PreparationCLI --> PreparationConfig : loads
+    PreparationCLI --> RegressionDataPreparation : invokes
+    RegressionDataPreparation --> RawExperimentResults : reads
+    RegressionDataPreparation --> RegressionReadyData : writes
+
+    RegressionCLI --> RegressionConfig : loads
+    RegressionCLI --> FixedEffectsEstimator : invokes
+    FixedEffectsEstimator --> RegressionReadyData : reads exactly one
+    FixedEffectsEstimator --> RegressionResults : writes
+
+    RenderCLI --> RenderConfig : loads
+    RenderCLI --> PaperStyleRenderer : invokes
+    PaperStyleRenderer --> RegressionResults : reads one or more
+    PaperStyleRenderer --> PaperPlot : writes

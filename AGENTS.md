@@ -35,9 +35,9 @@ When an architectural contract represented in a Mermaid diagram changes, update 
 - Keep Expected Parrot EDSL-specific types and behavior behind the inference adapter. Domain packages must use generic inference requests, results, and configuration rather than importing EDSL concepts directly.
 - The shared inference layer owns model configuration, concurrency, retries, execution, and normalized outcomes. Calling stages own domain prompts, response parsing, checkpoint policy, and output storage.
 - Template counts are configurable as `N`; do not hard-code four resumes or templates.
-- Resume and completion behavior must use stable scenario, persona, model-configuration, and job identifiers. Never use a DataFrame row index as durable identity.
+- Resume and completion behavior must use stable scenario, persona, model-configuration, job, and candidate/resume identifiers. Never use a DataFrame row index or candidate position as durable identity.
 - Keep `save_after_each_result` stage-specific and configurable. Incremental file writes must use an atomic replacement strategy.
-- The Python-to-R boundary uses CSV experiment outputs and YAML regression configuration. R analysis is invoked through an `Rscript` command-line entry point.
+- The Python-to-R boundary uses raw experiment CSVs. Separate YAML-configured `Rscript` entry points prepare a regression-ready CSV, estimate one inspected dataset into plot-ready numerical results, and render figures independently from those saved results.
 
 ## Repository Layout
 

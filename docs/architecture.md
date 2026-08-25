@@ -37,4 +37,9 @@ Experiment Execution ┘
 
 The inference layer owns model configuration, concurrency, retries, EDSL execution, and normalized inference results. Pipeline stages own domain-specific prompt construction, response parsing, checkpointing, and output storage.
 
-Experiment results cross the Python-to-R boundary as CSV files. Regression configuration is provided as YAML, and the R analysis produces both raw regression results and plots.
+Experiment results cross the Python-to-R boundary as raw CSV files. Within the
+R-based regression-analysis stage, a YAML-configured preparation command writes
+a candidate-level regression-ready CSV for researcher inspection. A separate
+YAML-configured estimator accepts one inspected dataset and writes plot-ready
+numerical results, and an independent renderer produces PNG figures from those
+saved results. No Python-to-R in-memory object exchange is required.
