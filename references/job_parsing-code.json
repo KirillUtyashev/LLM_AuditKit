@@ -1,6 +1,6 @@
 {
   "name": "job-parsing-code",
   "repository": "git@github.com:KirillUtyashev/job-parsing-code.git",
-  "revision": "4bd49fa2632494c600a973e6125d56c614efd7c3",
+  "revision": "c9391854ea55806ec252625cd2f48fb9edb156cd",
   "checkout_path": ".references/job_parsing-code"
 }
