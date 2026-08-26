@@ -38,6 +38,27 @@ source(
   ),
   local = TRUE
 )
+source(
+  file.path(REGRESSION_PROJECT_ROOT, "R", "regression", "regression_config.R"),
+  local = TRUE
+)
+source(
+  file.path(REGRESSION_PROJECT_ROOT, "R", "regression", "regression_data.R"),
+  local = TRUE
+)
+source(
+  file.path(REGRESSION_PROJECT_ROOT, "R", "regression", "estimation.R"),
+  local = TRUE
+)
+source(
+  file.path(
+    REGRESSION_PROJECT_ROOT,
+    "R",
+    "regression",
+    "regression_runner.R"
+  ),
+  local = TRUE
+)
 
 regression_fixture <- function(...) {
   file.path(

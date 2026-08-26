@@ -8,7 +8,8 @@ LLM AuditKit audits LLM behavior in hiring experiments through a Python
 pipeline and an accompanying R regression stage. The repository remains
 architecture-first overall: the Python package is largely a scaffold, while
 the regression stage has a locked R environment plus a complete
-raw-to-regression-ready preparation runner.
+raw-to-regression-ready preparation runner and a separate fixed-effects
+estimation runner that writes plot-ready numerical results.
 
 - Do not assume documented components are already implemented.
 - Do not add functionality, dependencies, interfaces, or placeholder modules outside the scope of the current task.
@@ -120,12 +121,20 @@ Run the complete or focused R test suite:
 Rscript tests/r/run_tests.R
 Rscript -e 'testthat::test_file("tests/r/test-preparation-config.R", reporter = "summary")'
 Rscript -e 'testthat::test_file("tests/r/test-preparation.R", reporter = "summary")'
+Rscript -e 'testthat::test_file("tests/r/test-regression-config.R", reporter = "summary")'
+Rscript -e 'testthat::test_file("tests/r/test-regression.R", reporter = "summary")'
 ```
 
 Prepare configured raw experiment results:
 
 ```bash
 Rscript scripts/prepare_regression_data.R --config path/to/preparation.yaml
+```
+
+Estimate one inspected regression-ready dataset:
+
+```bash
+Rscript scripts/run_regression.R --config path/to/regression.yaml
 ```
 
 Sync the optional paper reference implementation:

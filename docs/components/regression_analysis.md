@@ -27,8 +27,10 @@ This page defines the contracts established in subissue #19. Subissue #20 adds
 the locked R environment, preparation configuration validation, deterministic
 raw job-row loading, and the initial R test scaffold. Subissue #21 completes
 dynamic candidate preparation, selection outcomes, status reporting, and the
-preparation CLI. Estimation and rendering remain assigned to later regression
-subissues, so not all commands below are available yet.
+preparation CLI. Subissue #22 adds regression-configuration and prepared-data
+validation, grouped `fixest::feols` estimation, locked inference, atomic tidy
+result export, and the estimation CLI. Paper-style rendering remains assigned
+to subissue #23.
 
 ## Shared Configuration Rules
 
@@ -312,10 +314,17 @@ output_directory: outputs/regression/black_callback
 | `estimation_group_variables` | no | Ordered list of distinct columns; default `[]`, which estimates once on the full supplied dataset. An explicit `[]` has the same behavior. |
 | `output_directory` | yes | Directory receiving `regression_results.csv`. |
 
+The loader accepts exactly these ten keys, with only
+`estimation_group_variables` optional. The runner computes
+`<output_directory>/regression_results.csv`, rejects a collision with
+`data_path`, and replaces the result atomically only after successful
+validation and estimation.
+
 Variable-name fields contain literal CSV column names matching
-`[A-Za-z][A-Za-z0-9_]*`, not formula fragments. The outcome cannot also appear
-on the right-hand side, and explanatory and control lists cannot overlap. A
-fixed-effect variable may also be a clustering variable. Categorical predictors
+`[A-Za-z][A-Za-z0-9_]*` that are also syntactically valid R names, not formula
+fragments or reserved words. The outcome cannot also appear on the right-hand
+side, and explanatory and control lists cannot overlap. A fixed-effect
+variable may also be a clustering variable. Categorical predictors
 must be pre-encoded as one or more numeric/logical indicator columns in the
 inspected input, and each indicator must be listed explicitly. Indicator
 interactions and other transformations must likewise be precomputed. Character
@@ -367,21 +376,25 @@ The count identities are `n_missing_dropped = n_input - n_complete`,
 `n_dropped = n_input - n_used`.
 
 Coefficient tables, p-values, and confidence intervals use the same configured
-covariance estimator. Confidence intervals are obtained from `fixest::confint`
-at levels `0.90`, `0.95`, and `0.99`. Inference uses the locked `fixest::ssc()`
-defaults: `adj = TRUE`, `fixef.K = "nested"`, `cluster.adj = TRUE`,
-`cluster.df = "min"`, `t.df = "min"`, and `fixef.force_exact = FALSE`.
-Plotting never recomputes intervals.
+covariance estimator. Confidence intervals are obtained through
+`stats::confint()`'s `fixest` method at levels `0.90`, `0.95`, and `0.99`.
+Inference explicitly locks the canonical `fixest` 0.14.2 small-sample settings:
+`K.adj = TRUE`, `K.fixef = "nonnested"`, `K.exact = FALSE`, `G.adj = TRUE`,
+`G.df = "min"`, and `t.df = "min"`. Fixed-effect singleton and perfect-fit
+observations use `fixef.rm = "perfect_fit"`; clustered covariance matrices use
+`vcov_fix = TRUE`. Any estimator or inference warning is an error instead of a
+silently altered fit. Plotting never recomputes intervals.
 
 ### Plot-Ready Results Contract
 
 `regression_results.csv` is tidy and long: one row per model fit, estimable
-coefficient, and confidence level. It contains these stable columns:
+coefficient, and confidence level. Its exact ordered prefix contains the 32
+stable columns below, followed by the configured estimation-group columns:
 
 | Column | Meaning |
 | --- | --- |
 | `dataset_id`, `model_id` | Researcher-defined data and specification identities. |
-| `estimator`, `estimator_version`, `inference_contract_id` | `fixest::feols`, the locked `fixest` package version, and `fixest_feols_ssc_v1`. |
+| `estimator`, `estimator_version`, `inference_contract_id` | `fixest::feols`, `0.14.2` under the current lock, and `fixest_feols_ssc_v1`. |
 | `outcome_variable`, `term` | Dependent variable and estimated coefficient name. |
 | `estimate`, `std_error`, `statistic`, `p_value` | Numerical coefficient statistics from the configured covariance estimator. |
 | `n_input`, `n_complete`, `n_used` | Group rows, complete model-variable rows, and observations used by `fixest`. |
@@ -531,14 +544,15 @@ styling is not used as a substitute for the numerical result artifact.
 
 “Paper-style” refers to the historical visual grammar and panel arrangement,
 not a promise of numerically identical intervals. The authoritative result
-contract uses `fixest::confint` with locked finite-sample settings, whereas the
-historical script drew only 95% normal intervals as `estimate +/- 1.96 * SE`.
+contract uses `stats::confint` dispatching to `fixest` with locked finite-sample
+settings, whereas the historical script drew only 95% normal intervals as
+`estimate +/- 1.96 * SE`.
 
 ## Invocation
 
-The three entry points are intentionally separate. The preparation command is
-implemented; estimation and rendering commands become available in their
-respective subissues.
+The three entry points are intentionally separate. The preparation and
+estimation commands are implemented; rendering becomes available in its own
+subissue.
 
 ```bash
 Rscript scripts/prepare_regression_data.R --config path/to/preparation.yaml
@@ -572,7 +586,7 @@ Direct dependencies are intentionally narrow:
 | Package | Role |
 | --- | --- |
 | `yaml` | Load configuration contracts; locked beginning with subissue #20. |
-| `fixest` | Estimate fixed-effects models and their inference; added with estimation work. |
+| `fixest` | Estimate fixed-effects models and their inference; locked at 0.14.2 beginning with subissue #22. |
 | `ggplot2` | Build regression figures; added with rendering work. |
 | `patchwork` | Reproduce the paper's panel-specific margins and 2-by-2 assembly; added with rendering work. |
 | `testthat` | Run R tests; locked beginning with subissue #20. |
@@ -598,14 +612,18 @@ The full and focused R test commands are:
 Rscript tests/r/run_tests.R
 Rscript -e 'testthat::test_file("tests/r/test-preparation-config.R", reporter = "summary")'
 Rscript -e 'testthat::test_file("tests/r/test-preparation.R", reporter = "summary")'
+Rscript -e 'testthat::test_file("tests/r/test-regression-config.R", reporter = "summary")'
+Rscript -e 'testthat::test_file("tests/r/test-regression.R", reporter = "summary")'
 ```
 
 Subissue #20 introduces the `renv` scaffold, preparation-config and raw-loader
 modules, test runner, and public synthetic fixtures. Dependencies for
 estimation and rendering land only when those modules use them. Subissue #21
 adds the dependency-free base-R preparation transformation and CLI plus public
-multi-city, multi-year, dynamic-`N` fixtures. Existing Python checks continue
-to run with `python -m pytest`.
+multi-city, multi-year, dynamic-`N` fixtures. Subissue #22 adds the locked
+`fixest` estimator, strict regression-ready input validation, grouped
+estimation, tidy 90/95/99% interval export, and the atomic estimation CLI.
+Existing Python checks continue to run with `python -m pytest`.
 
 ## Artifact Example
 
@@ -647,7 +665,8 @@ The outcome contract also deliberately omits the historical global `pick_40`,
 renames `pick_99` to configurable `pick_threshold`, and treats a missing
 positive-answer probability as invalid instead of propagating `NA`. Historical
 file boundaries and the 2000--2002 period collapse become explicit data/strata
-choices. Finally, modern intervals come from `fixest::confint`, colored series
+choices. Finally, modern intervals come from `stats::confint` dispatching to
+`fixest`, colored series
 use deterministic fixed dodging rather than confidence-interval-dependent
 offsets, and y limits use coordinate zoom rather than dropping out-of-range
 rows. These choices preserve the requested paper-style appearance while making

@@ -6,8 +6,9 @@ as reproducible R entry points alongside it.
 
 The project is under active development. Most Python components remain
 architecture-first; the regression stage currently includes its locked R
-environment and a complete YAML-driven raw-to-regression-ready preparation
-runner.
+environment, a complete YAML-driven raw-to-regression-ready preparation
+runner, and a separate fixed-effects estimation runner that writes plot-ready
+numerical results.
 
 ## Documentation
 
@@ -55,3 +56,13 @@ Prepare raw experiment CSVs with:
 ```bash
 Rscript scripts/prepare_regression_data.R --config path/to/preparation.yaml
 ```
+
+After inspecting and, if desired, slicing that regression-ready CSV, estimate
+the configured model with:
+
+```bash
+Rscript scripts/run_regression.R --config path/to/regression.yaml
+```
+
+The regression YAML contract and tidy result schema are documented in the
+[regression analysis guide](docs/components/regression_analysis.md#2-fixed-effects-estimation).
