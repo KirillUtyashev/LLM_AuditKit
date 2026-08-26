@@ -1,5 +1,6 @@
 """Shared, domain-neutral LLM inference interfaces."""
 
+from .adapter import InferenceAdapter
 from .exceptions import (
     InferenceBatchError,
     InferenceConfigurationError,
@@ -21,6 +22,7 @@ from .models import (
 )
 
 __all__ = [
+    "InferenceAdapter",
     "InferenceBatchError",
     "InferenceBatchPreview",
     "InferenceBatchResult",

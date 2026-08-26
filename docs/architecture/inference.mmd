@@ -48,16 +48,22 @@ classDiagram
         +message: str
     }
     class InferenceOrchestrator {
-        -adapter: EDSLAdapter
+        -adapter: InferenceAdapter
         +preview_batch(requests: List~InferenceRequest~, config: InferenceConfig, batch_number: int) InferenceBatchPreview
         +run_batches(requests: List~InferenceRequest~, config: InferenceConfig) Iterator~InferenceBatchResult~
         +run_batches_async(requests: List~InferenceRequest~, config: InferenceConfig) AsyncIterator~InferenceBatchResult~
     }
+    class InferenceAdapter {
+        <<Protocol>>
+        +render_batch(requests: List~InferenceRequest~, models: Dict~str, ModelConfig~) List~RenderedPrompt~
+        +execute_batch(requests: List~InferenceRequest~, models: Dict~str, ModelConfig~) List~InferenceResult~
+        +execute_batch_async(requests: List~InferenceRequest~, models: Dict~str, ModelConfig~) List~InferenceResult~
+    }
     class EDSLAdapter {
         -group_requests(requests: List~InferenceRequest~)
-        +render_batch(requests: List~InferenceRequest~, models: List~ModelConfig~) List~RenderedPrompt~
-        +execute_batch(requests: List~InferenceRequest~, models: List~ModelConfig~) List~InferenceResult~
-        +execute_batch_async(requests: List~InferenceRequest~, models: List~ModelConfig~) List~InferenceResult~
+        +render_batch(requests: List~InferenceRequest~, models: Dict~str, ModelConfig~) List~RenderedPrompt~
+        +execute_batch(requests: List~InferenceRequest~, models: Dict~str, ModelConfig~) List~InferenceResult~
+        +execute_batch_async(requests: List~InferenceRequest~, models: Dict~str, ModelConfig~) List~InferenceResult~
     }
     class EDSL {
         <<Expected Parrot>>
@@ -72,6 +78,7 @@ classDiagram
     InferenceOrchestrator --> InferenceBatchResult : yields sequentially
     InferenceBatchResult --> InferenceResult
     InferenceResult --> InferenceError
-    InferenceOrchestrator --> EDSLAdapter : delegates batches
+    InferenceOrchestrator --> InferenceAdapter : delegates batches
+    EDSLAdapter ..|> InferenceAdapter : implements
     EDSLAdapter --> ModelConfig : configures
     EDSLAdapter --> EDSL : submits sequential model and system-prompt groups

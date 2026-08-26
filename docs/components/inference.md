@@ -101,7 +101,9 @@ The orchestrator does not begin the next batch until the caller requests the nex
 
 ## EDSL Boundary
 
-`EDSLAdapter` translates a generic request batch and model definitions into Expected Parrot questions, surveys, agents, models, scenarios, and jobs. Each adapter-created job is intentionally limited to one model configuration and one system prompt while scenarios supply the request-specific user prompts and stable request IDs. It exposes matching synchronous and asynchronous batch methods that call EDSL's native `run` and `run_async` methods for each group and convert EDSL responses and terminal failures into the same generic results.
+`InferenceAdapter` is the domain-neutral protocol consumed by `InferenceOrchestrator`. It accepts only generic requests and a model-configuration lookup and returns only generic rendered prompts or normalized results. This protocol is also the test seam for exercising orchestration without importing EDSL or making network calls.
+
+`EDSLAdapter` implements that protocol by translating a generic request batch and model definitions into Expected Parrot questions, surveys, agents, models, scenarios, and jobs. Each adapter-created job is intentionally limited to one model configuration and one system prompt while scenarios supply the request-specific user prompts and stable request IDs. It exposes matching synchronous and asynchronous batch methods that call EDSL's native `run` and `run_async` methods for each group and convert EDSL responses and terminal failures into the same generic results.
 
 The adapter must preserve the submitted request set without accidentally creating additional scenario, persona, or model combinations. Request IDs are carried through the EDSL job so returned outcomes can be associated without relying on EDSL list positions.
 
