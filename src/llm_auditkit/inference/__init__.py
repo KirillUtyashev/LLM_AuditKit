@@ -8,6 +8,7 @@ from .exceptions import (
     InferenceRequestValidationError,
     InferenceValidationError,
 )
+from .edsl_adapter import EDSLAdapter
 from .models import (
     InferenceBatchPreview,
     InferenceBatchResult,
@@ -23,6 +24,7 @@ from .models import (
 from .orchestrator import InferenceOrchestrator
 
 __all__ = [
+    "EDSLAdapter",
     "InferenceAdapter",
     "InferenceBatchError",
     "InferenceBatchPreview",

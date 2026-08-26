@@ -20,7 +20,7 @@ Callers submit domain-neutral `InferenceRequest` objects containing:
 
 A request ID must be unique within one inference run and stable when the same logical request is resumed. Calling stages must derive it from durable domain identifiers rather than DataFrame row positions. If prompt-defining inputs or the selected model configuration change in a way that invalidates an existing result, the calling stage must also invalidate the corresponding completion identity.
 
-`prompt` is always a string. `system_prompt=None` means that the caller supplies no explicit system instructions. A non-null system prompt is passed through the standard public EDSL agent and system-prompt mechanism. EDSL's rendered prompt behavior is authoritative; LLM AuditKit does not suppress or reconstruct EDSL's normal prompt handling.
+`prompt` is always a string. `system_prompt=None` means that the caller supplies no explicit system instructions and the adapter creates an empty EDSL `Agent`. A non-null system prompt is supplied as the standard EDSL agent `persona` trait. EDSL's default agent instruction and rendered prompt behavior are authoritative; LLM AuditKit does not customize the traits-presentation template, suppress EDSL instructions, or reconstruct EDSL's prompt.
 
 Template generation constructs requests from job-posting rows. Experiment execution constructs requests from populated scenarios and personas.
 
@@ -107,7 +107,7 @@ The orchestrator does not begin the next batch until the caller requests the nex
 
 The adapter must preserve the submitted request set without accidentally creating additional scenario, persona, or model combinations. Request IDs are carried through the EDSL job so returned outcomes can be associated without relying on EDSL list positions.
 
-No other package component depends directly on EDSL-specific classes. The implementation must declare and test a supported EDSL version range rather than relying on an arbitrary installed version.
+No other package component depends directly on EDSL-specific classes. The package supports `edsl>=1.0.8,<1.1`; compatibility outside that range is not implied.
 
 ## Results and Failures
 

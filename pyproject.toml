@@ -10,7 +10,7 @@ readme = "README.md"
 requires-python = ">=3.10"
 license = "MIT"
 license-files = ["LICENSE"]
-dependencies = []
+dependencies = ["edsl>=1.0.8,<1.1"]
 
 [project.optional-dependencies]
 test = ["pytest>=8"]

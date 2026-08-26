@@ -43,7 +43,7 @@ Each `Persona` contains:
 - `name`;
 - `description`.
 
-The persona description is supplied through the request's system prompt and mapped through the standard public EDSL `Agent` mechanism. EDSL owns its normal agent and system-prompt rendering behavior. A batch preview exposes the effective prompt rendered by EDSL without performing inference.
+The persona description is supplied through the request's system prompt and mapped to the standard EDSL `Agent` `persona` trait. EDSL owns its default agent instruction and normal system-prompt rendering behavior. A batch preview exposes the effective prompt rendered by EDSL without performing inference.
 
 ## Inference Configuration
 
