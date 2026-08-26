@@ -20,6 +20,7 @@ from .models import (
     ModelConfig,
     RenderedPrompt,
 )
+from .orchestrator import InferenceOrchestrator
 
 __all__ = [
     "InferenceAdapter",
@@ -30,6 +31,7 @@ __all__ = [
     "InferenceConfigurationError",
     "InferenceError",
     "InferenceException",
+    "InferenceOrchestrator",
     "InferenceRequest",
     "InferenceRequestValidationError",
     "InferenceResult",
