@@ -23,9 +23,12 @@ desired sample slice, and then pass exactly one regression-ready CSV to the
 estimator. The estimator does not parse raw experiment output or provide a
 sample-filtering language.
 
-This page defines the contracts for subissue #19. The R entry points and test
-scaffold are implemented by later regression subissues; the commands documented
-below are not available on `main` yet.
+This page defines the contracts established in subissue #19. Subissue #20 adds
+the locked R environment, preparation configuration validation, deterministic
+raw job-row loading, and the initial R test scaffold. Candidate reshaping,
+selection outcomes, production CLIs, estimation, and rendering remain assigned
+to later regression subissues, so the planned commands below are not all
+available yet.
 
 ## Shared Configuration Rules
 
@@ -115,9 +118,15 @@ candidate covariates must agree for every repeated
 `(scenario_id, candidate_id)` pair. Conflicts are errors rather than being
 resolved by input order.
 
-The paper-reference raw sample predates this stable schema. It may be used with
-a documented temporary mapping during the private smoke test, but it does not
-define the production input contract and is not a test fixture.
+The pinned paper-reference sample
+`.references/job_parsing-code/samples/edsl_raw_results_sample.csv` predates this
+stable schema. It uses legacy fields such as `scenario.*`, `agent.*`, `pick1`,
+and `logprob1`, assumes four candidate positions, and lacks the modern stable
+IDs, result status, candidate count, and candidate IDs. The production loader
+therefore rejects it with missing-field diagnostics; it is a private manual
+compatibility reference, not a public fixture or a schema authority. Any later
+end-to-end smoke-test mapping must be explicit and documented rather than
+silently embedded in the production loader.
 
 ### `PreparationConfig`
 
@@ -145,9 +154,16 @@ candidate_covariates:
 | `output_path` | yes | One CSV path distinct from every input path. |
 | `top_share` | no | Fraction in `(0, 1]`; default `0.08`. |
 | `probability_threshold` | no | Probability in `(0, 1]`; default `0.99`. |
-| `ranking_group_variables` | no | Nonempty list of distinct core or configured covariate names; default `[city, year]`. |
+| `ranking_group_variables` | no | Nonempty list of distinct pre-ranking fields: `source_file`, `scenario_id`, `persona_id`, `model_config_id`, `candidate_id`, `candidate_index`, `candidate_count`, `city`, `year`, or configured covariates; default `[city, year]`. |
 | `scenario_covariates` | no | Ordered allowlist of distinct scenario-level scalar columns; default `[]`. |
 | `candidate_covariates` | no | Ordered allowlist of distinct candidate-field suffixes; default `[]`. |
+
+The #20 functions `load_preparation_config()` and
+`load_experiment_results()` validate this configuration, read raw CSV values
+as character data, combine job rows in configured file and source-row order,
+preserve every result status, attach lexical `source_file` provenance, and
+reject duplicate stable job keys. Filtering, candidate-level reshaping,
+ranking, derived outcomes, and output writing belong to #21.
 
 Configured inputs are combined deterministically. `source_file` stores the
 lexically normalized path string from `input_paths`, using `/` separators and
@@ -530,21 +546,20 @@ tests/r/            testthat unit and end-to-end tests
 renv.lock           Authoritative R package environment
 ```
 
-R 4.4.2 is the initial implementation target. It becomes a verified project
-environment when the scaffold and tests land in subissue #20. `renv` manages R
-packages but does not install R itself or operating-system libraries. The
-initial bootstrap target is `renv` 1.2.4; `renv/activate.R` and `renv.lock` will
-record the project version so later restores do not float with CRAN.
+R 4.4.2 is the initial implementation target and is recorded in the project
+lockfile. `renv` manages R packages but does not install R itself or
+operating-system libraries. The committed bootstrap uses `renv` 1.2.4, so
+later restores do not float with CRAN.
 
-Planned direct dependencies are intentionally narrow:
+Direct dependencies are intentionally narrow:
 
 | Package | Role |
 | --- | --- |
-| `yaml` | Load the three configuration contracts. |
-| `fixest` | Estimate fixed-effects models and their inference. |
-| `ggplot2` | Build regression figures. |
-| `patchwork` | Reproduce the paper's panel-specific margins and 2-by-2 assembly. |
-| `testthat` | Run R tests; development/test only. |
+| `yaml` | Load configuration contracts; locked beginning with subissue #20. |
+| `fixest` | Estimate fixed-effects models and their inference; added with estimation work. |
+| `ggplot2` | Build regression figures; added with rendering work. |
+| `patchwork` | Reproduce the paper's panel-specific margins and 2-by-2 assembly; added with rendering work. |
+| `testthat` | Run R tests; locked beginning with subissue #20. |
 
 Base R handles CSV I/O and transformation unless implementation demonstrates a
 concrete need for another dependency. Runtime commits add a package only when
@@ -561,17 +576,17 @@ Rscript -e 'renv::restore(prompt = FALSE)'
 Rscript -e 'status <- renv::status(); if (!isTRUE(status$synchronized)) quit(status = 1)'
 ```
 
-The full and focused R test commands will be:
+The full and focused R test commands are:
 
 ```bash
 Rscript tests/r/run_tests.R
 Rscript -e 'testthat::test_file("tests/r/test-preparation-config.R", reporter = "summary")'
 ```
 
-The actual `renv` scaffold, R modules, test runner, and fixtures are introduced
-with runtime subissue #20 so this contract-only subissue does not add unused
-dependencies or placeholder code. Existing Python checks continue to run with
-`python -m pytest`.
+Subissue #20 introduces the `renv` scaffold, preparation-config and raw-loader
+modules, test runner, and public synthetic fixtures. Dependencies for
+estimation and rendering land only when those modules use them. Existing
+Python checks continue to run with `python -m pytest`.
 
 ## Artifact Example
 

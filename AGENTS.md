@@ -4,7 +4,11 @@ This file contains repository-wide guidance for human contributors and coding ag
 
 ## Project Status and Scope
 
-LLM AuditKit is a Python package for auditing LLM behavior in hiring experiments. The repository is currently architecture-first: its documentation describes planned behavior, while the Python package remains a scaffold unless a task explicitly requests implementation.
+LLM AuditKit audits LLM behavior in hiring experiments through a Python
+pipeline and an accompanying R regression stage. The repository remains
+architecture-first overall: the Python package is largely a scaffold, while
+the regression stage has a locked R environment plus configuration and raw
+experiment-result loading.
 
 - Do not assume documented components are already implemented.
 - Do not add functionality, dependencies, interfaces, or placeholder modules outside the scope of the current task.
@@ -43,9 +47,12 @@ When an architectural contract represented in a Mermaid diagram changes, update 
 
 ```text
 src/llm_auditkit/   Python package
+R/regression/       R regression modules
 tests/              Automated tests
+tests/r/            R testthat suite and public synthetic fixtures
 examples/           User-facing examples
 docs/               Architecture and behavior documentation
+renv.lock            Authoritative R package environment
 ```
 
 Place code according to responsibility. Avoid catch-all utility modules and avoid exposing internal implementation details from package `__init__.py` files without an intentional public API decision.
@@ -54,7 +61,7 @@ Place code according to responsibility. Avoid catch-all utility modules and avoi
 
 The sanitized, code-only implementation used for the earlier paper is an optional historical reference. It is not part of this package and is not an architectural authority.
 
-- As an initial setup step, run `python scripts/sync_reference_repo.py` to clone or update the pinned revision under `.references/job-parsing-code/`.
+- As an initial setup step, run `python scripts/sync_reference_repo.py` to clone or update the pinned revision under `.references/job_parsing-code/`.
 - Treat the checkout as read-only. Do not edit it or commit it to this repository.
 - Use the current architecture documentation to decide public behavior, interfaces, and package boundaries. Do not copy legacy secrets, data paths, generated outputs, or implementation defects.
 - When a design or implementation decision is materially based on the reference, record the reference repository revision and relevant file path in the issue or pull request.
@@ -97,6 +104,20 @@ Run the complete test suite:
 
 ```bash
 python -m pytest
+```
+
+Restore and verify the locked R environment:
+
+```bash
+Rscript -e 'renv::restore(prompt = FALSE)'
+Rscript -e 'status <- renv::status(); if (!isTRUE(status$synchronized)) quit(status = 1)'
+```
+
+Run the complete or focused R test suite:
+
+```bash
+Rscript tests/r/run_tests.R
+Rscript -e 'testthat::test_file("tests/r/test-preparation-config.R", reporter = "summary")'
 ```
 
 Sync the optional paper reference implementation:

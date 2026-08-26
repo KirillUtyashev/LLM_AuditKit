@@ -1,8 +1,13 @@
 # LLM AuditKit
 
-LLM AuditKit is a Python package for auditing large language model behavior in hiring experiments.
+LLM AuditKit audits large language model behavior in hiring experiments. The
+main pipeline is a Python package, while statistical analysis is implemented
+as reproducible R entry points alongside it.
 
-This repository currently provides the package structure only. Functionality will be added in future releases.
+The project is under active development. Most Python components remain
+architecture-first; the regression stage currently includes its locked R
+environment, preparation configuration validation, and raw experiment-result
+loading foundation.
 
 ## Documentation
 
@@ -36,3 +41,11 @@ The private [paper reference repository](docs/paper_reference.md) preserves the 
    This private reference requires GitHub SSH access and is checked out under the ignored `.references/` directory. Read the [paper reference guide](docs/paper_reference.md) before using it.
 
 4. Read the [package architecture](docs/architecture.md), [engineering workflow](docs/development_workflow.md), and `AGENTS.md` before beginning development.
+
+For regression-analysis development, restore the repository-local R
+environment and run its tests from the repository root:
+
+```bash
+Rscript -e 'renv::restore(prompt = FALSE)'
+Rscript tests/r/run_tests.R
+```
