@@ -25,6 +25,19 @@ source(
   file.path(REGRESSION_PROJECT_ROOT, "R", "regression", "experiment_results.R"),
   local = TRUE
 )
+source(
+  file.path(REGRESSION_PROJECT_ROOT, "R", "regression", "preparation.R"),
+  local = TRUE
+)
+source(
+  file.path(
+    REGRESSION_PROJECT_ROOT,
+    "R",
+    "regression",
+    "preparation_runner.R"
+  ),
+  local = TRUE
+)
 
 regression_fixture <- function(...) {
   file.path(

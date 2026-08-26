@@ -25,10 +25,10 @@ sample-filtering language.
 
 This page defines the contracts established in subissue #19. Subissue #20 adds
 the locked R environment, preparation configuration validation, deterministic
-raw job-row loading, and the initial R test scaffold. Candidate reshaping,
-selection outcomes, production CLIs, estimation, and rendering remain assigned
-to later regression subissues, so the planned commands below are not all
-available yet.
+raw job-row loading, and the initial R test scaffold. Subissue #21 completes
+dynamic candidate preparation, selection outcomes, status reporting, and the
+preparation CLI. Estimation and rendering remain assigned to later regression
+subissues, so not all commands below are available yet.
 
 ## Shared Configuration Rules
 
@@ -79,9 +79,11 @@ covariates from `1` through `candidate_count`; indexed values above that count
 are empty. Completed rows must also contain binary picks, and raw-positive picks
 must contain log probabilities. Unsuccessful rows may leave all picks and log
 probabilities empty and are excluded before result-value validation. Within one
-input file, every required candidate family exposes the same contiguous header
-indices; configured files may have different maximum values of `N` because they
-are combined after candidate-level reshaping. Parsing uses the complete
+input file, every required candidate family exposes exactly the same contiguous
+header indices from `1` through that file's maximum `candidate_count`;
+configured files may have different maximum values of `N` because their
+candidate rows are combined after per-file validation and reshaping. Parsing
+uses the complete
 `candidate_<i>_<field>` pattern, so `N >= 10` does not depend on the last
 character of a column name.
 
@@ -117,6 +119,10 @@ scenario covariates, and the complete candidate-ID set must agree. Configured
 candidate covariates must agree for every repeated
 `(scenario_id, candidate_id)` pair. Conflicts are errors rather than being
 resolved by input order.
+
+The intermediate implementation names `raw_pick` and `raw_log_probability`
+are reserved in addition to the published core columns, so configured
+covariates cannot overwrite the source values used to construct outcomes.
 
 The pinned paper-reference sample
 `.references/job_parsing-code/samples/edsl_raw_results_sample.csv` predates this
@@ -164,6 +170,13 @@ as character data, combine job rows in configured file and source-row order,
 preserve every result status, attach lexical `source_file` provenance, and
 reject duplicate stable job keys. Filtering, candidate-level reshaping,
 ranking, derived outcomes, and output writing belong to #21.
+
+The #21 function `prepare_regression_data()` performs those candidate-level
+transformations in memory from the configured CSV paths.
+`run_regression_preparation()` additionally reports completed and excluded job
+counts and atomically writes the configured regression-ready CSV. Neither
+function accepts an in-session data frame as a substitute for the canonical
+CSV boundary.
 
 Configured inputs are combined deterministically. `source_file` stores the
 lexically normalized path string from `input_paths`, using `/` separators and
@@ -240,6 +253,7 @@ Its required core columns are:
 | `model_config_id` | string | Non-null stable model-configuration identity. |
 | `candidate_id` | string | Non-null stable candidate identity. |
 | `candidate_index` | integer | Non-null one-based source index; not a durable key. |
+| `candidate_count` | integer | Non-null number of candidates attached to the source scenario/job post. |
 | `city` | string | Non-null default ranking field. |
 | `year` | integer | Non-null default ranking field. |
 | `pick` | integer | Non-null binary raw selection. |
@@ -520,9 +534,11 @@ not a promise of numerically identical intervals. The authoritative result
 contract uses `fixest::confint` with locked finite-sample settings, whereas the
 historical script drew only 95% normal intervals as `estimate +/- 1.96 * SE`.
 
-## Planned Invocation
+## Invocation
 
-The three entry points are intentionally separate:
+The three entry points are intentionally separate. The preparation command is
+implemented; estimation and rendering commands become available in their
+respective subissues.
 
 ```bash
 Rscript scripts/prepare_regression_data.R --config path/to/preparation.yaml
@@ -581,12 +597,15 @@ The full and focused R test commands are:
 ```bash
 Rscript tests/r/run_tests.R
 Rscript -e 'testthat::test_file("tests/r/test-preparation-config.R", reporter = "summary")'
+Rscript -e 'testthat::test_file("tests/r/test-preparation.R", reporter = "summary")'
 ```
 
 Subissue #20 introduces the `renv` scaffold, preparation-config and raw-loader
 modules, test runner, and public synthetic fixtures. Dependencies for
-estimation and rendering land only when those modules use them. Existing
-Python checks continue to run with `python -m pytest`.
+estimation and rendering land only when those modules use them. Subissue #21
+adds the dependency-free base-R preparation transformation and CLI plus public
+multi-city, multi-year, dynamic-`N` fixtures. Existing Python checks continue
+to run with `python -m pytest`.
 
 ## Artifact Example
 

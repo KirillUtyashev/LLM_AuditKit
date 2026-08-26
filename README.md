@@ -6,8 +6,8 @@ as reproducible R entry points alongside it.
 
 The project is under active development. Most Python components remain
 architecture-first; the regression stage currently includes its locked R
-environment, preparation configuration validation, and raw experiment-result
-loading foundation.
+environment and a complete YAML-driven raw-to-regression-ready preparation
+runner.
 
 ## Documentation
 
@@ -48,4 +48,10 @@ environment and run its tests from the repository root:
 ```bash
 Rscript -e 'renv::restore(prompt = FALSE)'
 Rscript tests/r/run_tests.R
+```
+
+Prepare raw experiment CSVs with:
+
+```bash
+Rscript scripts/prepare_regression_data.R --config path/to/preparation.yaml
 ```

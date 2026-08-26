@@ -21,6 +21,8 @@ PREPARATION_RESERVED_COLUMNS <- c(
   "year",
   "pick",
   "log_probability",
+  "raw_pick",
+  "raw_log_probability",
   "pick_top",
   "pick_threshold",
   "preparation_top_share",

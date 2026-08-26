@@ -163,6 +163,26 @@ testthat::test_that("config validates covariates and pre-ranking fields", {
   )
   testthat::expect_error(load_preparation_config(reserved), "reserved column 'pick'")
 
+  internal_scenario <- write_test_config(
+    input,
+    output,
+    c("scenario_covariates:", "  - raw_pick")
+  )
+  testthat::expect_error(
+    load_preparation_config(internal_scenario),
+    "reserved column 'raw_pick'"
+  )
+
+  internal_candidate <- write_test_config(
+    input,
+    output,
+    c("candidate_covariates:", "  - raw_log_probability")
+  )
+  testthat::expect_error(
+    load_preparation_config(internal_candidate),
+    "reserved column 'raw_log_probability'"
+  )
+
   payload <- write_test_config(
     input,
     output,

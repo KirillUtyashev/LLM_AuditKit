@@ -1,0 +1,8 @@
+input_paths:
+  - raw_preparation_multi_a.csv
+  - raw_preparation_multi_b.csv
+output_path: output/preparation_multi_ready.csv
+scenario_covariates:
+  - job_category
+candidate_covariates:
+  - black
