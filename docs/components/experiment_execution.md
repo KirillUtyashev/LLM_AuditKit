@@ -4,7 +4,7 @@
 
 ## Overview
 
-The experiment execution stage runs completed hiring scenarios through one or more LLM personas using the shared [inference layer](inference.md), which delegates execution to Expected Parrot EDSL.
+The experiment execution stage runs completed hiring scenarios through one or more LLM personas using the shared [inference layer](inference.md), which delegates batched execution to Expected Parrot EDSL.
 
 Each dataset row represents one complete scenario containing:
 
@@ -20,7 +20,7 @@ The configuration includes:
 
 - path to the populated experiment dataset;
 - personas;
-- shared `InferenceConfig`, including model selection, concurrency, and retries;
+- shared `InferenceConfig`, including model definitions and inference batch size;
 - whether to save after each result (`save_after_each_result`).
 
 ## Job Identity
@@ -31,75 +31,99 @@ Each scheduled job has a stable `ExperimentJobKey` composed of:
 - `persona_id`;
 - `model_config_id`.
 
-`model_config_id` identifies the provider, model, and provider-specific parameters as one configuration. Persona and model configuration IDs must remain stable across resumed runs. The job key, rather than a DataFrame row index, is used to associate results and errors and to determine whether a job is complete.
+The runner derives a unique inference request ID from this key and also carries the key fields in request metadata. The job key, rather than a DataFrame row index or an EDSL result position, associates results and errors and determines whether a job is complete.
 
-## Personas
+Persona and model configuration IDs remain stable only while they describe the same logical configuration. Changing a persona description or a model's provider, model name, or behavior-affecting parameters requires a new corresponding ID so incompatible prior results are not treated as complete.
+
+## Personas and System Prompts
 
 Each `Persona` contains:
 
-- `id`
-- `name`
-- `description`
+- `id`;
+- `name`;
+- `description`.
 
-The persona description is included in the system prompt.
+The persona description becomes the request's exact system prompt. Persona IDs and names remain association metadata and must not cause EDSL to prepend default agent text or otherwise alter the requested system instruction. A batch preview exposes the effective prompt rendered by EDSL so this contract can be checked without inference.
 
 ## Inference Configuration
 
 The shared `InferenceConfig` specifies:
 
-- one or more `ModelConfig` definitions;
-- maximum concurrency;
-- maximum retry attempts.
+- one or more uniquely identified `ModelConfig` definitions;
+- a positive batch size measured in logical inference requests.
 
-Each `ModelConfig` has a stable configuration ID, provider, model, and provider-specific parameters.
+Each `ModelConfig` has a stable configuration ID, EDSL provider or service name, model name, and JSON-compatible provider-specific inference parameters. Credentials remain outside model configuration.
 
-## Execution
+Experiment request cardinality is:
 
-For each combination of:
+```text
+pending scenarios × personas × configured models
+```
 
-- dataset row;
-- persona;
-- configured model;
+For example, 1,000 pending scenarios, five personas, and three model configurations produce 15,000 logical requests. `inference.batch_size` limits requests per EDSL submission rather than DataFrame rows.
 
-the runner creates a generic `InferenceRequest` with the `ExperimentJobKey` in its metadata.
+## Request Construction and Preview
 
-Requests are executed asynchronously by `InferenceOrchestrator`. `EDSLAdapter` translates them into Expected Parrot jobs and normalizes the results.
+For every incomplete combination of scenario, persona, and configured model, the runner creates a generic `InferenceRequest` containing:
+
+- a request ID derived from `ExperimentJobKey`;
+- the fully constructed experiment prompt;
+- the persona description as the exact system prompt;
+- the target model configuration ID;
+- the job key in generic metadata.
+
+`ExperimentRunner.preview` returns the selected shared-inference batch preview without making model calls. Previewing the first small batch is the recommended way to verify exact EDSL-rendered prompts, persona mapping, model mapping, and request cardinality before a large run.
+
+## Execution and Batching
+
+`ExperimentRunner.run` consumes the synchronous `InferenceOrchestrator.run_batches` iterator, while `ExperimentRunner.run_async` consumes `InferenceOrchestrator.run_batches_async`. Both paths follow the same processing contract:
+
+1. build requests only for incomplete job keys;
+2. await one EDSL-managed batch;
+3. validate and associate every normalized result in that completed batch;
+4. update and checkpoint the output according to configuration;
+5. request the next batch only after the current batch has been handled safely.
+
+Both entry points are first-class. The synchronous path delegates to EDSL's native blocking execution, and the asynchronous path delegates to EDSL's native async execution. They use the same request construction, batch boundaries, result association, failures, checkpoint behavior, and returned DataFrame shape.
+
+Batches are sequential at the LLM AuditKit layer. EDSL owns parallel interview execution, provider rate limiting, caching, and retry behavior inside each batch. The runner does not create its own request-worker pool or retry individual EDSL interviews.
+
+The runner can report completed batches and logical requests and use observed batch durations to estimate remaining time. Such estimates are informational because providers, models, prompt sizes, and rate limits can vary.
 
 The shared inference layer is responsible for:
 
-- model execution through EDSL;
-- concurrency control;
-- retries;
-- normalized results and errors.
+- validating generic request and model references;
+- deterministic batching;
+- EDSL execution through the adapter;
+- normalized batch results and terminal errors.
 
 `ExperimentRunner` is responsible for:
 
-- constructing inference requests;
-- associating results with the correct scenario;
-- incremental persistence;
-- resume behavior;
-- recording terminal errors.
+- constructing domain prompts and stable job identities;
+- excluding completed jobs before inference;
+- associating and parsing normalized results;
+- incremental persistence and resume behavior;
+- recording terminal errors;
+- stopping before another batch when a systemic contract failure is detected.
 
 ## Incremental Saving
 
-Completed results are written to an output DataFrame. When `save_after_each_result` is enabled, each result is persisted to disk using atomic replacement. When it is disabled, results remain in memory and are persisted after execution finishes.
+Completed normalized results are written to an output DataFrame. When `save_after_each_result` is enabled, after a batch returns, each result is applied and persisted using atomic replacement before the runner requests another batch. When it is disabled, results remain in memory and are persisted after execution finishes.
 
-Writes are synchronized to prevent concurrent modification or file corruption.
+No new local result becomes available while an EDSL batch is running. The configured inference batch size therefore bounds the logical work between checkpoint opportunities.
 
 ## Resume Behavior
 
-Before scheduling a job, the runner checks whether its `ExperimentJobKey` already has a completed result.
+Before constructing pending requests, the runner checks whether each `ExperimentJobKey` already has a completed result.
 
-Completed jobs are skipped when resuming an interrupted experiment.
+Completed jobs are skipped when resuming an interrupted experiment. Batch boundaries are not durable identity and can change when a run resumes with fewer pending jobs.
 
 ## Failure Handling
 
-If a job fails after `inference.max_retries` attempts:
+After EDSL completes its retry behavior, a terminal failure for an individual logical request is recorded against its job key, remains incomplete for resume purposes, and execution can continue for other requests.
 
-- the failure is recorded;
-- the job remains incomplete;
-- execution continues for the remaining jobs.
+A systemic batch failure, such as missing or duplicate request identities, unexpected result cardinality, invalid job-key association, or an inability to normalize the EDSL response set, stops the run before another batch is submitted. This prevents a broken prompt or integration from consuming tokens across the remaining dataset.
 
 ## Output
 
-The output preserves the scenario data and adds the corresponding experiment results and error information. Results are persisted as CSV with one record per `ExperimentJobKey`, providing the input contract for regression analysis.
+The output preserves the scenario data and adds corresponding experiment results and error information. Results are persisted as CSV with one record per `ExperimentJobKey`, providing the input contract for regression analysis.

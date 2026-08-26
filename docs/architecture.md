@@ -31,10 +31,14 @@ The package uses `pandas.DataFrame` as the common tabular representation passed 
 
 ```text
 Template Generation ─┐
-                     ├──> Inference Orchestrator ──> EDSL
+                     ├──> Inference Batching ──> EDSL Sync or Async Jobs
 Experiment Execution ┘
 ```
 
-The inference layer owns model configuration, concurrency, retries, EDSL execution, and normalized inference results. Pipeline stages own domain-specific prompt construction, response parsing, checkpointing, and output storage.
+The inference layer owns generic model configuration, deterministic request batching, EDSL execution through its adapter, and normalized batch results. EDSL owns parallel interview execution, provider rate limiting, caching, and retries within each submitted batch. Pipeline stages own domain-specific prompt construction, response parsing, checkpointing, and output storage.
+
+Batches are submitted sequentially. A calling stage validates and checkpoints the current completed batch before requesting the next one, which bounds uncheckpointed work and prevents a systemic prompt or integration error from consuming tokens across the remaining dataset.
+
+The shared inference layer provides equivalent synchronous and asynchronous batch APIs. Each delegates to the corresponding EDSL execution method while preserving the same validation, batching, normalization, and failure contract.
 
 Experiment results cross the Python-to-R boundary as CSV files. Regression configuration is provided as YAML, and the R analysis produces both raw regression results and plots.

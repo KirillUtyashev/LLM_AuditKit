@@ -38,7 +38,7 @@ All dataset sources return a `pandas.DataFrame`.
 
 Downstream pipeline stages do not need to know where the dataset originated.
 
-Before experiment execution, each row must have a stable `scenario_id`. An identifier supplied by the source is preserved; otherwise, one is generated once and persisted with the dataset. Resume behavior must not depend on a DataFrame row index.
+Before a row enters a resumable downstream inference stage, it must have a stable `scenario_id`. An identifier supplied by the source is preserved; otherwise, one is generated once and persisted with the dataset. Template generation and experiment execution use this identifier for request association and resume behavior; neither may use a DataFrame row index as durable identity.
 
 ## Core Validation
 

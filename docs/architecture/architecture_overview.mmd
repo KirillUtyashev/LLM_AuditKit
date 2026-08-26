@@ -7,6 +7,6 @@ flowchart LR
     B --> C[Template Population]
     C --> D[Experiment Execution]
     D --> E[Regression Analysis]
-    B -.-> I[Shared Inference Orchestrator]
+    B -.-> I[Shared Inference Batching]
     D -.-> I
-    I --> F[Expected Parrot EDSL]
+    I --> F[Expected Parrot Sync or Async Jobs<br/>Parallelism, Rate Limits, Caching, Retries]
