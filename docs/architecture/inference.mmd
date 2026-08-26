@@ -54,6 +54,7 @@ classDiagram
         +run_batches_async(requests: List~InferenceRequest~, config: InferenceConfig) AsyncIterator~InferenceBatchResult~
     }
     class EDSLAdapter {
+        -group_requests(requests: List~InferenceRequest~)
         +render_batch(requests: List~InferenceRequest~, models: List~ModelConfig~) List~RenderedPrompt~
         +execute_batch(requests: List~InferenceRequest~, models: List~ModelConfig~) List~InferenceResult~
         +execute_batch_async(requests: List~InferenceRequest~, models: List~ModelConfig~) List~InferenceResult~
@@ -73,4 +74,4 @@ classDiagram
     InferenceResult --> InferenceError
     InferenceOrchestrator --> EDSLAdapter : delegates batches
     EDSLAdapter --> ModelConfig : configures
-    EDSLAdapter --> EDSL : delegates parallelism, retries, and rate limits
+    EDSLAdapter --> EDSL : submits sequential model and system-prompt groups

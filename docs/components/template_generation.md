@@ -50,7 +50,7 @@ For every incomplete dataset row, `TemplateGenerator`:
 3. builds one generic `InferenceRequest` whose metadata includes `scenario_id`;
 4. expects one free-text response containing all configured `N` templates for that row.
 
-One logical inference request therefore represents one source row, regardless of the configured number of templates. The shared inference `batch_size` is also the maximum number of template-generation rows in one EDSL batch.
+One logical inference request therefore represents one source row, regardless of the configured number of templates. The shared inference `batch_size` is also the maximum number of template-generation rows in one logical inference batch.
 
 ## Preview
 
@@ -78,11 +78,11 @@ The stage can report completed batches and rows and use observed batch duration 
 
 Generation supports incremental checkpointing through `save_after_each_result`. In this stage, one result means one completed source row and all `N` templates generated for that row.
 
-When `save_after_each_result` is enabled, after a batch returns, each successfully parsed row result is applied and the updated dataset is written using atomic replacement before the next EDSL batch is requested. Failed row outcomes and their error messages are checkpointed through the same stage-owned store.
+When `save_after_each_result` is enabled, after a batch returns, each successfully parsed row result is applied and the updated dataset is written using atomic replacement before the next logical batch is requested. Failed row outcomes and their error messages are checkpointed through the same stage-owned store.
 
 When it is disabled, completed rows remain in memory and the dataset is persisted after generation finishes.
 
-No local result becomes available while an EDSL batch is in flight. The configured inference batch size therefore bounds the number of template-generation rows between checkpoint opportunities.
+No local result becomes available while the EDSL job groups for a logical batch are in flight. The configured inference batch size therefore bounds the number of template-generation rows between checkpoint opportunities.
 
 ## Resume Behavior
 

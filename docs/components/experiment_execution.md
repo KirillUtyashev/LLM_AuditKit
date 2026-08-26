@@ -43,7 +43,7 @@ Each `Persona` contains:
 - `name`;
 - `description`.
 
-The persona description becomes the request's exact system prompt. Persona IDs and names remain association metadata and must not cause EDSL to prepend default agent text or otherwise alter the requested system instruction. A batch preview exposes the effective prompt rendered by EDSL so this contract can be checked without inference.
+The persona description is supplied through the request's system prompt and mapped through the standard public EDSL `Agent` mechanism. EDSL owns its normal agent and system-prompt rendering behavior. A batch preview exposes the effective prompt rendered by EDSL without performing inference.
 
 ## Inference Configuration
 
@@ -60,7 +60,7 @@ Experiment request cardinality is:
 pending scenarios × personas × configured models
 ```
 
-For example, 1,000 pending scenarios, five personas, and three model configurations produce 15,000 logical requests. `inference.batch_size` limits requests per EDSL submission rather than DataFrame rows.
+For example, 1,000 pending scenarios, five personas, and three model configurations produce 15,000 logical requests. `inference.batch_size` limits requests per logical inference batch rather than DataFrame rows.
 
 ## Request Construction and Preview
 
@@ -68,25 +68,25 @@ For every incomplete combination of scenario, persona, and configured model, the
 
 - a request ID derived from `ExperimentJobKey`;
 - the fully constructed experiment prompt;
-- the persona description as the exact system prompt;
+- the persona description as the system prompt;
 - the target model configuration ID;
 - the job key in generic metadata.
 
-`ExperimentRunner.preview` returns the selected shared-inference batch preview without making model calls. Previewing the first small batch is the recommended way to verify exact EDSL-rendered prompts, persona mapping, model mapping, and request cardinality before a large run.
+`ExperimentRunner.preview` returns the selected shared-inference batch preview without making model calls. Previewing the first small batch is the recommended way to inspect EDSL-rendered prompts and verify persona mapping, model mapping, and request cardinality before a large run.
 
 ## Execution and Batching
 
 `ExperimentRunner.run` consumes the synchronous `InferenceOrchestrator.run_batches` iterator, while `ExperimentRunner.run_async` consumes `InferenceOrchestrator.run_batches_async`. Both paths follow the same processing contract:
 
 1. build requests only for incomplete job keys;
-2. await one EDSL-managed batch;
+2. execute one logical inference batch, which the adapter can partition into EDSL-compatible job groups;
 3. validate and associate every normalized result in that completed batch;
 4. update and checkpoint the output according to configuration;
 5. request the next batch only after the current batch has been handled safely.
 
 Both entry points are first-class. The synchronous path delegates to EDSL's native blocking execution, and the asynchronous path delegates to EDSL's native async execution. They use the same request construction, batch boundaries, result association, failures, checkpoint behavior, and returned DataFrame shape.
 
-Batches are sequential at the LLM AuditKit layer. EDSL owns parallel interview execution, provider rate limiting, caching, and retry behavior inside each batch. The runner does not create its own request-worker pool or retry individual EDSL interviews.
+Batches are sequential at the LLM AuditKit layer. Within a batch, the adapter groups requests by model configuration and system prompt and submits those EDSL jobs sequentially. EDSL owns parallel scenario-interview execution, provider rate limiting, caching, and retry behavior inside each job. The runner does not create its own request-worker pool or retry individual EDSL interviews.
 
 The runner can report completed batches and logical requests and use observed batch durations to estimate remaining time. Such estimates are informational because providers, models, prompt sizes, and rate limits can vary.
 
@@ -110,7 +110,7 @@ The shared inference layer is responsible for:
 
 Completed normalized results are written to an output DataFrame. When `save_after_each_result` is enabled, after a batch returns, each result is applied and persisted using atomic replacement before the runner requests another batch. When it is disabled, results remain in memory and are persisted after execution finishes.
 
-No new local result becomes available while an EDSL batch is running. The configured inference batch size therefore bounds the logical work between checkpoint opportunities.
+No new local result becomes available while the EDSL job groups for a logical batch are running. The configured inference batch size therefore bounds the logical work between checkpoint opportunities.
 
 ## Resume Behavior
 
