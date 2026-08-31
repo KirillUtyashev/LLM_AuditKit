@@ -59,6 +59,22 @@ source(
   ),
   local = TRUE
 )
+source(
+  file.path(REGRESSION_PROJECT_ROOT, "R", "regression", "render_config.R"),
+  local = TRUE
+)
+source(
+  file.path(REGRESSION_PROJECT_ROOT, "R", "regression", "render_data.R"),
+  local = TRUE
+)
+source(
+  file.path(REGRESSION_PROJECT_ROOT, "R", "regression", "paper_plot.R"),
+  local = TRUE
+)
+source(
+  file.path(REGRESSION_PROJECT_ROOT, "R", "regression", "render_runner.R"),
+  local = TRUE
+)
 
 regression_fixture <- function(...) {
   file.path(

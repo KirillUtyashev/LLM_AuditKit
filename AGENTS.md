@@ -9,7 +9,8 @@ pipeline and an accompanying R regression stage. The repository remains
 architecture-first overall: the Python package is largely a scaffold, while
 the regression stage has a locked R environment plus a complete
 raw-to-regression-ready preparation runner and a separate fixed-effects
-estimation runner that writes plot-ready numerical results.
+estimation runner that writes plot-ready numerical results. The independent
+paper-style renderer reads those saved results and atomically writes a PNG.
 
 - Do not assume documented components are already implemented.
 - Do not add functionality, dependencies, interfaces, or placeholder modules outside the scope of the current task.
@@ -123,6 +124,10 @@ Rscript -e 'testthat::test_file("tests/r/test-preparation-config.R", reporter = 
 Rscript -e 'testthat::test_file("tests/r/test-preparation.R", reporter = "summary")'
 Rscript -e 'testthat::test_file("tests/r/test-regression-config.R", reporter = "summary")'
 Rscript -e 'testthat::test_file("tests/r/test-regression.R", reporter = "summary")'
+Rscript -e 'testthat::test_file("tests/r/test-render-config.R", reporter = "summary")'
+Rscript -e 'testthat::test_file("tests/r/test-render-data.R", reporter = "summary")'
+Rscript -e 'testthat::test_file("tests/r/test-paper-plot.R", reporter = "summary")'
+Rscript -e 'testthat::test_file("tests/r/test-render-runner.R", reporter = "summary")'
 ```
 
 Prepare configured raw experiment results:
@@ -135,6 +140,13 @@ Estimate one inspected regression-ready dataset:
 
 ```bash
 Rscript scripts/run_regression.R --config path/to/regression.yaml
+```
+
+Render saved results, or run the public synthetic example:
+
+```bash
+Rscript scripts/render_regression_plot.R --config path/to/render.yaml
+Rscript scripts/render_regression_plot.R --config examples/regression/render_synthetic.yaml
 ```
 
 Sync the optional paper reference implementation:

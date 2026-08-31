@@ -29,8 +29,10 @@ raw job-row loading, and the initial R test scaffold. Subissue #21 completes
 dynamic candidate preparation, selection outcomes, status reporting, and the
 preparation CLI. Subissue #22 adds regression-configuration and prepared-data
 validation, grouped `fixest::feols` estimation, locked inference, atomic tidy
-result export, and the estimation CLI. Paper-style rendering remains assigned
-to subissue #23.
+result export, and the estimation CLI. Subissue #23 adds saved-result
+validation, deterministic plot-data preparation, and the independent
+paper-style PNG renderer. Final regression-stage walkthrough and integration
+handoff remain in subissue #24.
 
 ## Shared Configuration Rules
 
@@ -430,6 +432,14 @@ renderer rejects heterogeneous specifications; researchers render those as
 separately labeled figures instead of placing incomparable estimates in one
 grid.
 
+Each input is validated against the complete saved-result schema above,
+including finite statistics, coherent observation/cluster counts, and valid
+preparation metadata. Repeated interval rows for one coefficient must agree
+on their shared statistics and have nested bounds. A saved slice may contain
+only the chosen confidence level; all three levels are not required to render.
+The renderer does not check a historical estimator version against the current
+R installation or load that estimator. It consumes the saved inference.
+
 ### `RenderConfig`
 
 ```yaml
@@ -496,10 +506,10 @@ dpi: 300
 | `panel_labels` | no | Optional panel-value-to-label map with no unknown keys; source values are the default labels. |
 | `x_label`, `y_label` | no | Nonempty axis labels; defaults `Period` and `Coefficient estimate`. |
 | `y_limits` | no | Two finite increasing bounds; default `[-0.3, 0.3]`. |
-| `y_break_interval` | no | Positive finite spacing; default `0.1`. |
+| `y_break_interval` | no | Positive finite spacing; default `0.1`; together with the limits must imply at most 10,000 ticks. |
 | `significance_level` | no | Value in `[0, 1]`; default `0.05`. |
 | `panel_columns` | no | Positive integer; default `2`. |
-| `width`, `height` | no | Positive finite inches; defaults `12` and `8`. |
+| `width`, `height` | no | Positive finite inches; defaults `12` and `8`; each dimension times DPI must be between 1 and R's maximum integer pixel count. |
 | `dpi` | no | Positive integer PNG resolution; default `300`. |
 
 `outcome_by_panel` makes the paper's mixed-outcome display explicit: its Gemini
@@ -513,6 +523,21 @@ A nonempty order list must contain every distinct selected value exactly once;
 unknown, duplicate, or omitted values are errors. Orders never filter data. To
 render a subset, the researcher supplies a separately saved, inspected result
 CSV rather than relying on an accidental factor-level drop.
+
+Values are compared as their saved scalar tokens. Default ordering is numeric
+when all tokens parse as finite numbers, otherwise lexicographic. Ascending
+numeric periods retain their numeric spacing. Categorical periods, explicitly
+reversed/rearranged periods, numeric aliases such as `01` and `1`, and numeric
+ranges unsafe for coordinate arithmetic use equally spaced positions ten
+units apart while retaining their original tick labels. Panel labels affect
+display only; even identical labels do not merge distinct panels.
+
+Outcome-map coverage is checked after term/interval selection and before
+filtering outcomes. Compatibility and plotting-key checks then use the
+selected rows. An estimation-group dimension not mapped to period, panel, or
+series must be constant in those rows; a changing hidden dimension is an error.
+Unbalanced grids are allowed: missing panel/period/series combinations remain
+missing, with no imputation or recentering of the remaining series.
 
 The canonical paper-style renderer uses:
 
@@ -528,10 +553,19 @@ The canonical paper-style renderer uses:
 - the configured y limits through coordinate zoom so out-of-range values are
   not removed from the plot data.
 
+With multiple series, offsets span minus to plus 15% of the smallest period
+gap, in the global series order. Interval caps are at most `0.8` units, reduced
+to 60% of the distance between adjacent series when needed. The deterministic
+palette and one bottom legend retain all selected series even when a panel
+lacks some of them. Opacity is never recomputed from the displayed interval:
+the saved p-value controls it, including when a 90% or 99% interval is chosen.
+
 The historical script did not record physical output dimensions or DPI. This
 project therefore makes `12 x 8` inches at `300` DPI the explicit reproducible
 default. Other dimensions are allowed without changing the numerical result
-contract.
+contract. PNG pixel dimensions are the rounded products of inches and DPI.
+Rendering uses R's configured native PNG backend; fonts and antialiasing can
+differ by operating system, so byte-identical images are not promised.
 
 The renderer validates that the selected term, interval level, outcome, period,
 series, and panel fields exist. After term, confidence-level, and outcome
@@ -550,9 +584,7 @@ settings, whereas the historical script drew only 95% normal intervals as
 
 ## Invocation
 
-The three entry points are intentionally separate. The preparation and
-estimation commands are implemented; rendering becomes available in its own
-subissue.
+The three implemented entry points are intentionally separate.
 
 ```bash
 Rscript scripts/prepare_regression_data.R --config path/to/preparation.yaml
@@ -564,6 +596,26 @@ Each command exits nonzero with an actionable message on invalid arguments,
 configuration, input, or output. Estimation does not invoke rendering
 implicitly, which guarantees that a figure can be recreated in a fresh process
 from saved results alone.
+
+Run the [public synthetic rendering example](../../examples/regression/README.md)
+without preparation or estimation:
+
+```bash
+Rscript scripts/render_regression_plot.R --config examples/regression/render_synthetic.yaml
+```
+
+It writes a four-panel PNG from a checked-in, explicitly illustrative result
+CSV. The general-purpose numerical CSV is left unchanged and can also be used
+in a researcher's own plotting workflow.
+
+The R modules keep numeric preparation and graphics separate:
+`load_regression_results(config)` validates and combines saved CSVs;
+`prepare_regression_plot_data(config)` selects rows and returns their original
+values plus explicit panel/period/series order, positions, and opacity;
+`build_regression_plot(prepared)` builds the figure without I/O; and
+`render_regression_plot(config)` writes it atomically. The config argument is a
+render YAML path or the validated result of `load_render_config()`, not an
+in-memory raw dataset or fitted model.
 
 ## R Environment and Test Contract
 
@@ -587,8 +639,8 @@ Direct dependencies are intentionally narrow:
 | --- | --- |
 | `yaml` | Load configuration contracts; locked beginning with subissue #20. |
 | `fixest` | Estimate fixed-effects models and their inference; locked at 0.14.2 beginning with subissue #22. |
-| `ggplot2` | Build regression figures; added with rendering work. |
-| `patchwork` | Reproduce the paper's panel-specific margins and 2-by-2 assembly; added with rendering work. |
+| `ggplot2` | Build regression figures; locked at 4.0.3 beginning with subissue #23. |
+| `patchwork` | Reproduce the paper's panel-specific margins and 2-by-2 assembly; locked at 1.3.2 beginning with subissue #23. |
 | `testthat` | Run R tests; locked beginning with subissue #20. |
 
 Base R handles CSV I/O and transformation unless implementation demonstrates a
@@ -614,6 +666,10 @@ Rscript -e 'testthat::test_file("tests/r/test-preparation-config.R", reporter = 
 Rscript -e 'testthat::test_file("tests/r/test-preparation.R", reporter = "summary")'
 Rscript -e 'testthat::test_file("tests/r/test-regression-config.R", reporter = "summary")'
 Rscript -e 'testthat::test_file("tests/r/test-regression.R", reporter = "summary")'
+Rscript -e 'testthat::test_file("tests/r/test-render-config.R", reporter = "summary")'
+Rscript -e 'testthat::test_file("tests/r/test-render-data.R", reporter = "summary")'
+Rscript -e 'testthat::test_file("tests/r/test-paper-plot.R", reporter = "summary")'
+Rscript -e 'testthat::test_file("tests/r/test-render-runner.R", reporter = "summary")'
 ```
 
 Subissue #20 introduces the `renv` scaffold, preparation-config and raw-loader
@@ -623,6 +679,10 @@ adds the dependency-free base-R preparation transformation and CLI plus public
 multi-city, multi-year, dynamic-`N` fixtures. Subissue #22 adds the locked
 `fixest` estimator, strict regression-ready input validation, grouped
 estimation, tidy 90/95/99% interval export, and the atomic estimation CLI.
+Subissue #23 adds independent rendering, a public saved-result example, numeric
+plot-data and layer tests, PNG dimension/atomicity checks, and fresh-process
+tests that do not load `fixest`. Its tests also pass a real synthetic-data
+estimation output directly into plot preparation without adapting the schema.
 Existing Python checks continue to run with `python -m pytest`.
 
 ## Artifact Example

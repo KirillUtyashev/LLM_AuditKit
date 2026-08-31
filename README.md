@@ -8,7 +8,8 @@ The project is under active development. Most Python components remain
 architecture-first; the regression stage currently includes its locked R
 environment, a complete YAML-driven raw-to-regression-ready preparation
 runner, and a separate fixed-effects estimation runner that writes plot-ready
-numerical results.
+numerical results. An independent paper-style renderer recreates PNG figures
+from those saved results without rerunning a regression.
 
 ## Documentation
 
@@ -66,3 +67,21 @@ Rscript scripts/run_regression.R --config path/to/regression.yaml
 
 The regression YAML contract and tidy result schema are documented in the
 [regression analysis guide](docs/components/regression_analysis.md#2-fixed-effects-estimation).
+
+Render a paper-style figure from saved numerical results with:
+
+```bash
+Rscript scripts/render_regression_plot.R --config path/to/render.yaml
+```
+
+A runnable four-panel example uses only public, synthetic saved results:
+
+```bash
+Rscript scripts/render_regression_plot.R --config examples/regression/render_synthetic.yaml
+```
+
+It writes `outputs/regression/synthetic_paper_style.png` without needing raw
+data, private-repository access, or an estimation run. See the
+[rendering example](examples/regression/README.md) for configuration and
+interpretation notes. All CSV/YAML paths are resolved relative to the YAML
+file. Generated research outputs under `outputs/` are ignored by Git.
