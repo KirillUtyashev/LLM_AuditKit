@@ -11,6 +11,9 @@ from llm_auditkit.inference import (
     EDSLAdapter,
     InferenceAdapter,
     InferenceBatchError,
+    InferenceBatchResult,
+    InferenceConfig,
+    InferenceOrchestrator,
     InferenceRequest,
     ModelConfig,
 )
@@ -246,6 +249,40 @@ def test_edsl_adapter_implements_the_generic_protocol() -> None:
     assert isinstance(EDSLAdapter(), InferenceAdapter)
 
 
+def test_public_orchestrator_api_integrates_with_edsl_adapter(
+    fake_edsl: FakeEDSLRuntime,
+) -> None:
+    requests = _requests()
+    config = InferenceConfig(models=list(_models().values()), batch_size=2)
+    inference = InferenceOrchestrator(EDSLAdapter())
+
+    preview = inference.preview_batch(requests, config)
+    sync_batches = list(inference.run_batches(requests, config))
+
+    async def collect_async_batches() -> list[InferenceBatchResult]:
+        return [
+            batch
+            async for batch in inference.run_batches_async(requests, config)
+        ]
+
+    async_batches = asyncio.run(collect_async_batches())
+
+    assert preview.batch_number == 1
+    assert preview.total_batches == 2
+    assert [prompt.request_id for prompt in preview.prompts] == [
+        "request-1",
+        "request-2",
+    ]
+    assert [batch.batch_number for batch in sync_batches] == [1, 2]
+    assert [batch.batch_number for batch in async_batches] == [1, 2]
+    assert [
+        result.request_id for batch in sync_batches for result in batch.results
+    ] == ["request-1", "request-2", "request-3"]
+    assert [
+        result.request_id for batch in async_batches for result in batch.results
+    ] == ["request-1", "request-2", "request-3"]
+
+
 def test_render_batch_uses_effective_edsl_prompts_without_inference(
     fake_edsl: FakeEDSLRuntime,
 ) -> None:
@@ -286,7 +323,11 @@ def test_job_construction_uses_standard_edsl_agent_model_and_scenarios(
         "request-1",
         "request-3",
     ]
-    assert all(set(scenario) == {"request_id", "prompt"} for job in fake_edsl.jobs for scenario in job.scenarios)
+    assert all(
+        set(scenario) == {"request_id", "prompt"}
+        for job in fake_edsl.jobs
+        for scenario in job.scenarios
+    )
     assert fake_edsl.agents[0].traits == {"persona": "persona-a"}
     assert fake_edsl.agents[0].kwargs == {}
     assert fake_edsl.agents[1].traits is None
@@ -310,7 +351,19 @@ def test_job_construction_uses_standard_edsl_agent_model_and_scenarios(
 
 def test_async_execution_uses_only_sequential_run_async_calls(
     fake_edsl: FakeEDSLRuntime,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    cleanup_calls: list[list[str]] = []
+
+    async def record_cleanup(
+        requests: list[InferenceRequest],
+        models: dict[str, ModelConfig],
+    ) -> None:
+        del models
+        cleanup_calls.append([request.request_id for request in requests])
+
+    monkeypatch.setattr(adapter_module, "_close_edsl_async_clients", record_cleanup)
+
     results = asyncio.run(EDSLAdapter().execute_batch_async(_requests(), _models()))
 
     assert [result.request_id for result in results] == [
@@ -322,6 +375,7 @@ def test_async_execution_uses_only_sequential_run_async_calls(
         ("run_async", "first-model", {"print_exceptions": False}),
         ("run_async", "second-model", {"print_exceptions": False}),
     ]
+    assert cleanup_calls == [["request-1", "request-2", "request-3"]]
 
 
 def test_task_history_exception_is_used_for_a_missing_response(
@@ -403,6 +457,7 @@ def test_missing_edsl_result_is_a_systemic_failure(
 
 def test_edsl_job_errors_are_wrapped_with_group_context(
     fake_edsl: FakeEDSLRuntime,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     request = _requests()[0]
     fake_edsl.prompt_error = RuntimeError("preview broke")
@@ -419,6 +474,17 @@ def test_edsl_job_errors_are_wrapped_with_group_context(
 
     fake_edsl.sync_error = None
     fake_edsl.async_error = RuntimeError("async broke")
+    cleanup_calls = 0
+
+    async def record_cleanup(
+        requests: list[InferenceRequest],
+        models: dict[str, ModelConfig],
+    ) -> None:
+        nonlocal cleanup_calls
+        del requests, models
+        cleanup_calls += 1
+
+    monkeypatch.setattr(adapter_module, "_close_edsl_async_clients", record_cleanup)
 
     async def exercise() -> None:
         with pytest.raises(InferenceBatchError, match="async broke") as async_error:
@@ -426,3 +492,4 @@ def test_edsl_job_errors_are_wrapped_with_group_context(
         assert isinstance(async_error.value.__cause__, RuntimeError)
 
     asyncio.run(exercise())
+    assert cleanup_calls == 1

@@ -2,11 +2,16 @@
 
 LLM AuditKit is a Python package for auditing large language model behavior in hiring experiments.
 
-This repository currently provides the package structure only. Functionality will be added in future releases.
+The shared inference package is implemented with validated deterministic batching,
+synchronous and asynchronous execution, prompt preview, normalized outcomes, and an
+Expected Parrot EDSL adapter. The five domain pipeline stages remain architecture-first
+and are documented for incremental implementation.
 
 ## Documentation
 
-See the [package architecture](docs/architecture.md) for the planned hiring pipeline, shared inference layer, and detailed component documentation.
+See the [package architecture](docs/architecture.md) for the planned hiring pipeline and
+the [shared inference contract](docs/components/inference.md) for its public API and
+execution behavior.
 
 Contributors should also follow the [engineering workflow](docs/development_workflow.md) for issues, branches, pull requests, and review.
 
@@ -14,7 +19,8 @@ The private [paper reference repository](docs/paper_reference.md) preserves the 
 
 ## Getting Started
 
-1. Create and activate a virtual environment. For example, using Python's built-in `venv` on macOS or Linux:
+1. Create and activate a virtual environment. For example, using Python's built-in
+   `venv` on macOS or Linux:
 
    ```bash
    python -m venv .venv

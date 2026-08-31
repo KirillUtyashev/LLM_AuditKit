@@ -8,6 +8,85 @@ The inference package provides reusable LLM inference for template generation, e
 
 The shared layer validates and batches generic requests, partitions each logical batch into EDSL-compatible job groups, delegates those jobs to EDSL, and normalizes the returned outcomes. Requests can share one EDSL job only when they use the same model configuration and system prompt; their user prompts and request IDs are carried as scenarios. EDSL owns parallel interview execution, provider rate limiting, caching, and retry behavior within each submitted job. LLM AuditKit does not implement a second worker pool or retry loop around individual EDSL interviews.
 
+## Public API
+
+The supported entry points are exported from `llm_auditkit.inference`. Construct one
+`InferenceOrchestrator` with an `EDSLAdapter`, then use the same requests and
+configuration with either execution interface:
+
+```python
+from llm_auditkit.inference import (
+    EDSLAdapter,
+    InferenceConfig,
+    InferenceOrchestrator,
+    InferenceRequest,
+    ModelConfig,
+)
+
+config = InferenceConfig(
+    models=[
+        ModelConfig(
+            config_id="screening-model-v1",
+            provider="your-edsl-service",
+            model="your-model-name",
+            parameters={"temperature": 0.2},
+        )
+    ],
+    batch_size=25,
+)
+requests = [
+    InferenceRequest(
+        request_id="candidate-001:screening-model-v1",
+        prompt="Evaluate this synthetic candidate profile.",
+        system_prompt="You are a hiring manager.",
+        model_config_id="screening-model-v1",
+        metadata={"candidate_id": "candidate-001"},
+    )
+]
+
+inference = InferenceOrchestrator(EDSLAdapter())
+preview = inference.preview_batch(requests, config)
+
+for batch in inference.run_batches(requests, config):
+    # Parse and checkpoint this completed batch before requesting the next one.
+    persist(batch.results)
+```
+
+For an application that already uses an event loop, replace the synchronous loop with
+the native asynchronous interface:
+
+```python
+async def run_inference() -> None:
+    async for batch in inference.run_batches_async(requests, config):
+        await persist_async(batch.results)
+```
+
+`preview_batch` renders prompts without performing inference. Both execution methods
+are lazy at the logical-batch boundary: the next batch is not submitted until the
+caller advances its iterator. The `persist` functions above are caller-owned examples,
+not functions provided by LLM AuditKit.
+
+## Optional Live OpenAI Tests
+
+The regular test suite includes opt-in integration tests that exercise prompt preview,
+synchronous batching, and asynchronous execution through the public orchestrator and
+the real EDSL OpenAI backend. They are collected but skipped unless the paid-network
+test gate is explicitly enabled.
+
+Copy [`.env.example`](../../.env.example) to `.env` and provide a local value for
+`OPENAI_API_KEY`. The `.env` file and common variants are ignored by Git; never commit
+provider credentials. The smoke tests use `gpt-4.1-nano`. Run them with:
+
+```bash
+python -m pytest --run-live-inference tests/integration/test_openai_inference.py -v
+```
+
+Supplying `--run-live-inference` without the required API key fails during test setup.
+Running `python -m pytest` without the flag skips the live-test fixtures and never
+performs live model inference. The live tests intentionally use three short logical
+completions, but they still consume provider quota, may incur cost, and can result in
+additional provider attempts when EDSL applies its retry behavior.
+
 ## Requests
 
 Callers submit domain-neutral `InferenceRequest` objects containing:
@@ -107,7 +186,9 @@ The orchestrator does not begin the next batch until the caller requests the nex
 
 The adapter must preserve the submitted request set without accidentally creating additional scenario, persona, or model combinations. Request IDs are carried through the EDSL job so returned outcomes can be associated without relying on EDSL list positions.
 
-No other package component depends directly on EDSL-specific classes. The package supports `edsl>=1.0.8,<1.1`; compatibility outside that range is not implied.
+No other package component depends directly on EDSL-specific classes. The package
+installs EDSL's `inference` dependency extra and supports `edsl>=1.0.8,<1.1`;
+compatibility outside that range is not implied.
 
 ## Results and Failures
 

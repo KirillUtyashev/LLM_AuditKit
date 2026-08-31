@@ -5,6 +5,7 @@ from __future__ import annotations
 from collections.abc import Mapping, Sequence
 
 from edsl import Agent, Model, QuestionFreeText, Scenario, ScenarioList
+from edsl.inference_services.registry import GLOBAL_REGISTRY
 
 from .batching import AdapterJobGroup, group_requests_by_model_and_system_prompt
 from .exceptions import InferenceBatchError
@@ -73,17 +74,44 @@ class EDSLAdapter:
         """Execute compatible EDSL job groups sequentially with ``run_async``."""
 
         normalized_results: list[InferenceResult] = []
-        for group in group_requests_by_model_and_system_prompt(requests, models):
-            try:
-                job = _build_job(group)
-                edsl_results = await job.run_async(print_exceptions=False)
-                normalized_results.extend(_normalize_results(group, edsl_results))
-            except InferenceBatchError:
-                raise
-            except Exception as error:
-                raise _group_failure("execute asynchronously", group, error) from error
+        try:
+            for group in group_requests_by_model_and_system_prompt(requests, models):
+                try:
+                    job = _build_job(group)
+                    edsl_results = await job.run_async(print_exceptions=False)
+                    normalized_results.extend(_normalize_results(group, edsl_results))
+                except InferenceBatchError:
+                    raise
+                except Exception as error:
+                    raise _group_failure(
+                        "execute asynchronously",
+                        group,
+                        error,
+                    ) from error
 
-        return _order_results(requests, normalized_results)
+            return _order_results(requests, normalized_results)
+        finally:
+            await _close_edsl_async_clients(requests, models)
+
+
+async def _close_edsl_async_clients(
+    requests: Sequence[InferenceRequest],
+    models: Mapping[str, ModelConfig],
+) -> None:
+    """Close provider clients that EDSL caches beyond one awaited batch."""
+
+    provider_names = dict.fromkeys(
+        models[request.model_config_id].provider for request in requests
+    )
+    for provider_name in provider_names:
+        try:
+            service_class = GLOBAL_REGISTRY.get_service_class(provider_name)
+        except KeyError:
+            continue
+
+        close_async_clients = getattr(service_class, "close_async_clients", None)
+        if callable(close_async_clients):
+            await close_async_clients()
 
 
 def _build_job(group: AdapterJobGroup) -> object:
