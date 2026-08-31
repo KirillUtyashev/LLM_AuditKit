@@ -26,10 +26,12 @@ classDiagram
     class TemplateGenerator {
         -inference_orchestrator: InferenceOrchestrator
         -template_store: TemplateStore
-        -save_lock: asyncio.Lock
+        +preview(dataset: DataFrame, config: TemplateGenerationConfig, batch_number: int) InferenceBatchPreview
         +generate(dataset: DataFrame, config: TemplateGenerationConfig) DataFrame
-        +generate_row(row: Series, config: TemplateGenerationConfig) List~Template~
+        +generate_async(dataset: DataFrame, config: TemplateGenerationConfig) DataFrame
+        -build_requests(dataset: DataFrame, config: TemplateGenerationConfig) List~InferenceRequest~
         -build_prompt(row: Series, config: TemplateGenerationConfig) str
+        -parse_result(result: InferenceResult, config: TemplateGenerationConfig) List~Template~
     }
     class TemplateStore {
         -output_path: Path
@@ -43,11 +45,21 @@ classDiagram
     }
     class InferenceConfig {
         <<shared inference>>
+        +batch_size: int
     }
-    class InferenceOrchestrator {
+    class InferenceRequest {
+        <<shared inference>>
+    }
+    class InferenceBatchPreview {
+        <<shared inference>>
+    }
+    class InferenceBatchResult {
         <<shared inference>>
     }
     class InferenceResult {
+        <<shared inference>>
+    }
+    class InferenceOrchestrator {
         <<shared inference>>
     }
     class DataFrame {
@@ -57,10 +69,13 @@ classDiagram
     SkillConfig --> SkillSection
     TemplateGenerationConfig --> EducationConfig
     TemplateGenerationConfig --> InferenceConfig
-    TemplateGenerator --> InferenceOrchestrator : submits requests
-    TemplateGenerator --> InferenceResult : parses
+    TemplateGenerator --> InferenceRequest : builds pending requests
+    TemplateGenerator --> InferenceBatchPreview : previews
+    TemplateGenerator --> InferenceOrchestrator : consumes batches
+    InferenceOrchestrator --> InferenceBatchResult : yields sequentially
+    InferenceBatchResult --> InferenceResult
     TemplateGenerator --> TemplateGenerationConfig : uses
-    TemplateGenerator --> TemplateStore : persists results
+    TemplateGenerator --> TemplateStore : checkpoints results
     TemplateGenerator --> DataFrame : processes
-    TemplateGenerator --> Template : generates
+    TemplateGenerator --> Template : parses
     TemplateStore --> DataFrame : updates and persists

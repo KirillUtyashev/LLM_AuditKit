@@ -4,9 +4,8 @@ config:
 ---
 classDiagram
     class InferenceConfig {
-        +models: Dict~str, ModelConfig~
-        +max_concurrency: int
-        +max_retries: int
+        +models: List~ModelConfig~
+        +batch_size: int
     }
     class ModelConfig {
         +config_id: str
@@ -21,33 +20,65 @@ classDiagram
         +model_config_id: str
         +metadata: Dict
     }
+    class RenderedPrompt {
+        +request_id: str
+        +user_prompt: str
+        +system_prompt: Optional~str~
+    }
+    class InferenceBatchPreview {
+        +batch_number: int
+        +total_batches: int
+        +prompts: List~RenderedPrompt~
+    }
+    class InferenceBatchResult {
+        +batch_number: int
+        +total_batches: int
+        +elapsed_seconds: float
+        +results: List~InferenceResult~
+    }
     class InferenceResult {
         +request_id: str
         +model_config_id: str
-        +content: Any
+        +content: Optional~str~
         +metadata: Dict
         +error: Optional~InferenceError~
     }
     class InferenceError {
         +type: str
         +message: str
-        +retryable: bool
     }
     class InferenceOrchestrator {
-        -adapter: EDSLAdapter
-        +stream(requests: List~InferenceRequest~, config: InferenceConfig) AsyncIterator~InferenceResult~
+        -adapter: InferenceAdapter
+        +preview_batch(requests: List~InferenceRequest~, config: InferenceConfig, batch_number: int) InferenceBatchPreview
+        +run_batches(requests: List~InferenceRequest~, config: InferenceConfig) Iterator~InferenceBatchResult~
+        +run_batches_async(requests: List~InferenceRequest~, config: InferenceConfig) AsyncIterator~InferenceBatchResult~
+    }
+    class InferenceAdapter {
+        <<Protocol>>
+        +render_batch(requests: List~InferenceRequest~, models: Dict~str, ModelConfig~) List~RenderedPrompt~
+        +execute_batch(requests: List~InferenceRequest~, models: Dict~str, ModelConfig~) List~InferenceResult~
+        +execute_batch_async(requests: List~InferenceRequest~, models: Dict~str, ModelConfig~) List~InferenceResult~
     }
     class EDSLAdapter {
-        +execute(request: InferenceRequest, model: ModelConfig) InferenceResult
+        -group_requests(requests: List~InferenceRequest~)
+        +render_batch(requests: List~InferenceRequest~, models: Dict~str, ModelConfig~) List~RenderedPrompt~
+        +execute_batch(requests: List~InferenceRequest~, models: Dict~str, ModelConfig~) List~InferenceResult~
+        +execute_batch_async(requests: List~InferenceRequest~, models: Dict~str, ModelConfig~) List~InferenceResult~
     }
     class EDSL {
         <<Expected Parrot>>
+        +run()
+        +run_async()
     }
     InferenceConfig --> ModelConfig
-    InferenceOrchestrator --> InferenceConfig : uses
-    InferenceOrchestrator --> InferenceRequest : schedules
-    InferenceOrchestrator --> InferenceResult : yields
+    InferenceOrchestrator --> InferenceConfig : validates and batches
+    InferenceOrchestrator --> InferenceRequest : preserves identity
+    InferenceOrchestrator --> InferenceBatchPreview : previews
+    InferenceBatchPreview --> RenderedPrompt
+    InferenceOrchestrator --> InferenceBatchResult : yields sequentially
+    InferenceBatchResult --> InferenceResult
     InferenceResult --> InferenceError
-    InferenceOrchestrator --> EDSLAdapter : delegates
+    InferenceOrchestrator --> InferenceAdapter : delegates batches
+    EDSLAdapter ..|> InferenceAdapter : implements
     EDSLAdapter --> ModelConfig : configures
-    EDSLAdapter --> EDSL : builds and runs jobs
+    EDSLAdapter --> EDSL : submits sequential model and system-prompt groups
