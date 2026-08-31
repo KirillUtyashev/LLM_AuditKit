@@ -10,10 +10,10 @@ readme = "README.md"
 requires-python = ">=3.10"
 license = "MIT"
 license-files = ["LICENSE"]
-dependencies = ["edsl[inference]>=1.0.8,<1.1"]
+dependencies = ["edsl[inference]>=1.0.8,<1.1", "python-dotenv>=1"]
 
 [project.optional-dependencies]
-test = ["pytest>=8", "python-dotenv>=1"]
+test = ["pytest>=8"]
 
 [tool.setuptools.packages.find]
 where = ["src"]

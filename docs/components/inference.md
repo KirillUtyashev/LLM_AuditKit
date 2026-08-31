@@ -6,6 +6,10 @@
 
 The inference package provides reusable LLM inference for template generation, experiment execution, and future package workflows. Expected Parrot EDSL is the execution backend, but EDSL-specific objects do not leak into calling pipeline stages.
 
+For installation and task-oriented examples, see
+[Using Shared Inference](../guides/shared_inference.md). This page defines the detailed
+component contract and implementation boundaries.
+
 The shared layer validates and batches generic requests, partitions each logical batch into EDSL-compatible job groups, delegates those jobs to EDSL, and normalizes the returned outcomes. Requests can share one EDSL job only when they use the same model configuration and system prompt; their user prompts and request IDs are carried as scenarios. EDSL owns parallel interview execution, provider rate limiting, caching, and retry behavior within each submitted job. LLM AuditKit does not implement a second worker pool or retry loop around individual EDSL interviews.
 
 ## Public API
@@ -78,6 +82,7 @@ Copy [`.env.example`](../../.env.example) to `.env` and provide a local value fo
 provider credentials. The smoke tests use `gpt-4.1-nano`. Run them with:
 
 ```bash
+python -m pip install -e ".[test]"
 python -m pytest --run-live-inference tests/integration/test_openai_inference.py -v
 ```
 
@@ -99,7 +104,17 @@ Callers submit domain-neutral `InferenceRequest` objects containing:
 
 A request ID must be unique within one inference run and stable when the same logical request is resumed. Calling stages must derive it from durable domain identifiers rather than DataFrame row positions. If prompt-defining inputs or the selected model configuration change in a way that invalidates an existing result, the calling stage must also invalidate the corresponding completion identity.
 
+`InferenceConfig` is the run-level model catalog and batching policy. Each request's
+`model_config_id` selects one `ModelConfig.config_id` from that catalog; provider,
+model, and parameter values are not duplicated on individual requests. The caller
+passes the request collection and configuration together to preview or execute it.
+
 `prompt` is always a string. `system_prompt=None` means that the caller supplies no explicit system instructions and the adapter creates an empty EDSL `Agent`. A non-null system prompt is supplied as the standard EDSL agent `persona` trait. EDSL's default agent instruction and rendered prompt behavior are authoritative; LLM AuditKit does not customize the traits-presentation template, suppress EDSL instructions, or reconstruct EDSL's prompt.
+
+Request metadata is optional caller-owned convenience context. It is not sent to the
+model or used for execution decisions. The inference layer copies it to the normalized
+result so callers can associate outcomes with application records without parsing the
+request ID; the request ID remains the authoritative identity.
 
 Template generation constructs requests from job-posting rows. Experiment execution constructs requests from populated scenarios and personas.
 

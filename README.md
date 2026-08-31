@@ -7,38 +7,49 @@ synchronous and asynchronous execution, prompt preview, normalized outcomes, and
 Expected Parrot EDSL adapter. The five domain pipeline stages remain architecture-first
 and are documented for incremental implementation.
 
+## Quickstart
+
+The current user-facing functionality is the shared inference API. The following
+commands install the package from this repository and make one real OpenAI request:
+
+```bash
+python -m venv .venv
+source .venv/bin/activate
+python -m pip install -e .
+cp -n .env.example .env
+```
+
+Add your key to `.env`:
+
+```dotenv
+OPENAI_API_KEY=your-key-here
+```
+
+Then run the synchronous example:
+
+```bash
+python examples/shared_inference_sync.py
+```
+
+The example previews the EDSL-rendered prompt, executes it with `gpt-4.1-nano`, and
+prints the normalized result. It makes a paid provider call. An asynchronous example
+is also available:
+
+```bash
+python examples/shared_inference_async.py
+```
+
+Read [Using Shared Inference](docs/guides/shared_inference.md) for configuration,
+request identity, prompt preview, batching, sync and async execution, results,
+failures, and checkpoint integration.
+
 ## Documentation
 
-See the [package architecture](docs/architecture.md) for the planned hiring pipeline and
-the [shared inference contract](docs/components/inference.md) for its public API and
-execution behavior.
+The [package architecture](docs/architecture.md) describes the planned hiring pipeline.
+The [shared inference component contract](docs/components/inference.md) documents its
+detailed behavior and boundaries.
 
-Contributors should also follow the [engineering workflow](docs/development_workflow.md) for issues, branches, pull requests, and review.
-
-The private [paper reference repository](docs/paper_reference.md) preserves the earlier research code for historical context without making it part of this package.
-
-## Getting Started
-
-1. Create and activate a virtual environment. For example, using Python's built-in
-   `venv` on macOS or Linux:
-
-   ```bash
-   python -m venv .venv
-   source .venv/bin/activate
-   ```
-
-2. Install the package in editable mode from the repository root:
-
-   ```bash
-   python -m pip install -e .
-   ```
-
-3. Sync the pinned, code-only implementation used for the earlier paper:
-
-   ```bash
-   python scripts/sync_reference_repo.py
-   ```
-
-   This private reference requires GitHub SSH access and is checked out under the ignored `.references/` directory. Read the [paper reference guide](docs/paper_reference.md) before using it.
-
-4. Read the [package architecture](docs/architecture.md), [engineering workflow](docs/development_workflow.md), and `AGENTS.md` before beginning development.
+Contributors should follow the
+[engineering workflow](docs/development_workflow.md). The optional private
+[paper reference repository](docs/paper_reference.md) preserves earlier research code
+for historical context without making it part of this package.
