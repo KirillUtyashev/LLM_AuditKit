@@ -94,6 +94,9 @@
     ),
     drop = FALSE
   ])
+  class(counts) <- "data.frame"
+  attr(counts, "regression_fit_count") <- NULL
+  attr(counts, "regression_results_contract_id") <- NULL
   row.names(counts) <- NULL
   counts
 }
@@ -107,6 +110,15 @@ testthat::test_that("grouped IID fixed-effects results satisfy the tidy contract
 
   results <- estimate_regressions(config_path)
 
+  testthat::expect_identical(
+    class(results),
+    c("regression_results", "data.frame")
+  )
+  testthat::expect_true(is.data.frame(results))
+  testthat::expect_identical(
+    attr(results, "regression_results_contract_id", exact = TRUE),
+    REGRESSION_RESULTS_OBJECT_CONTRACT_ID
+  )
   testthat::expect_identical(
     names(results),
     c(REGRESSION_RESULT_CORE_COLUMNS, "period")
@@ -355,6 +367,66 @@ testthat::test_that("two-field grouped fits are ordered by group, term, and leve
     rep(0.26854307776478742, 8L),
     tolerance = 1e-12
   )
+})
+
+testthat::test_that("multiple requested explanatory variables are estimated in every group", {
+  results <- estimate_regressions(
+    .regression_execution_config(
+      model_id = "multiple_explanatory_variables",
+      explanatory = c("black", "high"),
+      controls = character(),
+      clusters = character(),
+      groups = c("period", "model_config_id")
+    )
+  )
+
+  testthat::expect_s3_class(results, "regression_results")
+  testthat::expect_identical(
+    names(results),
+    c(REGRESSION_RESULT_CORE_COLUMNS, "period", "model_config_id")
+  )
+  testthat::expect_identical(
+    attr(results, "regression_fit_count", exact = TRUE),
+    4L
+  )
+  testthat::expect_identical(nrow(results), 24L)
+  testthat::expect_true(all(results$explanatory_variables == "black|high"))
+  testthat::expect_true(all(results$control_variables == ""))
+
+  group_labels <- paste(results$period, results$model_config_id, sep = "/")
+  for (group_label in unique(group_labels)) {
+    group_rows <- which(group_labels == group_label)
+    testthat::expect_setequal(
+      unique(results$term[group_rows]),
+      c("black", "high")
+    )
+    for (term in c("black", "high")) {
+      term_rows <- group_rows[results$term[group_rows] == term]
+      testthat::expect_identical(length(term_rows), 3L)
+      testthat::expect_equal(
+        results$confidence_level[term_rows],
+        REGRESSION_CONFIDENCE_LEVELS
+      )
+      testthat::expect_identical(
+        length(unique(results$estimate[term_rows])),
+        1L
+      )
+      testthat::expect_identical(
+        length(unique(results$std_error[term_rows])),
+        1L
+      )
+      testthat::expect_identical(
+        length(unique(results$p_value[term_rows])),
+        1L
+      )
+      testthat::expect_true(
+        all(results$conf_low[term_rows] <= results$estimate[term_rows])
+      )
+      testthat::expect_true(
+        all(results$conf_high[term_rows] >= results$estimate[term_rows])
+      )
+    }
+  }
 })
 
 testthat::test_that("an ungrouped model without fixed effects retains its intercept", {
@@ -725,6 +797,127 @@ testthat::test_that("stable input ordering produces identical tidy results", {
   )
 
   testthat::expect_identical(reversed, original)
+})
+
+testthat::test_that("in-memory regression results can be written safely", {
+  results <- estimate_regressions(
+    .regression_execution_config(
+      model_id = "public_writer",
+      clusters = character(),
+      groups = "period"
+    )
+  )
+  directory <- tempfile("regression-results-writer-")
+  output_path <- file.path(directory, "nested", "results.csv")
+
+  returned_path <- testthat::expect_invisible(
+    write_regression_results(results, output_path)
+  )
+  testthat::expect_identical(returned_path, output_path)
+  testthat::expect_true(file.exists(output_path))
+  column_classes <- vapply(
+    results,
+    function(values) {
+      switch(
+        typeof(values),
+        integer = "integer",
+        double = "numeric",
+        logical = "logical",
+        character = "character"
+      )
+    },
+    character(1)
+  )
+  written <- utils::read.csv(
+    output_path,
+    check.names = FALSE,
+    na.strings = character(),
+    stringsAsFactors = FALSE,
+    colClasses = column_classes
+  )
+  expected <- results
+  class(expected) <- "data.frame"
+  attr(expected, "regression_fit_count") <- NULL
+  attr(expected, "regression_results_contract_id") <- NULL
+  testthat::expect_equal(written, expected, tolerance = 1e-14)
+
+  original_bytes <- .regression_execution_bytes(output_path)
+  invalid_results <- results
+  invalid_results$confidence_level[[1L]] <- 0.80
+  testthat::expect_error(
+    write_regression_results(invalid_results, output_path),
+    "each term and estimation group must contain one internally consistent"
+  )
+  testthat::expect_identical(
+    .regression_execution_bytes(output_path),
+    original_bytes
+  )
+
+  invalid_version <- results
+  invalid_version$estimator_version[[1L]] <- "different"
+  testthat::expect_error(
+    write_regression_results(invalid_version, output_path),
+    "estimator_version.*constant"
+  )
+  invalid_counts <- results
+  tampered_term_rows <- seq_len(3L)
+  invalid_counts$n_used[tampered_term_rows] <-
+    invalid_counts$n_used[tampered_term_rows] - 1L
+  invalid_counts$n_estimator_dropped[tampered_term_rows] <-
+    invalid_counts$n_estimator_dropped[tampered_term_rows] + 1L
+  invalid_counts$n_dropped[tampered_term_rows] <-
+    invalid_counts$n_dropped[tampered_term_rows] + 1L
+  testthat::expect_error(
+    write_regression_results(invalid_counts, output_path),
+    "n_used.*constant within each estimation group"
+  )
+
+  clustered <- estimate_regressions(
+    .regression_execution_config(
+      model_id = "public_writer_clustered",
+      clusters = "position_fe",
+      groups = "period"
+    )
+  )
+  invalid_cluster_counts <- clustered
+  invalid_cluster_counts$cluster_counts[clustered$period == 2010L] <-
+    "position_fe=999"
+  testthat::expect_error(
+    write_regression_results(invalid_cluster_counts, output_path),
+    "cluster_counts is inconsistent"
+  )
+
+  plain_results <- results
+  class(plain_results) <- "data.frame"
+  attr(plain_results, "regression_fit_count") <- NULL
+  attr(plain_results, "regression_results_contract_id") <- NULL
+  testthat::expect_error(
+    write_regression_results(plain_results, output_path),
+    "must be returned by estimate_regressions"
+  )
+  testthat::expect_error(
+    write_regression_results(results, c("one.csv", "two.csv")),
+    "must be one nonempty string"
+  )
+  testthat::expect_error(
+    write_regression_results(results, file.path(directory, "results.txt")),
+    "must end in '.csv'",
+    fixed = TRUE
+  )
+  directory_path <- file.path(directory, "directory.csv")
+  dir.create(directory_path)
+  testthat::expect_error(
+    write_regression_results(results, directory_path),
+    "output path is a directory"
+  )
+  testthat::expect_length(
+    list.files(
+      dirname(output_path),
+      pattern = "^\\.results\\.csv-.*\\.tmp$",
+      all.files = TRUE
+    ),
+    0L
+  )
 })
 
 testthat::test_that("runner replacement is deterministic and preserves old output on failure", {

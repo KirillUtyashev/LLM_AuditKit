@@ -8,8 +8,9 @@ The project is under active development. Most Python components remain
 architecture-first; the regression stage currently includes its locked R
 environment, a complete YAML-driven raw-to-regression-ready preparation
 runner, and a separate fixed-effects estimation runner that writes plot-ready
-numerical results. An independent paper-style renderer recreates PNG figures
-from those saved results without rerunning a regression.
+numerical results. The estimator also returns the same tidy results as an R
+object for interactive analysis. An independent paper-style renderer recreates
+PNG figures from those results without rerunning a regression.
 
 ## Documentation
 
@@ -64,6 +65,13 @@ the configured model with:
 ```bash
 Rscript scripts/run_regression.R --config path/to/regression.yaml
 ```
+
+The command writes `regression_results.csv`. In an interactive R session,
+`estimate_regressions()` instead returns the same tidy table directly, and
+`write_regression_results()` can save that object later. Every configured
+estimation-group combination is a separate fit, and every requested
+explanatory variable receives its own estimate, standard error, p-value, and
+90%, 95%, and 99% confidence intervals.
 
 The regression YAML contract and tidy result schema are documented in the
 [regression analysis guide](docs/components/regression_analysis.md#2-fixed-effects-estimation).

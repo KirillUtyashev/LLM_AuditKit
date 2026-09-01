@@ -86,11 +86,42 @@
   invisible(output_path)
 }
 
+write_regression_results <- function(results, output_path) {
+  .regression_results_validate(results)
+  if (
+    !is.character(output_path) ||
+      length(output_path) != 1L ||
+      is.na(output_path) ||
+      !nzchar(trimws(output_path))
+  ) {
+    stop(
+      "Regression-results output path must be one nonempty string.",
+      call. = FALSE
+    )
+  }
+  if (!grepl("\\.csv$", basename(output_path), ignore.case = TRUE)) {
+    stop(
+      "Regression-results output path must end in '.csv'.",
+      call. = FALSE
+    )
+  }
+  if (file.exists(output_path) && isTRUE(file.info(output_path)$isdir)) {
+    stop(
+      sprintf(
+        "Regression-results output path is a directory: %s",
+        output_path
+      ),
+      call. = FALSE
+    )
+  }
+  .regression_write_csv_atomic(results, output_path)
+}
+
 run_regressions <- function(config) {
   config <- .regression_as_config(config)
   results <- estimate_regressions(config)
   fit_count <- attr(results, "regression_fit_count", exact = TRUE)
-  .regression_write_csv_atomic(results, config$resolved_output_path)
+  write_regression_results(results, config$resolved_output_path)
   coefficient_count <- as.integer(nrow(results) / 3L)
   message(
     sprintf(

@@ -69,6 +69,7 @@ classDiagram
     class FixedEffectsEstimator {
         <<R>>
         +estimate(config: RegressionConfig) RegressionResults
+        +write(results: RegressionResults, path: Path) CSV
     }
     class PaperStyleRenderer {
         <<R>>
@@ -90,7 +91,7 @@ classDiagram
         +preparation_settings: repeated
     }
     class RegressionResults {
-        <<CSV>>
+        <<R data.frame / CSV>>
         +row_grain: coefficient_interval
         +estimator: fixest_feols
         +inference_contract_id: str
@@ -119,7 +120,7 @@ classDiagram
     RegressionCLI --> RegressionConfig : loads
     RegressionCLI --> FixedEffectsEstimator : invokes
     FixedEffectsEstimator --> RegressionReadyData : reads exactly one
-    FixedEffectsEstimator --> RegressionResults : writes
+    FixedEffectsEstimator --> RegressionResults : returns; optionally writes
 
     RenderCLI --> RenderConfig : loads
     RenderCLI --> PaperStyleRenderer : invokes

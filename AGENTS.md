@@ -9,8 +9,9 @@ pipeline and an accompanying R regression stage. The repository remains
 architecture-first overall: the Python package is largely a scaffold, while
 the regression stage has a locked R environment plus a complete
 raw-to-regression-ready preparation runner and a separate fixed-effects
-estimation runner that writes plot-ready numerical results. The independent
-paper-style renderer reads those saved results and atomically writes a PNG.
+estimation runner that returns plot-ready numerical results and can write them
+as CSV. The independent paper-style renderer reads those results and atomically
+writes a PNG.
 
 - Do not assume documented components are already implemented.
 - Do not add functionality, dependencies, interfaces, or placeholder modules outside the scope of the current task.
@@ -43,7 +44,7 @@ When an architectural contract represented in a Mermaid diagram changes, update 
 - Template counts are configurable as `N`; do not hard-code four resumes or templates.
 - Resume and completion behavior must use stable scenario, persona, model-configuration, job, and candidate/resume identifiers. Never use a DataFrame row index or candidate position as durable identity.
 - Keep `save_after_each_result` stage-specific and configurable. Incremental file writes must use an atomic replacement strategy.
-- The Python-to-R boundary uses raw experiment CSVs. Separate YAML-configured `Rscript` entry points prepare a regression-ready CSV, estimate one inspected dataset into plot-ready numerical results, and render figures independently from those saved results.
+- The Python-to-R boundary uses raw experiment CSVs. Separate YAML-configured `Rscript` entry points prepare a regression-ready CSV, estimate one inspected dataset into plot-ready numerical results, and render figures independently from those results. Within R, estimation returns the same tidy table that the CLI can persist as CSV.
 
 ## Repository Layout
 

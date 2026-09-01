@@ -12,7 +12,7 @@ Raw experiment CSVs
     -> regression-data preparation
     -> regression-ready CSV
     -> fixed-effects estimation
-    -> plot-ready regression-results CSV
+    -> plot-ready regression-results R object (optionally CSV)
     -> paper-style rendering
     -> PNG
 ```
@@ -28,11 +28,11 @@ the locked R environment, preparation configuration validation, deterministic
 raw job-row loading, and the initial R test scaffold. Subissue #21 completes
 dynamic candidate preparation, selection outcomes, status reporting, and the
 preparation CLI. Subissue #22 adds regression-configuration and prepared-data
-validation, grouped `fixest::feols` estimation, locked inference, atomic tidy
-result export, and the estimation CLI. Subissue #23 adds saved-result
-validation, deterministic plot-data preparation, and the independent
-paper-style PNG renderer. Final regression-stage walkthrough and integration
-handoff remain in subissue #24.
+validation, grouped `fixest::feols` estimation, locked inference, an in-memory
+tidy result object, optional atomic CSV export, and the estimation CLI.
+Subissue #23 adds saved-result validation, deterministic plot-data preparation,
+and the independent paper-style PNG renderer. Final regression-stage
+walkthrough and integration handoff remain in subissue #24.
 
 ## Shared Configuration Rules
 
@@ -292,7 +292,9 @@ model_id: black_callback_by_period_model
 outcome_variable: pick_top
 explanatory_variables:
   - black
-control_variables: []
+  - black_high
+control_variables:
+  - high
 fixed_effects:
   - scenario_id
 cluster_variables:
@@ -344,15 +346,25 @@ configured. An empty clustering list uses IID standard errors. One or more
 cluster variables use the corresponding one- or multi-way clustered covariance
 estimator.
 
-The canonical paper example leaves `control_variables` empty so `black` is the
-overall Black--White contrast. A separate quality-heterogeneity specification
-may add `high` and `black_high`; in that model, the raw `black` coefficient is
-the contrast at the baseline quality level and must be labeled accordingly.
+The example illustrates multiple explanatory variables. The estimator retains
+a separate coefficient result for every configured explanatory and control
+variable. In this quality-heterogeneity specification, `black` is the
+Black--White contrast at the baseline quality level, `black_high` is the
+interaction coefficient, and `high` is an estimated control term. A simpler
+overall Black--White contrast would use `explanatory_variables: [black]` and an
+empty control list.
 
 When `estimation_group_variables` is nonempty, the same specification is fit
 independently to every observed group combination. Group variables must be
 complete, and fits are ordered by the configured variables and their ascending
 values. No grouping variables means one fit.
+
+Estimation grouping and covariance clustering are separate choices. For
+example, `estimation_group_variables: [city, year]` produces one coefficient
+set for every observed city-year combination. `cluster_variables` instead
+controls the standard-error calculation within each such fit; it does not split
+the data or create additional point estimates. A cluster variable must still
+have at least two distinct clusters inside every estimation group.
 
 Period collapsing is an inspection-stage data decision, not an implicit
 estimator transformation. For the paper smoke test, the inspected dataset adds
@@ -389,9 +401,13 @@ silently altered fit. Plotting never recomputes intervals.
 
 ### Plot-Ready Results Contract
 
-`regression_results.csv` is tidy and long: one row per model fit, estimable
-coefficient, and confidence level. Its exact ordered prefix contains the 32
-stable columns below, followed by the configured estimation-group columns:
+The `regression_results` object and its CSV representation share one tidy,
+long schema: one row per model fit, estimable coefficient, and confidence
+level. With two explanatory variables, four observed estimation groups, and
+three confidence levels, the output therefore contains 24 rows for those
+explanatory coefficients (plus any estimated controls or intercept). Its exact
+ordered prefix contains the 32 stable columns below, followed by the configured
+estimation-group columns:
 
 | Column | Meaning |
 | --- | --- |
@@ -414,6 +430,14 @@ Configuration variable names cannot contain the `|` or `=` metadata separators
 under the variable-name rule. Result rows are ordered by group values,
 coefficient order, and confidence level. The output contains all information
 required for rendering and does not serialize fitted model objects.
+
+`estimate_regressions(config)` visibly returns this table as an S3
+`regression_results` object that is also a regular R `data.frame`.
+`write_regression_results(results, output_path)` validates and atomically saves
+an estimator-produced object. `run_regressions(config)` is the CLI-oriented
+convenience workflow: it estimates, writes the configured
+`regression_results.csv`, reports the fit and coefficient counts, and invisibly
+returns the same object.
 
 ## 3. Paper-Style Rendering
 
@@ -678,7 +702,8 @@ estimation and rendering land only when those modules use them. Subissue #21
 adds the dependency-free base-R preparation transformation and CLI plus public
 multi-city, multi-year, dynamic-`N` fixtures. Subissue #22 adds the locked
 `fixest` estimator, strict regression-ready input validation, grouped
-estimation, tidy 90/95/99% interval export, and the atomic estimation CLI.
+multi-variable estimation, an in-memory tidy result object, optional atomic
+90/95/99% interval CSV export, and the estimation CLI.
 Subissue #23 adds independent rendering, a public saved-result example, numeric
 plot-data and layer tests, PNG dimension/atomicity checks, and fresh-process
 tests that do not load `fixest`. Its tests also pass a real synthetic-data

@@ -1,6 +1,422 @@
 REGRESSION_CONFIDENCE_LEVELS <- c(0.90, 0.95, 0.99)
 REGRESSION_ESTIMATOR <- "fixest::feols"
 REGRESSION_INFERENCE_CONTRACT_ID <- "fixest_feols_ssc_v1"
+REGRESSION_RESULTS_OBJECT_CONTRACT_ID <- "llm_auditkit_regression_results_v1"
+
+.regression_results_abort <- function(format, ...) {
+  stop(
+    sprintf(
+      "Invalid regression_results object: %s",
+      sprintf(format, ...)
+    ),
+    call. = FALSE
+  )
+}
+
+.regression_results_serialized_names <- function(
+  results,
+  field,
+  allow_empty = TRUE
+) {
+  values <- results[[field]]
+  if (!is.character(values) || anyNA(values)) {
+    .regression_results_abort("column '%s' must contain strings.", field)
+  }
+  unique_values <- unique(values)
+  if (length(unique_values) != 1L) {
+    .regression_results_abort(
+      "column '%s' must be constant across the result table.",
+      field
+    )
+  }
+  serialized <- unique_values[[1L]]
+  if (!nzchar(serialized)) {
+    if (!allow_empty) {
+      .regression_results_abort("column '%s' must not be empty.", field)
+    }
+    return(character())
+  }
+  names <- strsplit(serialized, "|", fixed = TRUE)[[1L]]
+  invalid <- !nzchar(names) |
+    !grepl("^[A-Za-z][A-Za-z0-9_]*$", names) |
+    make.names(names) != names
+  if (any(invalid) || anyDuplicated(names)) {
+    .regression_results_abort(
+      "column '%s' contains invalid or duplicate variable names.",
+      field
+    )
+  }
+  names
+}
+
+.regression_results_constant <- function(results, fields) {
+  for (field in fields) {
+    values <- results[[field]]
+    if (anyNA(values) || length(unique(values)) != 1L) {
+      .regression_results_abort(
+        "column '%s' must be non-missing and constant across the result table.",
+        field
+      )
+    }
+  }
+  invisible(results)
+}
+
+.regression_results_validate <- function(results) {
+  if (
+    !inherits(results, "regression_results") ||
+      !inherits(results, "data.frame")
+  ) {
+    .regression_results_abort(
+      "results must be returned by estimate_regressions()."
+    )
+  }
+  if (
+    !identical(
+      attr(results, "regression_results_contract_id", exact = TRUE),
+      REGRESSION_RESULTS_OBJECT_CONTRACT_ID
+    )
+  ) {
+    .regression_results_abort(
+      "the in-memory results contract marker is missing or unsupported."
+    )
+  }
+  if (nrow(results) == 0L) {
+    .regression_results_abort("the result table must not be empty.")
+  }
+  missing_columns <- setdiff(REGRESSION_RESULT_CORE_COLUMNS, names(results))
+  if (length(missing_columns) > 0L) {
+    .regression_results_abort(
+      "missing required column(s): %s.",
+      paste(missing_columns, collapse = ", ")
+    )
+  }
+
+  group_variables <- .regression_results_serialized_names(
+    results,
+    "estimation_group_variables"
+  )
+  expected_columns <- c(REGRESSION_RESULT_CORE_COLUMNS, group_variables)
+  if (!identical(names(results), expected_columns)) {
+    .regression_results_abort(
+      paste0(
+        "columns must exactly match the regression result schema followed ",
+        "by the declared estimation-group columns."
+      )
+    )
+  }
+
+  string_columns <- c(
+    "dataset_id",
+    "model_id",
+    "estimator",
+    "estimator_version",
+    "inference_contract_id",
+    "outcome_variable",
+    "term",
+    "vcov_type",
+    "explanatory_variables",
+    "control_variables",
+    "fixed_effects",
+    "cluster_variables",
+    "estimation_group_variables",
+    "cluster_counts",
+    "preparation_ranking_group_variables",
+    "preparation_scenario_covariates",
+    "preparation_candidate_covariates"
+  )
+  invalid_string <- vapply(
+    results[string_columns],
+    function(values) !is.character(values) || anyNA(values),
+    logical(1)
+  )
+  if (any(invalid_string)) {
+    .regression_results_abort(
+      "column '%s' must contain non-missing strings.",
+      names(invalid_string)[which(invalid_string)[[1L]]]
+    )
+  }
+  required_nonempty <- c(
+    "dataset_id",
+    "model_id",
+    "estimator",
+    "estimator_version",
+    "inference_contract_id",
+    "outcome_variable",
+    "term",
+    "vcov_type",
+    "explanatory_variables",
+    "preparation_ranking_group_variables"
+  )
+  for (field in required_nonempty) {
+    if (any(!nzchar(trimws(results[[field]])))) {
+      .regression_results_abort("column '%s' must not be empty.", field)
+    }
+  }
+
+  .regression_results_constant(
+    results,
+    c(
+      "dataset_id",
+      "model_id",
+      "estimator",
+      "estimator_version",
+      "inference_contract_id",
+      "outcome_variable",
+      "vcov_type",
+      "explanatory_variables",
+      "control_variables",
+      "fixed_effects",
+      "cluster_variables",
+      "estimation_group_variables",
+      "preparation_top_share",
+      "preparation_probability_threshold",
+      "preparation_ranking_group_variables",
+      "preparation_scenario_covariates",
+      "preparation_candidate_covariates"
+    )
+  )
+  if (
+    !identical(unique(results$estimator), REGRESSION_ESTIMATOR) ||
+      !identical(
+        unique(results$inference_contract_id),
+        REGRESSION_INFERENCE_CONTRACT_ID
+      )
+  ) {
+    .regression_results_abort("estimator metadata is unsupported.")
+  }
+
+  numerical_columns <- c(
+    "estimate",
+    "std_error",
+    "statistic",
+    "p_value",
+    "confidence_level",
+    "conf_low",
+    "conf_high",
+    "preparation_top_share",
+    "preparation_probability_threshold"
+  )
+  invalid_numerical <- vapply(
+    results[numerical_columns],
+    function(values) !is.numeric(values) || any(!is.finite(values)),
+    logical(1)
+  )
+  if (any(invalid_numerical)) {
+    .regression_results_abort(
+      "column '%s' must contain finite numeric values.",
+      names(invalid_numerical)[which(invalid_numerical)[[1L]]]
+    )
+  }
+  count_columns <- c(
+    "n_input",
+    "n_complete",
+    "n_used",
+    "n_missing_dropped",
+    "n_estimator_dropped",
+    "n_dropped"
+  )
+  invalid_count <- vapply(
+    results[count_columns],
+    function(values) !is.integer(values) || anyNA(values),
+    logical(1)
+  )
+  if (any(invalid_count)) {
+    .regression_results_abort(
+      "column '%s' must contain integer counts.",
+      names(invalid_count)[which(invalid_count)[[1L]]]
+    )
+  }
+  invalid_count_values <-
+    results$n_input <= 0L |
+    results$n_complete <= 0L |
+    results$n_used <= 0L |
+    results$n_complete > results$n_input |
+    results$n_used > results$n_complete |
+    results$n_missing_dropped != results$n_input - results$n_complete |
+    results$n_estimator_dropped != results$n_complete - results$n_used |
+    results$n_dropped != results$n_input - results$n_used
+  if (any(invalid_count_values)) {
+    .regression_results_abort("observation counts are inconsistent.")
+  }
+  if (
+    any(results$std_error < 0) ||
+      any(results$p_value < 0 | results$p_value > 1) ||
+      any(results$conf_low > results$estimate) ||
+      any(results$conf_high < results$estimate) ||
+      any(
+        results$preparation_top_share <= 0 |
+          results$preparation_top_share > 1
+      ) ||
+      any(
+        results$preparation_probability_threshold <= 0 |
+          results$preparation_probability_threshold > 1
+      )
+  ) {
+    .regression_results_abort(
+      "coefficient, interval, p-value, or preparation values are inconsistent."
+    )
+  }
+
+  explanatory_variables <- .regression_results_serialized_names(
+    results,
+    "explanatory_variables",
+    allow_empty = FALSE
+  )
+  control_variables <- .regression_results_serialized_names(
+    results,
+    "control_variables"
+  )
+  fixed_effects <- .regression_results_serialized_names(
+    results,
+    "fixed_effects"
+  )
+  cluster_variables <- .regression_results_serialized_names(
+    results,
+    "cluster_variables"
+  )
+  expected_terms <- c(
+    if (length(fixed_effects) == 0L) "(Intercept)" else character(),
+    explanatory_variables,
+    control_variables
+  )
+  if (
+    length(cluster_variables) == 0L &&
+      (!all(results$vcov_type == "iid") ||
+        any(nzchar(results$cluster_counts)))
+  ) {
+    .regression_results_abort("IID covariance metadata is inconsistent.")
+  }
+  if (
+    length(cluster_variables) > 0L &&
+      (!all(results$vcov_type == "cluster") ||
+        any(!nzchar(results$cluster_counts)))
+  ) {
+    .regression_results_abort("clustered covariance metadata is inconsistent.")
+  }
+
+  for (field in group_variables) {
+    values <- results[[field]]
+    if (is.list(values) || anyNA(values)) {
+      .regression_results_abort(
+        "estimation-group column '%s' must contain atomic, non-missing values.",
+        field
+      )
+    }
+    if (is.character(values) && any(!nzchar(trimws(values)))) {
+      .regression_results_abort(
+        "estimation-group column '%s' must not be empty.",
+        field
+      )
+    }
+    if (is.numeric(values) && any(!is.finite(values))) {
+      .regression_results_abort(
+        "estimation-group column '%s' must be finite.",
+        field
+      )
+    }
+  }
+  grouped_rows <- .regression_group_rows(results, group_variables)
+  fit_count <- attr(results, "regression_fit_count", exact = TRUE)
+  if (
+    !is.integer(fit_count) ||
+      length(fit_count) != 1L ||
+      is.na(fit_count) ||
+      fit_count <= 0L ||
+      fit_count != length(grouped_rows)
+  ) {
+    .regression_results_abort(
+      "regression_fit_count does not match the estimation groups."
+    )
+  }
+
+  statistic_columns <- c("estimate", "std_error", "statistic", "p_value")
+  for (rows in grouped_rows) {
+    fit_fields <- c(
+      "n_input", "n_complete", "n_used", "n_missing_dropped",
+      "n_estimator_dropped", "n_dropped", "cluster_counts"
+    )
+    inconsistent_fit_fields <- vapply(
+      results[rows, fit_fields, drop = FALSE],
+      function(values) length(unique(values)) != 1L,
+      logical(1)
+    )
+    if (any(inconsistent_fit_fields)) {
+      .regression_results_abort(
+        "column '%s' must be constant within each estimation group.",
+        names(inconsistent_fit_fields)[which(inconsistent_fit_fields)[[1L]]]
+      )
+    }
+    if (length(cluster_variables) > 0L) {
+      count_parts <- strsplit(
+        results$cluster_counts[rows[[1L]]], "|", fixed = TRUE
+      )[[1L]]
+      expected_prefixes <- paste0(cluster_variables, "=")
+      valid_parts <- length(count_parts) == length(cluster_variables) &&
+        all(startsWith(count_parts, expected_prefixes))
+      cluster_sizes <- if (valid_parts) {
+        suppressWarnings(as.numeric(sub("^[^=]+=", "", count_parts)))
+      } else {
+        numeric()
+      }
+      if (
+        !valid_parts || any(!is.finite(cluster_sizes)) ||
+          any(cluster_sizes != floor(cluster_sizes)) ||
+          any(cluster_sizes < 2) ||
+          any(cluster_sizes > results$n_used[rows[[1L]]])
+      ) {
+        .regression_results_abort(
+          paste0(
+            "cluster_counts is inconsistent with the configured clusters ",
+            "and used sample."
+          )
+        )
+      }
+    }
+    group_terms <- split(rows, results$term[rows])
+    if (!setequal(names(group_terms), expected_terms)) {
+      .regression_results_abort(
+        "each estimation group must contain every configured model term."
+      )
+    }
+    for (term_rows in group_terms) {
+      if (
+        length(term_rows) != length(REGRESSION_CONFIDENCE_LEVELS) ||
+          !setequal(
+            results$confidence_level[term_rows],
+            REGRESSION_CONFIDENCE_LEVELS
+          ) ||
+          nrow(unique(results[term_rows, statistic_columns, drop = FALSE])) !=
+            1L
+      ) {
+        .regression_results_abort(
+          paste0(
+            "each term and estimation group must contain one internally ",
+            "consistent 90%%, 95%%, and 99%% interval."
+          )
+        )
+      }
+      level_order <- order(results$confidence_level[term_rows])
+      lows <- results$conf_low[term_rows][level_order]
+      highs <- results$conf_high[term_rows][level_order]
+      if (any(diff(lows) > 0) || any(diff(highs) < 0)) {
+        .regression_results_abort(
+          "confidence intervals must be nested as their level increases."
+        )
+      }
+    }
+  }
+  invisible(results)
+}
+
+.new_regression_results <- function(results, fit_count) {
+  attr(results, "regression_fit_count") <- as.integer(fit_count)
+  attr(results, "regression_results_contract_id") <-
+    REGRESSION_RESULTS_OBJECT_CONTRACT_ID
+  class(results) <- c("regression_results", "data.frame")
+  .regression_results_validate(results)
+  results
+}
 
 .regression_locked_ssc <- function() {
   fixest::ssc(
@@ -418,6 +834,5 @@ estimate_regressions <- function(config) {
     REGRESSION_RESULT_CORE_COLUMNS,
     config$estimation_group_variables
   )]
-  attr(results, "regression_fit_count") <- as.integer(length(groups))
-  results
+  .new_regression_results(results, length(groups))
 }
