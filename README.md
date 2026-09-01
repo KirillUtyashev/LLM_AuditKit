@@ -60,9 +60,11 @@ Prepare raw experiment CSVs with:
 Rscript scripts/prepare_regression_data.R --config path/to/preparation.yaml
 ```
 
-Each preparation config supplies one stable `audit_id`. All configured raw
-files are treated as shards of that audit, and the identifier is retained in
-the regression-ready data and every later coefficient result.
+The researcher assigns one stable `audit_id` in each preparation config. The
+software never generates or infers it from filenames, model metadata, or other
+IDs. All configured raw files are treated as shards of that audit, and the
+identifier is retained in the regression-ready data and every later
+coefficient result.
 
 After inspecting and, if desired, slicing that regression-ready CSV, estimate
 the configured model with:

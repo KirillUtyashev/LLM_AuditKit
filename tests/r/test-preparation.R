@@ -485,7 +485,8 @@ testthat::test_that("runner writes repeatable CSV and preserves output on failur
   testthat::expect_message(
     run_regression_preparation(config),
     paste0(
-      "Prepared 22 candidate row.*6 completed job.*",
+      "Prepared 22 candidate row.*researcher-assigned audit_id ",
+      "'multi_fixture_audit'.*6 completed job.*",
       "excluded 1 non-completed job.*failed=1"
     )
   )
@@ -556,6 +557,11 @@ testthat::test_that("preparation CLI accepts exactly --config path", {
   testthat::expect_identical(success_status, 0L)
   testthat::expect_true(file.exists(output))
   testthat::expect_match(paste(success, collapse = "\n"), "Prepared 22")
+  testthat::expect_match(
+    paste(success, collapse = "\n"),
+    "researcher-assigned audit_id 'multi_fixture_audit'",
+    fixed = TRUE
+  )
 
   failure <- suppressWarnings(
     system2(

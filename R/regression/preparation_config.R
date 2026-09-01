@@ -350,6 +350,8 @@ load_preparation_config <- function(config_path) {
     "output_path",
     config_path
   )
+  # Audit identity is a substantive researcher decision. Never derive it from
+  # a path, model configuration, or another metadata field.
   audit_id <- .preparation_scalar_string(
     config$audit_id,
     "audit_id",

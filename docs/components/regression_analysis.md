@@ -164,7 +164,7 @@ candidate_covariates:
 | --- | --- | --- |
 | `input_paths` | yes | Nonempty, ordered list of distinct readable CSV paths. |
 | `output_path` | yes | One CSV path distinct from every input path. |
-| `audit_id` | yes | Nonempty stable identity for the LLM audit represented by all configured inputs. |
+| `audit_id` | yes | Nonempty stable identity assigned by the researcher to the LLM audit represented by all configured inputs. |
 | `top_share` | no | Fraction in `(0, 1]`; default `0.08`. |
 | `probability_threshold` | no | Probability in `(0, 1]`; default `0.99`. |
 | `ranking_group_variables` | no | Nonempty list of distinct pre-ranking fields: `source_file`, `scenario_id`, `persona_id`, `model_config_id`, `candidate_id`, `candidate_index`, `candidate_count`, `city`, `year`, or configured covariates; default `[city, year]`. |
@@ -178,12 +178,20 @@ preserve every result status, attach lexical `source_file` provenance, and
 reject duplicate stable job keys. Filtering, candidate-level reshaping,
 ranking, derived outcomes, and output writing belong to #21.
 
+The researcher assigns `audit_id` before preparation. It is an opaque label:
+the software preserves and compares it but never generates it or parses
+meaning from it. Use the same value only for raw-file shards belonging to the
+same substantive audit, and assign a new value to a distinct audit or rerun
+that must remain distinguishable. Human-readable snake-case labels such as
+`historian_gpt_4o_2025_01` are recommended but not required. Do not infer or
+copy it from `model_config_id`, a filename, `dataset_id`, or `model_id`.
+
 The #21 function `prepare_regression_data()` performs those candidate-level
 transformations in memory from the configured CSV paths.
-`run_regression_preparation()` additionally reports completed and excluded job
-counts and atomically writes the configured regression-ready CSV. Neither
-function accepts an in-session data frame as a substitute for the canonical
-CSV boundary.
+`run_regression_preparation()` additionally echoes the researcher-assigned
+`audit_id`, reports completed and excluded job counts, and atomically writes
+the configured regression-ready CSV. Neither function accepts an in-session
+data frame as a substitute for the canonical CSV boundary.
 
 Configured inputs are combined deterministically. `source_file` stores the
 lexically normalized path string from `input_paths`, using `/` separators and
@@ -258,7 +266,7 @@ Its required core columns are:
 | Column | Type | Nullability and meaning |
 | --- | --- | --- |
 | `source_file` | string | Non-null normalized configured-path provenance. |
-| `audit_id` | string | Non-null preparation-supplied audit identity, constant throughout the prepared dataset. |
+| `audit_id` | string | Non-null researcher-assigned audit identity, constant throughout the prepared dataset. |
 | `scenario_id` | string | Non-null stable scenario identity. |
 | `persona_id` | string | Non-null stable persona identity. |
 | `model_config_id` | string | Non-null stable model-configuration identity. |
@@ -424,7 +432,7 @@ estimation-group columns:
 
 | Column | Meaning |
 | --- | --- |
-| `dataset_id`, `audit_id`, `model_id` | Researcher-defined inspected-data identity, preparation-supplied audit identity, and regression-specification identity. |
+| `dataset_id`, `audit_id`, `model_id` | Researcher-defined inspected-data identity, researcher-assigned audit identity, and regression-specification identity. |
 | `estimator`, `estimator_version`, `inference_contract_id` | `fixest::feols`, `0.14.2` under the current lock, and `fixest_feols_ssc_v1`. |
 | `outcome_variable`, `term` | Dependent variable and estimated coefficient name. |
 | `estimate`, `std_error`, `statistic`, `p_value` | Numerical coefficient statistics from the configured covariance estimator. |
@@ -700,7 +708,7 @@ configuration.
 
 `plot_regression_results()` also accepts a nonempty list of result tables or a
 character vector of result CSV paths. For separate LLM audits, keep each
-preparation-supplied `audit_id`, use `panel_variable = "audit_id"`, and map
+researcher-assigned `audit_id`, use `panel_variable = "audit_id"`, and map
 `series_variable = "city"` and `period_variable = "year"` when the estimator
 used `estimation_group_variables: [city, year]`. Each audit panel may retain a
 different `dataset_id`; both identities must remain constant within that

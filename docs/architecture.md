@@ -40,7 +40,7 @@ The inference layer owns model configuration, concurrency, retries, EDSL executi
 Experiment results cross the Python-to-R boundary as raw CSV files. Within the
 R-based regression-analysis stage, a YAML-configured preparation command writes
 a candidate-level regression-ready CSV for researcher inspection and stamps it
-with one stable `audit_id`. A separate
+with one stable, researcher-assigned `audit_id`. A separate
 YAML-configured estimator transforms one inspected dataset into plot-ready
 numerical results. It returns the tidy table in an interactive R session and
 can persist it as CSV. An independent renderer accepts one result table, a
