@@ -1,10 +1,17 @@
 .regression_execution_read_fixture <- function() {
-  utils::read.csv(
+  data <- utils::read.csv(
     regression_fixture("regression_ready_known.csv"),
     check.names = FALSE,
     na.strings = "",
     stringsAsFactors = FALSE
   )
+  # Preserve two-way estimator coverage without treating model variants as one audit.
+  data$analysis_group <- ifelse(
+    data$position_fe %in% c("position-1", "position-4"),
+    "analysis-b",
+    "analysis-a"
+  )
+  data
 }
 
 .regression_execution_write_csv <- function(data, path) {
@@ -297,16 +304,16 @@ testthat::test_that("clustered inference uses locked finite-sample intervals", {
   multiway <- estimate_regressions(
     .regression_execution_config(
       model_id = "fe_multiway_clustered",
-      clusters = c("position_fe", "model_config_id"),
+      clusters = c("position_fe", "analysis_group"),
       groups = "period"
     )
   )
   testthat::expect_true(all(multiway$vcov_type == "cluster"))
   testthat::expect_true(
-    all(multiway$cluster_variables == "position_fe|model_config_id")
+    all(multiway$cluster_variables == "position_fe|analysis_group")
   )
   testthat::expect_true(
-    all(multiway$cluster_counts == "position_fe=4|model_config_id=2")
+    all(multiway$cluster_counts == "position_fe=4|analysis_group=2")
   )
 })
 
@@ -315,13 +322,13 @@ testthat::test_that("two-field grouped fits are ordered by group, term, and leve
     .regression_execution_config(
       model_id = "two_field_groups",
       clusters = "position_fe",
-      groups = c("period", "model_config_id")
+      groups = c("period", "analysis_group")
     )
   )
 
   testthat::expect_identical(
     names(results),
-    c(REGRESSION_RESULT_CORE_COLUMNS, "period", "model_config_id")
+    c(REGRESSION_RESULT_CORE_COLUMNS, "period", "analysis_group")
   )
   testthat::expect_identical(nrow(results), 24L)
   testthat::expect_identical(
@@ -329,11 +336,16 @@ testthat::test_that("two-field grouped fits are ordered by group, term, and leve
     4L
   )
   expected_group <- rep(
-    c("2010/model-a", "2010/model-b", "2020/model-a", "2020/model-b"),
+    c(
+      "2010/analysis-a",
+      "2010/analysis-b",
+      "2020/analysis-a",
+      "2020/analysis-b"
+    ),
     each = 6L
   )
   testthat::expect_identical(
-    paste(results$period, results$model_config_id, sep = "/"),
+    paste(results$period, results$analysis_group, sep = "/"),
     expected_group
   )
   testthat::expect_identical(
@@ -349,7 +361,7 @@ testthat::test_that("two-field grouped fits are ordered by group, term, and leve
   testthat::expect_true(all(results$cluster_counts == "position_fe=2"))
   testthat::expect_true(
     all(
-      results$estimation_group_variables == "period|model_config_id"
+      results$estimation_group_variables == "period|analysis_group"
     )
   )
 
@@ -377,14 +389,14 @@ testthat::test_that("multiple requested explanatory variables are estimated in e
       explanatory = c("black", "high"),
       controls = character(),
       clusters = character(),
-      groups = c("period", "model_config_id")
+      groups = c("period", "analysis_group")
     )
   )
 
   testthat::expect_s3_class(results, "regression_results")
   testthat::expect_identical(
     names(results),
-    c(REGRESSION_RESULT_CORE_COLUMNS, "period", "model_config_id")
+    c(REGRESSION_RESULT_CORE_COLUMNS, "period", "analysis_group")
   )
   testthat::expect_identical(
     attr(results, "regression_fit_count", exact = TRUE),
@@ -394,7 +406,7 @@ testthat::test_that("multiple requested explanatory variables are estimated in e
   testthat::expect_true(all(results$explanatory_variables == "black|high"))
   testthat::expect_true(all(results$control_variables == ""))
 
-  group_labels <- paste(results$period, results$model_config_id, sep = "/")
+  group_labels <- paste(results$period, results$analysis_group, sep = "/")
   for (group_label in unique(group_labels)) {
     group_rows <- which(group_labels == group_label)
     testthat::expect_setequal(
@@ -481,13 +493,13 @@ testthat::test_that("an ungrouped model without fixed effects retains its interc
   multiple_fe <- estimate_regressions(
     .regression_execution_config(
       model_id = "multiple_fixed_effects",
-      fixed_effects = c("position_fe", "model_config_id"),
+      fixed_effects = c("position_fe", "analysis_group"),
       groups = "period"
     )
   )
   testthat::expect_identical(nrow(multiple_fe), 12L)
   testthat::expect_true(
-    all(multiple_fe$fixed_effects == "position_fe|model_config_id")
+    all(multiple_fe$fixed_effects == "position_fe|analysis_group")
   )
 })
 
@@ -544,6 +556,36 @@ testthat::test_that("regression-ready input semantics are validated", {
       )
     ),
     "audit_id.*one audit identity.*estimate separate audits separately"
+  )
+
+  mixed_personas <- .regression_execution_read_fixture()
+  mixed_personas$persona_id[[1L]] <- "another-persona"
+  testthat::expect_error(
+    estimate_regressions(
+      .regression_execution_config(
+        data = mixed_personas,
+        model_id = "mixed_personas"
+      )
+    ),
+    paste0(
+      "audit_id 'known_audit' spans multiple persona_id values.*",
+      "another-persona.*persona-default.*exactly one persona_id"
+    )
+  )
+
+  mixed_models <- .regression_execution_read_fixture()
+  mixed_models$model_config_id[[1L]] <- "another-model"
+  testthat::expect_error(
+    estimate_regressions(
+      .regression_execution_config(
+        data = mixed_models,
+        model_id = "mixed_models"
+      )
+    ),
+    paste0(
+      "audit_id 'known_audit' spans multiple model_config_id values.*",
+      "another-model.*model-a.*exactly one model_config_id"
+    )
   )
 
   invalid_subset <- .regression_execution_read_fixture()
@@ -797,7 +839,7 @@ testthat::test_that("stable input ordering produces identical tidy results", {
       data = data,
       model_id = "order_invariant",
       clusters = "position_fe",
-      groups = c("period", "model_config_id")
+      groups = c("period", "analysis_group")
     )
   )
   reversed <- estimate_regressions(
@@ -805,7 +847,7 @@ testthat::test_that("stable input ordering produces identical tidy results", {
       data = data[rev(seq_len(nrow(data))), , drop = FALSE],
       model_id = "order_invariant",
       clusters = "position_fe",
-      groups = c("period", "model_config_id")
+      groups = c("period", "analysis_group")
     )
   )
 

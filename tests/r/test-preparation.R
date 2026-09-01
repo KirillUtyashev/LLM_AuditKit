@@ -88,6 +88,8 @@ testthat::test_that("preparation reshapes dynamic N and applies exact defaults",
 
   testthat::expect_equal(nrow(data), 22L)
   testthat::expect_identical(unique(data$audit_id), "multi_fixture_audit")
+  testthat::expect_identical(unique(data$persona_id), "persona-a")
+  testthat::expect_identical(unique(data$model_config_id), "model-a")
   testthat::expect_identical(
     names(data),
     c(
@@ -126,25 +128,25 @@ testthat::test_that("preparation reshapes dynamic N and applies exact defaults",
   testthat::expect_setequal(
     keys[data$pick_top == 1L],
     c(
-      "job-001/persona-a/model-b/cand-001-a",
+      "job-001/persona-a/model-a/cand-001-a",
       "job-003/persona-a/model-a/cand-003-01",
-      "job-004/persona-c/model-c/cand-004-a"
+      "job-004/persona-a/model-a/cand-004-a"
     )
   )
   testthat::expect_setequal(
     keys[data$pick_threshold == 1L],
     c(
-      "job-001/persona-a/model-b/cand-001-a",
-      "job-001/persona-b/model-a/cand-001-a",
+      "job-001/persona-a/model-a/cand-001-a",
       "job-002/persona-a/model-a/cand-002-a",
       "job-003/persona-a/model-a/cand-003-01",
       "job-003/persona-a/model-a/cand-003-02",
-      "job-004/persona-c/model-c/cand-004-a"
+      "job-004/persona-a/model-a/cand-004-a",
+      "job-007/persona-a/model-a/cand-001-a"
     )
   )
 
   high_confidence_no <- keys ==
-    "job-001/persona-b/model-a/cand-001-c"
+    "job-007/persona-a/model-a/cand-001-c"
   testthat::expect_identical(data$pick[high_confidence_no], 0L)
   testthat::expect_identical(data$pick_top[high_confidence_no], 0L)
   testthat::expect_identical(data$pick_threshold[high_confidence_no], 0L)
@@ -154,6 +156,23 @@ testthat::test_that("preparation reshapes dynamic N and applies exact defaults",
   testthat::expect_identical(report$completed_jobs, 6L)
   testthat::expect_identical(report$excluded_jobs, 1L)
   testthat::expect_identical(report$excluded_by_status, c(failed = 1L))
+})
+
+testthat::test_that("preparation rejects raw rows outside the configured audit", {
+  mixed_persona <- mutated_multi_config(
+    mutate_second = function(data) {
+      data$persona_id[data$scenario_id == "job-006"] <- "persona-b"
+      data
+    }
+  )
+
+  testthat::expect_error(
+    prepare_regression_data(mixed_persona),
+    paste0(
+      "audit_id 'multi_fixture_audit' spans multiple persona_id values.*",
+      "exactly one persona_id.*separate preparation configs"
+    )
+  )
 })
 
 testthat::test_that("preparation honors ranking and threshold overrides", {
@@ -174,17 +193,17 @@ testthat::test_that("preparation honors ranking and threshold overrides", {
   testthat::expect_setequal(
     keys[data$pick_top == 1L],
     c(
-      "job-001/persona-a/model-b/cand-001-a",
-      "job-001/persona-b/model-a/cand-001-a",
+      "job-001/persona-a/model-a/cand-001-a",
       "job-003/persona-a/model-a/cand-003-01",
       "job-003/persona-a/model-a/cand-003-02",
       "job-003/persona-a/model-a/cand-003-03",
-      "job-004/persona-c/model-c/cand-004-a"
+      "job-004/persona-a/model-a/cand-004-a",
+      "job-007/persona-a/model-a/cand-001-a"
     )
   )
   testthat::expect_true(
     data$pick_threshold[
-      keys == "job-004/persona-c/model-c/cand-004-b"
+      keys == "job-004/persona-a/model-a/cand-004-b"
     ] == 1L
   )
   testthat::expect_true(all(data$preparation_top_share == 0.25))
@@ -279,10 +298,10 @@ testthat::test_that("preparation is invariant to file and source-row order", {
   testthat::expect_identical(shuffled, normal)
 })
 
-testthat::test_that("scenario consistency uses integer year semantics", {
+testthat::test_that("preparation normalizes signed integer year text", {
   equivalent_years <- mutated_multi_config(
     mutate_first = function(data) {
-      row <- data$scenario_id == "job-001" & data$persona_id == "persona-b"
+      row <- data$scenario_id == "job-007"
       data$year[row] <- "+2010"
       data
     }
@@ -292,7 +311,7 @@ testthat::test_that("scenario consistency uses integer year semantics", {
 
   testthat::expect_true(all(prepared$year == as.integer(prepared$year)))
   testthat::expect_true(all(
-    prepared$year[prepared$scenario_id == "job-001"] == 2010L
+    prepared$year[prepared$scenario_id == "job-007"] == 2010L
   ))
 })
 
@@ -342,7 +361,7 @@ testthat::test_that("preparation validates candidate families before combining",
   )
 })
 
-testthat::test_that("preparation validates stable candidate identity and covariates", {
+testthat::test_that("preparation validates stable candidate identity", {
   duplicate_candidate <- mutated_multi_config(
     mutate_second = function(data) {
       row <- data$scenario_id == "job-004"
@@ -354,29 +373,51 @@ testthat::test_that("preparation validates stable candidate identity and covaria
     prepare_regression_data(duplicate_candidate),
     "Duplicate candidate identity"
   )
+})
 
-  changed_set <- mutated_multi_config(
-    mutate_first = function(data) {
-      row <- data$scenario_id == "job-001" & data$persona_id == "persona-b"
-      data$candidate_3_id[row] <- "different-candidate"
-      data
-    }
+testthat::test_that("defensive cross-job candidate checks remain deterministic", {
+  config <- load_preparation_config(
+    regression_fixture("preparation_multi.yaml")
+  )
+  raw <- data.frame(
+    scenario_id = c("scenario", "scenario"),
+    stringsAsFactors = FALSE
+  )
+  incomplete_set <- data.frame(
+    scenario_id = rep("scenario", 3L),
+    persona_id = c("persona-a", "persona-a", "persona-b"),
+    model_config_id = rep("model-a", 3L),
+    candidate_id = c("candidate-a", "candidate-b", "candidate-a"),
+    black = c("1", "0", "1"),
+    stringsAsFactors = FALSE
   )
   testthat::expect_error(
-    prepare_regression_data(changed_set),
+    .preparation_validate_candidate_identity(incomplete_set, raw, config),
     "inconsistent candidate-ID sets"
   )
 
-  conflicting_covariate <- mutated_multi_config(
-    mutate_first = function(data) {
-      row <- data$scenario_id == "job-001" & data$persona_id == "persona-b"
-      data$candidate_1_black[row] <- "0"
-      data
-    }
+  conflicting_covariate <- rbind(
+    incomplete_set,
+    data.frame(
+      scenario_id = "scenario",
+      persona_id = "persona-b",
+      model_config_id = "model-a",
+      candidate_id = "candidate-b",
+      black = "0",
+      stringsAsFactors = FALSE
+    )
   )
+  conflicting_covariate$black[
+    conflicting_covariate$persona_id == "persona-b" &
+      conflicting_covariate$candidate_id == "candidate-a"
+  ] <- "0"
   testthat::expect_error(
-    prepare_regression_data(conflicting_covariate),
-    "candidate 'cand-001-a'.*inconsistent 'black'"
+    .preparation_validate_candidate_identity(
+      conflicting_covariate,
+      raw,
+      config
+    ),
+    "candidate 'candidate-a'.*inconsistent 'black'"
   )
 })
 

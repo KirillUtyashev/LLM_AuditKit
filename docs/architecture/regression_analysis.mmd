@@ -90,6 +90,9 @@ classDiagram
     class RawExperimentResults {
         <<CSV>>
         +row_grain: experiment_job_key
+        +configured_input_scope: one_audit
+        +persona_id: str
+        +model_config_id: str
         +candidate_fields: stable
         +probability_semantics: emitted_answer
     }
@@ -97,6 +100,8 @@ classDiagram
         <<CSV>>
         +row_grain: candidate
         +audit_id: str
+        +persona_id: str = one_per_audit
+        +model_config_id: str = one_per_audit
         +pick: int
         +pick_top: int
         +pick_threshold: int
@@ -106,6 +111,8 @@ classDiagram
         <<R data.frame / CSV>>
         +row_grain: coefficient_interval
         +audit_id: str
+        +dataset_id: str
+        +model_id: str
         +estimator: fixest_feols
         +inference_contract_id: str
         +outcome_variable: str

@@ -226,7 +226,6 @@ testthat::test_that("one-panel in-memory plots do not require a panel column rol
 testthat::test_that("outcome and coefficient selections are explicit in memory", {
   top <- .plot_api_fixture()
   threshold <- top
-  threshold$model_id <- paste0(threshold$model_id, "_threshold")
   threshold$outcome_variable <- "pick_threshold"
   combined_outcomes <- rbind(top, threshold)
 

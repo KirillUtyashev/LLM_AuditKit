@@ -125,7 +125,6 @@ testthat::test_that("mixed panel outcomes must be selected explicitly and comple
 
   # An extra, unused outcome is filtered without altering panel coverage.
   extra <- data
-  extra$model_id <- paste0(extra$model_id, "_other")
   extra$outcome_variable <- "pick_raw"
   extra$fixed_effects <- "alternative_fe"
   selected <- prepare_regression_plot_data(.render_data_test_config(
@@ -143,6 +142,57 @@ testthat::test_that("interval selection cannot silently drop an audit dataset", 
       "term and confidence-level selection.*",
       "audit_id='audit_d', dataset_id='synthetic_render_d'"
     )
+  )
+})
+
+testthat::test_that("term selection cannot silently drop a model specification", {
+  data <- .render_data_test_fixture()
+  data <- data[data$audit_id == "audit_a", , drop = FALSE]
+  unavailable <- data
+  unavailable$model_id <- "alternative_model"
+  unavailable$term <- "unavailable_term"
+
+  testthat::expect_error(
+    prepare_regression_plot_data(.render_data_test_config(
+      rbind(data, unavailable),
+      c(panel_variable = "model_id")
+    )),
+    paste0(
+      "term and confidence-level selection.*",
+      "audit_id='audit_a', dataset_id='synthetic_render_a', ",
+      "model_id='alternative_model'"
+    )
+  )
+})
+
+testthat::test_that("term selection cannot silently drop a shared-source panel", {
+  data <- .render_data_test_fixture()
+  data <- data[data$audit_id == "audit_a", , drop = FALSE]
+  data$city <- ifelse(data$period <= 1990, "Toronto", "Montreal")
+  data$estimation_group_variables <- "model_config_id|period|city"
+  data$term[data$city == "Montreal"] <- "unavailable_term"
+
+  testthat::expect_error(
+    prepare_regression_plot_data(.render_data_test_config(
+      data,
+      c(panel_variable = "city")
+    )),
+    paste0(
+      "term and confidence-level selection.*",
+      "panel_variable 'city'.*'Montreal'"
+    )
+  )
+
+  mixed_outcome <- data
+  mixed_outcome$term <- "black"
+  mixed_outcome$outcome_variable[mixed_outcome$city == "Montreal"] <-
+    "pick_threshold"
+  testthat::expect_error(
+    prepare_regression_plot_data(.render_data_test_config(
+      mixed_outcome,
+      c(panel_variable = "city")
+    )),
+    "outcome selection.*panel_variable 'city'.*'Montreal'"
   )
 })
 
@@ -193,7 +243,6 @@ testthat::test_that("sparse series retain their globally fixed slots", {
   left$estimation_group_variables <- "model_config_id|period|city"
   right <- left
   right$city <- "Montreal"
-  right$model_id <- paste0(right$model_id, "_montreal")
   sparse <- right[!(right$model_config_id == "model_a" & right$period == 1970), ]
   data <- rbind(left, sparse)
   settings <- c(series_variable = "city", series_order = "[Toronto, Montreal]")
@@ -218,12 +267,12 @@ testthat::test_that("sparse series retain their globally fixed slots", {
     .render_data_test_config(left))$data), 24L)
 })
 
-testthat::test_that("plot keys are tuple-safe and independent of model identifiers", {
+testthat::test_that("panel sources and saved coefficient keys are unambiguous", {
   data <- .render_data_test_fixture()
   copy <- data
   copy$model_id <- paste0(copy$model_id, "_copy")
   testthat::expect_error(prepare_regression_plot_data(.render_data_test_config(
-    rbind(data, copy))), "duplicate plotting keys")
+    rbind(data, copy))), "incompatible 'model_id'.*within panel")
   testthat::expect_error(load_regression_results(.render_data_test_config(
     slices = list(data, data))), "duplicate saved coefficient/interval keys")
 
@@ -234,9 +283,11 @@ testthat::test_that("plot keys are tuple-safe and independent of model identifie
     .render_data_test_config(tricky))$data), 2L)
 })
 
-testthat::test_that("specifications may differ across panels but not within one panel", {
+testthat::test_that("specifications match globally while sources are panel-local", {
   data <- .render_data_test_fixture()
   global_changes <- list(
+    explanatory_variables = "black|high",
+    control_variables = "other_control", fixed_effects = "other_fe",
     estimator = "other_estimator",
     estimator_version = "2.0", inference_contract_id = "other_contract",
     preparation_top_share = .2, preparation_probability_threshold = .9,
@@ -254,19 +305,13 @@ testthat::test_that("specifications may differ across panels but not within one 
     )
   }
 
-  panel_changes <- list(
-    dataset_id = "other_dataset",
-    explanatory_variables = "black|high", control_variables = "other_control",
-    fixed_effects = "other_fe"
+  mixed_dataset <- data
+  mixed_dataset[model_b & mixed_dataset$period == 1970, "dataset_id"] <-
+    "other_dataset"
+  testthat::expect_error(
+    prepare_regression_plot_data(.render_data_test_config(mixed_dataset)),
+    "incompatible 'dataset_id'.*within panel 'audit_b'"
   )
-  for (field in names(panel_changes)) {
-    changed <- data
-    changed[model_b & changed$period == 1970, field] <- panel_changes[[field]]
-    testthat::expect_error(
-      prepare_regression_plot_data(.render_data_test_config(changed)),
-      paste0("incompatible '", field, "'.*within panel 'audit_b'")
-    )
-  }
 
   mixed_audit <- data
   mixed_audit[
@@ -281,16 +326,12 @@ testthat::test_that("specifications may differ across panels but not within one 
     "incompatible 'audit_id'.*within panel 'model_b'"
   )
 
-  separate_specification <- data
-  separate_specification$model_id[model_b] <- "other_model"
-  separate_specification$explanatory_variables[model_b] <- "black|high"
-  separate_specification$control_variables[model_b] <- "other_control"
-  separate_specification$fixed_effects[model_b] <- "other_fe"
-  testthat::expect_identical(
-    nrow(prepare_regression_plot_data(
-      .render_data_test_config(separate_specification)
-    )$data),
-    24L
+  mixed_model <- data
+  mixed_model$model_id[model_b & mixed_model$period == 1970] <-
+    "other_model"
+  testthat::expect_error(
+    prepare_regression_plot_data(.render_data_test_config(mixed_model)),
+    "incompatible 'model_id'.*within panel 'audit_b'"
   )
 
   grouped <- data
@@ -303,24 +344,18 @@ testthat::test_that("specifications may differ across panels but not within one 
   )
 
   clustered <- data
-  clustered$vcov_type[model_b] <- "cluster"
-  clustered$cluster_variables[model_b] <- "position_fe"
-  clustered$cluster_counts[model_b] <- "position_fe=20"
+  clustered$vcov_type <- "cluster"
+  clustered$cluster_variables <- "position_fe"
+  clustered$cluster_counts <- "position_fe=20"
   testthat::expect_identical(
     nrow(prepare_regression_plot_data(.render_data_test_config(clustered))$data),
     24L
   )
-  clustered[
-    model_b & clustered$period == 1970,
-    "cluster_variables"
-  ] <- "year"
-  clustered[
-    model_b & clustered$period == 1970,
-    "cluster_counts"
-  ] <- "year=6"
+  clustered$cluster_variables[model_b] <- "year"
+  clustered$cluster_counts[model_b] <- "year=6"
   testthat::expect_error(
     prepare_regression_plot_data(.render_data_test_config(clustered)),
-    "incompatible 'cluster_variables'.*within panel 'audit_b'"
+    "incompatible 'cluster_variables'.*across selected results"
   )
 })
 
@@ -556,8 +591,24 @@ testthat::test_that("the estimator's saved CSV feeds rendering without schema ad
     "output_directory: baseline_saved"
   ), baseline_path)
   baseline <- estimate_regressions(baseline_path)
+  testthat::expect_error(
+    prepare_regression_plot_data(
+      list(baseline, results),
+      regression_plot_config(
+        term = "black",
+        outcome_variable = "pick_top",
+        period_variable = "period",
+        panel_variable = "model_id",
+        panel_order = c("baseline_example", "clustered_example")
+      )
+    ),
+    "incompatible 'explanatory_variables'.*across selected results"
+  )
+
+  compatible_baseline <- results
+  compatible_baseline$model_id <- "baseline_example"
   separate_panels <- prepare_regression_plot_data(
-    list(baseline, results),
+    list(compatible_baseline, results),
     regression_plot_config(
       term = "black",
       outcome_variable = "pick_top",
@@ -573,6 +624,6 @@ testthat::test_that("the estimator's saved CSV feeds rendering without schema ad
   testthat::expect_identical(nrow(separate_panels$data), 4L)
   testthat::expect_identical(
     unique(separate_panels$data$explanatory_variables),
-    c("black", "black|high")
+    "black|high"
   )
 })

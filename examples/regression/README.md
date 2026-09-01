@@ -33,6 +33,9 @@ Each audit has its own `audit_id` and `dataset_id`. The example explicitly maps
 Audit A to `pick_top` and Audits B–D to `pick_threshold`, demonstrating the
 paper's mixed-outcome panel convention
 without suggesting these fictional models reproduce its findings.
+In production, one audit ID denotes one LLM product/version configuration ×
+one persona × one distinguishable execution run or batch; city/year files may
+be shards of that audit.
 
 The same CSV can be plotted interactively from a clean R session:
 
@@ -60,8 +63,9 @@ figure
 
 `plot_regression_results()` also accepts the object returned by
 `estimate_regressions()` or a list of compatible result tables. List names,
-list order, and file paths do not define audit identity; the saved `audit_id`
-and `dataset_id` columns do.
+list order, and file paths do not define source or panel identity. Saved
+`audit_id`, `dataset_id`, and `model_id` values preserve each result source;
+the configured `panel_variable` chooses which saved field creates panels.
 
 ## Use your own saved results
 
@@ -83,20 +87,23 @@ slice.
   pooled away.
 - Set `panel_variable: null` for one panel. For separately prepared LLM audits,
   use `panel_variable: audit_id` and label each panel clearly. Use `model_id`
-  only when the panels intentionally compare regression specifications.
+  as the panel field only when compatible result sources intentionally use
+  distinct regression-specification labels.
 - Order lists must include every selected value exactly once. For a subset,
   save an inspected CSV slice first. Unmapped grouping columns must be
   constant within each selected panel.
 - Change `panel_labels`, axis labels, y limits, dimensions, or DPI as needed.
   Y limits zoom the display without deleting out-of-range coefficients.
 
-Results used in one figure may have different audit and dataset identities
-across explicit panels, but both must be constant within each panel. They must
-share estimation-group, inference, and preparation metadata. Formula and
-covariance specifications may differ across panels but must remain constant
-within each panel. A different `model_id` does not waive those checks. The
-default figure is paper-style, not a pixel-identical copy of the historical
-output; it uses modern saved intervals and the local PNG backend.
+Results used in one figure may have different audit, dataset, and model
+identities across explicit panels, but all three must be constant within each
+panel. They must
+share explanatory variables, controls, fixed effects, clustering, covariance
+type, estimation-group, inference, and preparation metadata. A panel-specific
+dependent variable is allowed only through an explicit `outcome_by_panel` map.
+A different `model_id` does not waive those checks. The default figure is
+paper-style, not a pixel-identical copy of the historical output; it uses
+modern saved intervals and the local PNG backend.
 
 See the [complete rendering contract](../../docs/components/regression_analysis.md#3-paper-style-rendering)
 for every option. The same result CSV remains available for other plotting

@@ -62,9 +62,10 @@ Rscript scripts/prepare_regression_data.R --config path/to/preparation.yaml
 
 The researcher assigns one stable `audit_id` in each preparation config. The
 software never generates or infers it from filenames, model metadata, or other
-IDs. All configured raw files are treated as shards of that audit, and the
-identifier is retained in the regression-ready data and every later
-coefficient result.
+IDs. One audit covers one LLM product/version configuration, one persona, and
+one distinguishable execution run or batch. Its configured files may be
+city/year shards. The identifier is retained in the regression-ready data and
+every later coefficient result.
 
 After inspecting and, if desired, slicing that regression-ready CSV, estimate
 the configured model with:
@@ -82,6 +83,9 @@ explanatory variable receives its own estimate, standard error, p-value, and
 
 The regression YAML contract and tidy result schema are documented in the
 [regression analysis guide](docs/components/regression_analysis.md#2-fixed-effects-estimation).
+It also records the [subissue #24 walkthrough and upstream revalidation
+checklist](docs/components/regression_analysis.md#subissue-24-and-upstream-revalidation)
+to repeat after experiment execution finalizes its raw CSV schema.
 
 For an interactive estimate-and-plot workflow, start R from the repository and
 load the public R interface once:
@@ -107,7 +111,11 @@ paths can be passed in place of `results`, and compatible result objects from
 separate audit calls can be supplied as a list with `panel_variable =
 "audit_id"`. For paper-style city/year figures, use `series_variable = "city"`
 and `period_variable = "year"`; distinct audit panels may retain distinct
-`dataset_id` values.
+`dataset_id` values. The comparison must otherwise use the same explanatory
+variables, controls, fixed effects, clustering, covariance type, estimation
+grouping, inference contract, and preparation settings. The selected
+`panel_variable`, rather than the mere presence of `audit_id`, `dataset_id`, or
+`model_id`, determines the panels.
 
 Render a paper-style PNG from saved numerical results with:
 

@@ -14,9 +14,63 @@ testthat::test_that("loader combines explicit inputs with lexical provenance", {
   )
   testthat::expect_true(all(vapply(data, is.character, logical(1))))
   testthat::expect_identical(data$result_status, c("completed", "failed", "completed"))
+  testthat::expect_identical(unique(data$persona_id), "persona-a")
+  testthat::expect_identical(unique(data$model_config_id), "model-a")
   testthat::expect_true(is.na(data$candidate_3_id[1L]))
   testthat::expect_identical(data$candidate_3_id[3L], "C-3")
   testthat::expect_false(any(c("row_id", "row_index") %in% names(data)))
+})
+
+testthat::test_that("loader enforces one persona and model configuration per audit", {
+  directory <- tempfile("audit-scope-")
+  mixed_personas <- write_raw_csv(
+    directory,
+    "mixed-personas.csv",
+    minimal_raw_header,
+    c(
+      "010,persona-a,model-a,completed,1,Toronto,2010",
+      "011,persona-b,model-a,failed,1,Montreal,2020"
+    )
+  )
+  persona_config <- write_test_config(
+    mixed_personas,
+    tempfile(fileext = ".csv")
+  )
+  testthat::expect_error(
+    load_experiment_results(persona_config),
+    paste0(
+      "audit_id 'test_audit' spans multiple persona_id values.*",
+      "'persona-a'.*mixed-personas\\.csv.*",
+      "'persona-b'.*mixed-personas\\.csv.*",
+      "exactly one persona_id.*different audit_id"
+    )
+  )
+
+  first_model <- write_raw_csv(
+    directory,
+    "model-a.csv",
+    minimal_raw_header,
+    "020,persona-a,model-a,completed,1,Toronto,2010"
+  )
+  second_model <- write_raw_csv(
+    directory,
+    "model-b.csv",
+    minimal_raw_header,
+    "021,persona-a,model-b,completed,1,Vancouver,2020"
+  )
+  model_config <- write_test_config(
+    c(first_model, second_model),
+    tempfile(fileext = ".csv")
+  )
+  testthat::expect_error(
+    load_experiment_results(model_config),
+    paste0(
+      "audit_id 'test_audit' spans multiple model_config_id values.*",
+      "'model-a'.*model-a\\.csv.*",
+      "'model-b'.*model-b\\.csv.*",
+      "exactly one model_config_id.*different audit_id"
+    )
+  )
 })
 
 testthat::test_that("loader follows configured file order", {
@@ -219,7 +273,7 @@ testthat::test_that("loader handles quoted multiline fields", {
   testthat::expect_identical(data$notes, "first line\nsecond line")
 })
 
-testthat::test_that("loader validates configured covariates and scenario consistency", {
+testthat::test_that("loader validates configured covariates", {
   directory <- tempfile("covariate-errors-")
   missing_candidate <- write_raw_csv(
     directory,
@@ -242,21 +296,24 @@ testthat::test_that("loader validates configured covariates and scenario consist
     "missing configured candidate family.*black"
   )
 
-  conflicting <- write_raw_csv(
-    directory,
-    "conflicting.csv",
-    minimal_raw_header,
-    c(
-      "021,persona-a,model,completed,1,Toronto,2010",
-      "021,persona-b,model,completed,1,Montreal,2010"
-    )
+})
+
+testthat::test_that("defensive scenario checks normalize integer fields", {
+  data <- data.frame(
+    scenario_id = c("021", "021"),
+    city = c("Toronto", "Montreal"),
+    year = c("2010", "+2010"),
+    candidate_count = c("1", "1"),
+    stringsAsFactors = FALSE
   )
-  conflicting_config <- write_test_config(
-    conflicting,
-    tempfile(fileext = ".csv")
-  )
+
   testthat::expect_error(
-    load_experiment_results(conflicting_config),
+    .experiment_results_validate_scenarios(data, character()),
     "Scenario '021' has inconsistent 'city'"
+  )
+
+  data$city <- "Toronto"
+  testthat::expect_invisible(
+    .experiment_results_validate_scenarios(data, character())
   )
 })

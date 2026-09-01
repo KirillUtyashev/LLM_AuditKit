@@ -1,7 +1,8 @@
 RENDER_CONFIDENCE_LEVELS <- c(0.90, 0.95, 0.99)
 
 RENDER_GLOBAL_COMPATIBILITY_COLUMNS <- c(
-  "term", "estimation_group_variables", "estimator",
+  "term", "explanatory_variables", "control_variables", "fixed_effects",
+  "cluster_variables", "vcov_type", "estimation_group_variables", "estimator",
   "estimator_version", "inference_contract_id",
   "preparation_top_share", "preparation_probability_threshold",
   "preparation_ranking_group_variables", "preparation_scenario_covariates",
@@ -9,9 +10,7 @@ RENDER_GLOBAL_COMPATIBILITY_COLUMNS <- c(
 )
 
 RENDER_PANEL_COMPATIBILITY_COLUMNS <- c(
-  "audit_id", "dataset_id", "explanatory_variables", "control_variables",
-  "fixed_effects",
-  "cluster_variables", "vcov_type"
+  "audit_id", "dataset_id", "model_id"
 )
 
 .render_data_abort <- function(source, format, ...) {
@@ -484,6 +483,7 @@ load_regression_results <- function(config) {
   unique(data.frame(
     audit_id = as.character(data$audit_id),
     dataset_id = as.character(data$dataset_id),
+    model_id = as.character(data$model_id),
     stringsAsFactors = FALSE
   ))
 }
@@ -493,21 +493,49 @@ load_regression_results <- function(config) {
   retained <- vapply(seq_len(nrow(expected)), function(index) {
     any(
       observed$audit_id == expected$audit_id[[index]] &
-        observed$dataset_id == expected$dataset_id[[index]]
+        observed$dataset_id == expected$dataset_id[[index]] &
+        observed$model_id == expected$model_id[[index]]
     )
   }, logical(1))
   if (any(!retained)) {
     missing <- expected[!retained, , drop = FALSE]
     labels <- sprintf(
-      "audit_id='%s', dataset_id='%s'",
+      "audit_id='%s', dataset_id='%s', model_id='%s'",
       missing$audit_id,
-      missing$dataset_id
+      missing$dataset_id,
+      missing$model_id
     )
     .render_data_abort(
       "selected data",
       "%s removed all rows for source(s): %s. Supply a compatible selection or an explicitly inspected result subset.",
       selection,
       paste(labels, collapse = "; ")
+    )
+  }
+  invisible(data)
+}
+
+.render_require_panel_coverage <- function(
+  data,
+  expected,
+  panel_variable,
+  selection
+) {
+  if (is.null(panel_variable)) {
+    return(invisible(data))
+  }
+  observed <- unique(as.character(data[[panel_variable]]))
+  missing <- setdiff(expected, observed)
+  if (length(missing) > 0L) {
+    .render_data_abort(
+      "selected data",
+      paste0(
+        "%s removed all rows for panel_variable '%s' value(s): %s. ",
+        "Supply a compatible selection or an explicitly inspected result subset."
+      ),
+      selection,
+      panel_variable,
+      paste(sprintf("'%s'", missing), collapse = ", ")
     )
   }
   invisible(data)
@@ -596,12 +624,23 @@ prepare_regression_plot_data <- function(results = NULL, config = NULL) {
     data <- validate_regression_results(results)
   }
   expected_sources <- .render_source_identities(data)
+  expected_panels <- if (is.null(config$panel_variable)) {
+    character()
+  } else {
+    unique(.render_selected_tokens(data, config$panel_variable))
+  }
   selected <- data$term == config$term &
     data$confidence_level == config$confidence_level
   data <- data[selected, , drop = FALSE]
   .render_require_source_coverage(
     data,
     expected_sources,
+    "the term and confidence-level selection"
+  )
+  .render_require_panel_coverage(
+    data,
+    expected_panels,
+    config$panel_variable,
     "the term and confidence-level selection"
   )
   if (nrow(data) == 0L) {
@@ -632,8 +671,7 @@ prepare_regression_plot_data <- function(results = NULL, config = NULL) {
       )
     }
     panel <- .render_selected_tokens(data, config$panel_variable)
-    observed_panels <- unique(panel)
-    if (!setequal(names(mapping), observed_panels)) {
+    if (!setequal(names(mapping), expected_panels)) {
       .render_data_abort(
         "selected data", "outcome_by_panel must cover every observed panel exactly."
       )
@@ -645,7 +683,7 @@ prepare_regression_plot_data <- function(results = NULL, config = NULL) {
       expected_sources,
       "the outcome selection"
     )
-    missing_panels <- setdiff(observed_panels, unique(panel[keep]))
+    missing_panels <- setdiff(expected_panels, unique(panel[keep]))
     if (length(missing_panels) > 0L) {
       .render_data_abort(
         "selected data",
@@ -658,6 +696,12 @@ prepare_regression_plot_data <- function(results = NULL, config = NULL) {
   .render_require_source_coverage(
     data,
     expected_sources,
+    "the outcome selection"
+  )
+  .render_require_panel_coverage(
+    data,
+    expected_panels,
+    config$panel_variable,
     "the outcome selection"
   )
   panel <- if (is.null(config$panel_variable)) {

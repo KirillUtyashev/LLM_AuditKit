@@ -238,6 +238,46 @@ EXPERIMENT_RESULT_ENVELOPE_COLUMNS <- c(
   )
 }
 
+.experiment_results_validate_audit_scope <- function(data, config) {
+  for (field in c("persona_id", "model_config_id")) {
+    values <- sort(unique(data[[field]]), method = "radix")
+    if (length(values) == 1L) {
+      next
+    }
+
+    value_sources <- vapply(
+      values,
+      function(value) {
+        sources <- unique(data$source_file[data[[field]] == value])
+        sprintf(
+          "'%s' in %s",
+          value,
+          paste(sprintf("'%s'", sources), collapse = ", ")
+        )
+      },
+      character(1)
+    )
+    stop(
+      sprintf(
+        paste0(
+          "Researcher-assigned audit_id '%s' spans multiple %s values ",
+          "across its configured experiment-result rows/files: %s. ",
+          "Each preparation config/audit_id must contain exactly one %s; ",
+          "split different %s values into separate preparation configs ",
+          "with different audit_id values."
+        ),
+        config$audit_id,
+        field,
+        paste(value_sources, collapse = "; "),
+        field,
+        field
+      ),
+      call. = FALSE
+    )
+  }
+  invisible(data)
+}
+
 .experiment_results_validate_scenarios <- function(data, scenario_covariates) {
   fields <- c("city", "year", "candidate_count", scenario_covariates)
   for (field in fields) {
@@ -301,6 +341,7 @@ EXPERIMENT_RESULT_ENVELOPE_COLUMNS <- c(
 
 .experiment_results_combine_frames <- function(frames, config) {
   combined <- .experiment_results_bind(frames)
+  .experiment_results_validate_audit_scope(combined, config)
   .experiment_results_validate_job_keys(combined)
   .experiment_results_validate_scenarios(
     combined,

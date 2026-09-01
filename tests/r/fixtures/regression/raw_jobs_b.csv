@@ -1,2 +1,2 @@
 scenario_id,persona_id,model_config_id,result_status,candidate_count,city,year,job_category,candidate_1_id,candidate_1_pick,candidate_1_log_probability,candidate_1_black,candidate_2_id,candidate_2_pick,candidate_2_log_probability,candidate_2_black,candidate_3_id,candidate_3_pick,candidate_3_log_probability,candidate_3_black
-003,persona-a,model-b,completed,3,Toronto,2020,technical,C-1,1,-0.0005,1,C-2,1,-0.01,0,C-3,0,-0.02,1
+003,persona-a,model-a,completed,3,Toronto,2020,technical,C-1,1,-0.0005,1,C-2,1,-0.01,0,C-3,0,-0.02,1

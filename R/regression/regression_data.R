@@ -266,6 +266,43 @@ REGRESSION_PREPARATION_PROVENANCE_COLUMNS <- c(
   )
 }
 
+.regression_validate_audit_scope <- function(raw, source_file) {
+  audit_id <- unique(raw$audit_id)[[1L]]
+  for (field in c("persona_id", "model_config_id")) {
+    values <- sort(unique(raw[[field]]), method = "radix")
+    if (length(values) == 1L) {
+      next
+    }
+
+    value_sources <- vapply(
+      values,
+      function(value) {
+        sources <- unique(raw$source_file[raw[[field]] == value])
+        sprintf(
+          "'%s' in %s",
+          value,
+          paste(sprintf("'%s'", sources), collapse = ", ")
+        )
+      },
+      character(1)
+    )
+    .regression_data_abort(
+      source_file,
+      paste0(
+        "researcher-assigned audit_id '%s' spans multiple %s values: %s. ",
+        "Each audit_id must contain exactly one %s; prepare and estimate ",
+        "different %s values as separate audits."
+      ),
+      audit_id,
+      field,
+      paste(value_sources, collapse = "; "),
+      field,
+      field
+    )
+  }
+  invisible(raw)
+}
+
 .regression_type_convert <- function(raw) {
   protected_strings <- c(
     "source_file",
@@ -412,6 +449,7 @@ load_regression_data <- function(config) {
       "column 'audit_id' must contain one audit identity; estimate separate audits separately."
     )
   }
+  .regression_validate_audit_scope(raw, source_file)
 
   duplicate_identity <- duplicated(raw[REGRESSION_LONG_KEY_COLUMNS]) |
     duplicated(raw[REGRESSION_LONG_KEY_COLUMNS], fromLast = TRUE)

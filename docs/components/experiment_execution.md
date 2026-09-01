@@ -104,9 +104,11 @@ If a job fails after `inference.max_retries` attempts:
 
 The output preserves structured scenario and candidate metadata and adds the
 corresponding experiment results and error information. Results are persisted
-as a raw CSV with one record per `ExperimentJobKey`. This CSV is the input to
-[regression-data preparation](regression_analysis.md#1-regression-data-preparation),
-not directly to regression estimation.
+as a raw CSV with one record per `ExperimentJobKey`. This CSV is the upstream
+source for [regression-data preparation](regression_analysis.md#1-regression-data-preparation),
+not directly for regression estimation; when it contains multiple personas or
+models, an audit-partitioned writer output or handoff adapter becomes the
+preparation command's direct input.
 
 The raw output must preserve:
 
@@ -117,6 +119,17 @@ The raw output must preserve:
 - structured candidate covariates needed for later analysis;
 - candidate-level raw selections and emitted-answer log probabilities; and
 - structured ranking fields such as city and year.
+
+An experiment configuration may schedule several personas and model
+configurations into one aggregate result table. The current regression
+preparation boundary does not filter such a table: each configured CSV set must
+already represent one persona, one model configuration, and one distinguishable
+run or batch before the researcher assigns its `audit_id`. Subissue #24 must
+therefore verify either that the finalized experiment writer can emit
+audit-partitioned CSVs or that an explicit, validated handoff adapter partitions
+the aggregate output first. Because `ExperimentJobKey` currently has no
+run/batch field, the writer or adapter must also preserve that provenance rather
+than asking preparation to infer it.
 
 Candidate indices may describe the wide CSV layout but are not durable
 identities. The exact consumer-facing column convention and validation rules are

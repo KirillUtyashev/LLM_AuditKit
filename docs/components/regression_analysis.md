@@ -119,11 +119,11 @@ supplied scalar analysis covariates but does not infer demographic indicators,
 treatment assignments, quality measures, or interaction terms from candidate
 position.
 
-For every repeated `scenario_id`, `city`, `year`, `candidate_count`, configured
-scenario covariates, and the complete candidate-ID set must agree. Configured
-candidate covariates must agree for every repeated
-`(scenario_id, candidate_id)` pair. Conflicts are errors rather than being
-resolved by input order.
+Within the current one-persona/one-model audit boundary, a repeated
+`scenario_id` is a duplicate `ExperimentJobKey` and is rejected. Consequently,
+preparation does not compare candidate sets or covariates across separate
+audits. Subissue #24 must validate that shared scenarios and candidates align
+before their separately prepared audit results are compared.
 
 The intermediate implementation names `raw_pick` and `raw_log_probability`
 are reserved in addition to the published core columns, so configured
@@ -180,11 +180,22 @@ ranking, derived outcomes, and output writing belong to #21.
 
 The researcher assigns `audit_id` before preparation. It is an opaque label:
 the software preserves and compares it but never generates it or parses
-meaning from it. Use the same value only for raw-file shards belonging to the
-same substantive audit, and assign a new value to a distinct audit or rerun
-that must remain distinguishable. Human-readable snake-case labels such as
-`historian_gpt_4o_2025_01` are recommended but not required. Do not infer or
-copy it from `model_config_id`, a filename, `dataset_id`, or `model_id`.
+meaning from it. One audit is exactly one `model_config_id` (one LLM
+product/version and provider-parameter configuration) × one `persona_id` × one
+distinguishable execution run or batch. Every configured input must therefore
+belong to that same model configuration, persona, and run/batch. City/year
+files may be shards of the audit. Use a new value for another model
+configuration, persona, or rerun that must remain distinguishable.
+Human-readable snake-case labels such as `historian_gpt_4o_2025_01` are
+recommended but not required. Do not infer or copy the ID from
+`model_config_id`, a filename, `dataset_id`, or `model_id`.
+
+The software can enforce the persona and model-configuration parts only within
+each preparation or estimation input. No global registry prevents two separate
+artifacts from reusing an `audit_id`, and the current raw schema has no
+run/batch identifier from which to verify that part automatically. Researchers
+must therefore maintain that mapping outside the CSVs until the experiment
+handoff is finalized; subissue #24 records and rechecks it across artifacts.
 
 The #21 function `prepare_regression_data()` performs those candidate-level
 transformations in memory from the configured CSV paths.
@@ -202,10 +213,24 @@ treated as shards of one audit, not as separate audits. Separate audits use
 separate preparation calls. Rows whose `result_status` is not `completed`
 are excluded with a reported count; zero remaining rows is an error.
 
+Every row from every configured input path is in audit scope. Preparation has
+no persona/model row selector, so an aggregate experiment CSV containing
+several personas or model configurations cannot be passed unchanged to
+separate preparation calls. Subissue #24 must confirm either audit-partitioned
+upstream exports or an explicit validated splitter/adapter before preparation.
+
+Across all configured experiment-result rows, `load_experiment_results()`
+requires exactly one nonempty `persona_id` and exactly one nonempty
+`model_config_id`. This prevents different personas or LLM configurations from
+sharing an audit label or competing inside the default city-year ranking
+groups.
+
 Every configured scenario field and candidate family header must exist in every
-input. Among eligible rows, stable IDs and ranking fields must be nonempty,
-`candidate_count` must be a positive integer, candidate picks must be exactly
-`0` or `1`, and configured ranking-group values must be complete.
+input. On all rows, envelope identities, status, candidate count, city, year,
+and active candidate IDs must be nonempty, and `candidate_count` must be a
+positive integer. After unsuccessful rows are excluded, completed candidate
+picks must be exactly `0` or `1`, raw-positive picks require log probabilities,
+and configured ranking-group values must be complete.
 
 ### Selection Outcomes
 
@@ -296,18 +321,22 @@ Researchers perform any sample selection before invoking it and save that slice
 as a separate dataset. The slice must retain every core and preparation
 provenance column. Each repeated preparation setting must have exactly one
 nonmissing value in the supplied slice; mixing differently prepared data is an
-error. `audit_id` must likewise be nonempty and constant. A single estimator
-invocation never pools separate audits; estimate each audit separately and
-combine their tidy results only at the rendering stage. Because every
-estimator invocation writes the fixed filename `regression_results.csv`, use a
-distinct `output_directory` for each persisted audit or specification.
+error. `audit_id` must likewise be nonempty and constant.
+`load_regression_data()` also requires one nonempty `persona_id` and one nonempty
+`model_config_id`, so a manually assembled regression-ready CSV cannot bypass
+the locally enforceable persona/model portion of the audit-granularity
+invariant. A single estimator invocation never pools separate audits; estimate
+each audit separately and combine their tidy results only at the rendering
+stage. Because every estimator invocation writes the fixed filename
+`regression_results.csv`, use a distinct `output_directory` for each persisted
+audit or specification.
 
 ### `RegressionConfig`
 
 ```yaml
 data_path: outputs/regression/paper_example_ready.csv
 dataset_id: paper_example
-model_id: black_callback_by_period_model
+model_id: black_callback_by_city_year
 outcome_variable: pick_top
 explanatory_variables:
   - black
@@ -319,8 +348,8 @@ fixed_effects:
 cluster_variables:
   - scenario_id
 estimation_group_variables:
-  - period
-  - model_config_id
+  - city
+  - year
 output_directory: outputs/regression/black_callback
 ```
 
@@ -388,15 +417,11 @@ the data or create additional point estimates. A cluster variable must still
 have at least two distinct clusters inside every estimation group.
 
 Period collapsing is an inspection-stage data decision, not an implicit
-estimator transformation. For the paper smoke test, the inspected dataset adds
-`period = 2000` for source years 2000 through 2002 and otherwise uses `year`,
-then groups and renders on `period` as shown here. Retaining raw `year` instead
-is allowed but defines a different set of models.
-
-The example groups by `period` and `model_config_id`, so it composes with the
-fixed-blue renderer below. A separate city-series run adds `city` to
-`estimation_group_variables` and sets `series_variable: city`; it does not reuse
-the main-panel result file as though the row grain were the same.
+estimator transformation. For a paper smoke test, an inspected dataset may add
+`period = 2000` for source years 2000 through 2002 and otherwise use `year`,
+then use `estimation_group_variables: [city, period]`. Retaining raw `year`, as
+in the example above, defines a different set of models. `model_config_id` is
+constant within one audit and is not an audit-internal grouping dimension.
 
 Missingness across the outcome, right-hand-side, fixed-effect, and cluster
 variables is handled by complete-case estimation. For every fit, the runner
@@ -448,9 +473,17 @@ Configured estimation-group columns are appended using their original column
 names and scalar group values. Every stable column named in the table above is
 reserved; an estimation-group name that collides with one is rejected.
 The in-memory result contract is `llm_auditkit_regression_results_v2`; version
-2 adds required audit provenance. Earlier prepared/result CSVs must be
-regenerated from an audit-labeled preparation config or deliberately migrated
-with the correct nonempty `audit_id` rather than receiving an inferred value.
+2 adds required audit provenance. Regenerating earlier prepared data and
+results from an audit-labeled preparation config is the preferred migration.
+If regeneration is impossible, migrate an inspected v1 prepared CSV only after
+identifying its true audit: add the correct nonempty `audit_id` uniformly,
+confirm one persona and one model configuration with `load_regression_data()`,
+and rerun estimation. Migrating a result CSV directly additionally
+requires an external audit record because result rows may not retain persona
+and model-configuration columns; preserve its `dataset_id` and `model_id`, add
+the correct audit ID uniformly, and run the current result validator. Never
+derive a missing ID from a path, model label, list position, or another
+identifier.
 Configuration variable names cannot contain the `|` or `=` metadata separators
 under the variable-name rule. Result rows are ordered by group values,
 coefficient order, and confidence level. The output contains all information
@@ -470,23 +503,26 @@ Rendering never reads regression-ready data and never re-estimates a model.
 The interactive interface accepts one tidy result table, a nonempty list of
 tables, or one or more result CSV paths and returns a composable `patchwork`
 object. List element names, list order, and file paths are diagnostic input
-labels only: saved `audit_id` and `dataset_id` columns determine source and
-panel identity. The independent file interface reads configured CSVs and
-atomically writes one PNG.
+labels only. Saved `(audit_id, dataset_id, model_id)` values determine result
+source provenance. They do not create panels automatically: `panel_variable`
+explicitly selects the saved field whose values become panels. The independent
+file interface reads configured CSVs and atomically writes one PNG.
 
 Selected rows must agree globally on `term`, `estimation_group_variables`,
 `estimator`, `estimator_version`, `inference_contract_id`, and every repeated
-`preparation_*` setting field. Within each explicit panel they must agree on
-`audit_id`, `dataset_id`, and the explanatory-variable, control, fixed-effect,
-cluster, and covariance specifications. Audit and dataset identities may
-differ across panels, which allows separately prepared audit datasets to
-retain honest provenance in one figure. Those model specifications may differ
-across panels, which lets researchers combine
-separately run regressions without silently changing a specification within a
-panel. The researcher-defined `model_id` may differ, but it never waives the
-substantive checks or permits duplicate plotting keys. When no panel variable
-is configured, the entire selection is one panel and therefore one
-specification.
+`preparation_*` setting field. They must also agree globally on explanatory
+variables, controls, fixed effects, cluster variables, and covariance type.
+This makes coefficient comparisons across audit panels one common regression
+specification. An explicit `outcome_by_panel` map is the sole exception: it may
+select a different dependent variable for each panel. Within each explicit
+panel, `audit_id`, `dataset_id`, and `model_id` must each be constant. `model_id`
+remains part of source provenance and may itself be the configured panel field,
+but a different `model_id` never waives the substantive checks or permits
+duplicate plotting keys. Audit, dataset, and model identities may differ
+across panels,
+letting separately prepared audits retain honest provenance without weakening
+comparability. When no panel variable is configured, the entire selection is
+one panel.
 
 Each input is validated against the complete saved-result schema above,
 including finite statistics, coherent observation/cluster counts, and valid
@@ -595,10 +631,14 @@ With `panel_variable: null`, panel order and labels must be empty and the single
 panel title is the selected outcome.
 
 Term, confidence-level, and outcome selection must retain at least one row from
-every supplied `(audit_id, dataset_id)` source. A selection that would silently
-drop an entire audit or dataset is an error naming both identities; researchers
-intentionally plotting a subset must pass an explicitly inspected result slice
-instead.
+every supplied `(audit_id, dataset_id, model_id)` source. A selection that
+would silently drop an entire audit, dataset slice, or regression specification
+is an error naming all three identities; researchers intentionally plotting a
+subset must pass an explicitly inspected result slice instead.
+
+When `panel_variable` is configured, those selections must also retain at least
+one row for every supplied panel value. This separate check matters when
+several panels, such as cities, share the same source-provenance triple.
 
 A nonempty order list must contain every distinct selected value exactly once;
 unknown, duplicate, or omitted values are errors. Orders never filter data. To
@@ -713,9 +753,9 @@ researcher-assigned `audit_id`, use `panel_variable = "audit_id"`, and map
 used `estimation_group_variables: [city, year]`. Each audit panel may retain a
 different `dataset_id`; both identities must remain constant within that
 panel. Preparation, estimator, inference, and estimation-group metadata still
-match globally, while formula and covariance specifications may differ only
-across explicit panels. Use `outcome_by_panel` instead of `outcome_variable`
-when the panels have different dependent variables.
+match globally, as must explanatory variables, controls, fixed effects,
+clustering, and covariance type. Use `outcome_by_panel` instead of
+`outcome_variable` when the panels have different dependent variables.
 
 Run the [public synthetic rendering example](../../examples/regression/README.md)
 without preparation or estimation:
@@ -810,6 +850,43 @@ the locked interactive loader. Its tests pass real multi-variable `fixest`
 output directly into coefficient-specific plot preparation without adapting
 the schema.
 Existing Python checks continue to run with `python -m pytest`.
+
+## Subissue #24 and Upstream Revalidation
+
+Subissue #24 owns the true multi-audit walkthrough: raw experiment CSVs go
+through separate audit preparation calls, researcher inspection, grouped
+`fixest` estimation, combined result sources, explicit audit panels, and a
+final figure. Its integration handoff records the upstream assumptions and the
+regression files, contracts, and tests that may need revisiting.
+
+When the experiment-execution issue finalizes its raw writer, repeat this
+revalidation checklist before declaring cross-issue integration complete:
+
+1. Compare the finalized headers, status values, candidate-family naming, and
+   probability semantics with the raw experiment CSV contract above.
+2. Confirm stable job and candidate identities, duplicate detection across
+   shards, and the mapping of one model configuration, one persona, and one
+   distinguishable run/batch to each researcher-assigned `audit_id`.
+3. Decide and test whether the experiment writer emits audit-partitioned raw
+   CSVs or a validated handoff adapter splits aggregate multi-persona/model
+   output; preserve an explicit run/batch identity or partition guarantee.
+4. Verify that city/year shards for one audit combine without changing ranking
+   groups, while another persona, model configuration, or distinguishable rerun
+   is prepared under another audit ID.
+5. Run at least two audits from raw CSV through preparation and grouped
+   city-year estimation; inspect candidate counts and the `pick`, `pick_top`,
+   and `pick_threshold` outcomes before combining results.
+6. Confirm the same `audit_id` is not reused for different persona/model/run
+   combinations across separately prepared artifacts, because result rows do
+   not currently retain enough scope metadata to detect that mistake later.
+7. Confirm `(audit_id, dataset_id, model_id)` provenance and every configured
+   panel value survive term, confidence-level, and any explicit
+   outcome-by-panel selection, then render the combined audit panels under one
+   globally comparable specification.
+8. Update the selected experiment-writer or handoff-adapter boundary, fixtures,
+   contracts, and integration handoff together if the finalized upstream format
+   differs. Prefer regenerating prepared and result artifacts over manually
+   migrating them.
 
 ## Artifact Example
 
