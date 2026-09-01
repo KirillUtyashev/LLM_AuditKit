@@ -12,8 +12,9 @@ incremental implementation.
 
 ## Quickstart
 
-The current user-facing functionality is the shared inference API. The following
-commands install the package from this repository and make one real OpenAI request:
+The current user-facing functionality includes shared inference and experiment
+execution. The following commands install the package from this repository and make
+one real OpenAI request:
 
 ```bash
 python -m venv .venv
@@ -46,11 +47,21 @@ Read [Using Shared Inference](docs/guides/shared_inference.md) for configuration
 request identity, prompt preview, batching, sync and async execution, results,
 failures, and checkpoint integration.
 
+For the higher-level DataFrame workflow, read
+[Running Hiring Experiments](docs/guides/experiment_execution.md). The guide covers
+schema mapping, personas, stable IDs, log probabilities, prompt preview, synchronous
+and asynchronous execution, atomic CSV checkpoints, and resume behavior. Paid OpenAI
+examples are available at
+[`experiment_execution_sync.py`](examples/experiment_execution_sync.py) and
+[`experiment_execution_async.py`](examples/experiment_execution_async.py).
+
 ## Documentation
 
 The [package architecture](docs/architecture.md) describes the planned hiring pipeline.
 The [shared inference component contract](docs/components/inference.md) documents its
-detailed behavior and boundaries.
+detailed behavior and boundaries. The
+[experiment execution component contract](docs/components/experiment_execution.md)
+documents the implemented hiring-experiment stage.
 
 Contributors should follow the
 [engineering workflow](docs/development_workflow.md). The optional private

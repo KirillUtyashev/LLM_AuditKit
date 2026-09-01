@@ -1,8 +1,9 @@
 # Using Shared Inference
 
-This guide shows how to send prompts through LLM AuditKit's implemented shared
-inference package. The dataset, template, experiment, and regression pipeline stages
-are not implemented yet; today, users construct generic inference requests directly.
+This guide shows how to send prompts through LLM AuditKit's shared inference package.
+Use it when constructing generic inference requests directly. The implemented
+experiment execution stage provides a higher-level DataFrame workflow on top of this
+API.
 
 For internal contracts and design rationale, see the
 [shared inference component documentation](../components/inference.md).
@@ -152,7 +153,7 @@ for batch in inference.run_batches(requests, config):
 
 For direct shared-inference use, choose the metadata fields that make downstream
 processing convenient and keep their values serialization-friendly. Domain pipeline
-stages such as experiment execution will define a consistent metadata schema rather
+stages such as experiment execution define a consistent metadata schema rather
 than asking users to assemble it manually. `request_id` remains the authoritative
 request identity; metadata is convenience context and should not replace it.
 
