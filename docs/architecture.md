@@ -23,7 +23,7 @@ Experiment Execution
 Regression Analysis
 ```
 
-The package uses `pandas.DataFrame` as the common tabular representation passed between Python pipeline stages.
+The package uses `pandas.DataFrame` as the common tabular representation passed between Python pipeline stages. Dataset loading is the single path-to-DataFrame boundary; downstream Python stages accept DataFrames rather than input paths in their stage configuration.
 
 ## Shared Inference Layer
 
@@ -35,9 +35,9 @@ Template Generation ─┐
 Experiment Execution ┘
 ```
 
-The inference layer owns generic model configuration, deterministic request batching, compatible EDSL job grouping through its adapter, and normalized batch results. A logical batch is grouped by model configuration and system prompt; EDSL owns parallel scenario-interview execution, provider rate limiting, caching, and retries within each submitted job. Pipeline stages own domain-specific prompt construction, response parsing, checkpointing, and output storage.
+The inference layer owns generic model and response-format configuration, deterministic request batching, compatible EDSL job grouping through its adapter, and normalized batch results including structured content and token log probabilities when requested. A logical batch is grouped by model configuration, system prompt, and response format; EDSL owns parallel scenario-interview execution, provider rate limiting, caching, and retries within each submitted job. Pipeline stages own domain-specific prompt construction, response parsing, checkpointing, and output storage.
 
-Batches are submitted sequentially. A calling stage validates and checkpoints the current completed batch before requesting the next one, which bounds uncheckpointed work and prevents a systemic prompt or integration error from consuming tokens across the remaining dataset.
+Batches are submitted sequentially. A calling stage validates and checkpoints the current completed batch before requesting the next one, which bounds uncheckpointed work and prevents a systemic prompt or integration error from consuming tokens across the remaining dataset. Experiment execution applies all outcomes from a completed logical batch and performs one atomic CSV replacement before advancing when `save_after_each_batch` is enabled.
 
 The shared inference layer provides equivalent synchronous and asynchronous batch APIs. Each delegates to the corresponding EDSL execution method while preserving the same validation, batching, normalization, and failure contract.
 

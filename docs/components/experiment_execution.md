@@ -9,8 +9,13 @@ The experiment execution stage runs completed hiring scenarios through one or mo
 Each dataset row represents one complete scenario containing:
 
 - one job posting;
-- `N` populated resumes, where `N` is configured during template generation;
+- an ordered set of `N` populated resumes;
 - all metadata needed to construct the experiment prompt.
+
+All Python pipeline stages exchange `pandas.DataFrame` objects. Dataset loading is the
+single path-to-DataFrame boundary; experiment execution does not load its input from a
+path stored in experiment configuration. The result store separately owns the CSV path
+used for checkpoints and final output.
 
 ## Configuration
 
@@ -18,22 +23,55 @@ Experiments are configured through `ExperimentConfig`.
 
 The configuration includes:
 
-- path to the populated experiment dataset;
+- a stable `experiment_id`;
+- an `ExperimentDatasetSchema` describing the experiment input columns;
 - personas;
 - shared `InferenceConfig`, including model definitions and inference batch size;
-- whether to save after each result (`save_after_each_result`).
+- whether to save after each completed logical batch (`save_after_each_batch`).
+
+### Dataset Schema
+
+`ExperimentDatasetSchema` maps semantic experiment fields to the actual DataFrame
+columns. It contains:
+
+- `scenario_id_column`;
+- `job_posting_column`;
+- an ordered, non-empty list of `resume_columns`;
+- optional `context_columns`, mapping semantic context names such as `city`, `year`,
+  `month`, and `day` to DataFrame columns used by prompt construction.
+
+The number of applicants `N` is `len(resume_columns)`. There is no separate applicant
+count that can disagree with the configured columns. The runner validates that all
+configured columns exist, scenario IDs are unique and non-empty, and every job posting
+and populated resume required for inference is a non-empty string.
+
+The package documents canonical default column names, including `scenario_id`,
+`job_posting`, and `resume_1` through `resume_N`, while allowing callers entering the
+pipeline with an existing DataFrame to map different names explicitly. Other source
+columns are caller-owned scenario metadata and are preserved unchanged in experiment
+output. This is an experiment-boundary schema, not one universal column schema imposed
+on every pipeline stage.
 
 ## Job Identity
 
 Each scheduled job has a stable `ExperimentJobKey` composed of:
 
+- `experiment_id`;
 - `scenario_id`;
 - `persona_id`;
 - `model_config_id`.
 
-The runner derives a unique inference request ID from this key and also carries the key fields in request metadata. The job key, rather than a DataFrame row index or an EDSL result position, associates results and errors and determines whether a job is complete.
+The runner derives a deterministic, collision-safe inference request ID from this key
+and also carries the key fields in request metadata. The job key and derived request ID
+are persisted in output. The job key, rather than a DataFrame row index or an EDSL
+result position, associates results and errors and determines whether a job is complete.
 
-Persona and model configuration IDs remain stable only while they describe the same logical configuration. Changing a persona description or a model's provider, model name, or behavior-affecting parameters requires a new corresponding ID so incompatible prior results are not treated as complete.
+An experiment ID identifies one logical experiment definition, including its dataset
+schema and prompt construction contract. Changing prompt-defining experiment behavior
+requires a new experiment ID. Persona and model configuration IDs remain stable only
+while they describe the same logical configuration. Changing a persona description or
+a model's provider, model name, or behavior-affecting parameters requires a new
+corresponding ID so incompatible prior results are not treated as complete.
 
 ## Personas and System Prompts
 
@@ -54,6 +92,12 @@ The shared `InferenceConfig` specifies:
 
 Each `ModelConfig` has a stable configuration ID, EDSL provider or service name, model name, and JSON-compatible provider-specific inference parameters. Credentials remain outside model configuration.
 
+Experiment execution requires token log probabilities. Every configured model must be
+configured to request them through its supported model parameters. A provider or model
+that does not return enough token log-probability data for a completed applicant
+decision produces a request-level experiment parsing error rather than silently writing
+an incomplete successful record.
+
 Experiment request cardinality is:
 
 ```text
@@ -70,23 +114,45 @@ For every incomplete combination of scenario, persona, and configured model, the
 - the fully constructed experiment prompt;
 - the persona description as the system prompt;
 - the target model configuration ID;
+- a generic dictionary response format with one ordered `Yes` or `No` field per
+  applicant and an optional comment;
 - the job key in generic metadata.
+
+The shared inference adapter maps the generic dictionary response format to EDSL's
+standard `QuestionDict`. EDSL renders and validates the structured response. The runner
+then performs domain validation, converts the ordered applicant answers to `0` or `1`,
+and associates each answer with its normalized emitted-token log probability. Raw EDSL
+or provider response objects do not cross the inference boundary.
 
 `ExperimentRunner.preview` returns the selected shared-inference batch preview without making model calls. Previewing the first small batch is the recommended way to inspect EDSL-rendered prompts and verify persona mapping, model mapping, and request cardinality before a large run.
 
 ## Execution and Batching
+
+The runner constructs the canonical job sequence deterministically in this order:
+
+1. scenarios in the input DataFrame's existing row order;
+2. personas in their declared configuration order for each scenario;
+3. model configurations in their declared `InferenceConfig.models` order for each
+   scenario-persona pair.
+
+The sequence is partitioned into consecutive logical batches. DataFrame row position
+therefore controls execution and presentation order only; stable identifiers remain the
+sole durable identity. The runner associates returned outcomes by `request_id`, never
+by EDSL return position or completion order, and restores canonical order before
+updating the output.
 
 `ExperimentRunner.run` consumes the synchronous `InferenceOrchestrator.run_batches` iterator, while `ExperimentRunner.run_async` consumes `InferenceOrchestrator.run_batches_async`. Both paths follow the same processing contract:
 
 1. build requests only for incomplete job keys;
 2. execute one logical inference batch, which the adapter can partition into EDSL-compatible job groups;
 3. validate and associate every normalized result in that completed batch;
-4. update and checkpoint the output according to configuration;
+4. apply all outcomes from the completed batch and, when configured, checkpoint the
+   updated output with one atomic CSV replacement;
 5. request the next batch only after the current batch has been handled safely.
 
 Both entry points are first-class. The synchronous path delegates to EDSL's native blocking execution, and the asynchronous path delegates to EDSL's native async execution. They use the same request construction, batch boundaries, result association, failures, checkpoint behavior, and returned DataFrame shape.
 
-Batches are sequential at the LLM AuditKit layer. Within a batch, the adapter groups requests by model configuration and system prompt and submits those EDSL jobs sequentially. EDSL owns parallel scenario-interview execution, provider rate limiting, caching, and retry behavior inside each job. The runner does not create its own request-worker pool or retry individual EDSL interviews.
+Batches are sequential at the LLM AuditKit layer. Within a batch, the adapter groups requests by model configuration, system prompt, and response format and submits those EDSL jobs sequentially. EDSL owns parallel scenario-interview execution, provider rate limiting, caching, and retry behavior inside each job. The runner does not create its own request-worker pool or retry individual EDSL interviews.
 
 The runner can report completed batches and logical requests and use observed batch durations to estimate remaining time. Such estimates are informational because providers, models, prompt sizes, and rate limits can vary.
 
@@ -101,6 +167,8 @@ The shared inference layer is responsible for:
 
 - constructing domain prompts and stable job identities;
 - excluding completed jobs before inference;
+- validating one structured `Yes` or `No` answer and one selected-token log probability
+  for each configured resume column;
 - associating and parsing normalized results;
 - incremental persistence and resume behavior;
 - recording terminal errors;
@@ -108,15 +176,24 @@ The shared inference layer is responsible for:
 
 ## Incremental Saving
 
-Completed normalized results are written to an output DataFrame. When `save_after_each_result` is enabled, after a batch returns, each result is applied and persisted using atomic replacement before the runner requests another batch. When it is disabled, results remain in memory and are persisted after execution finishes.
+Completed normalized results are parsed and applied to the output DataFrame as a batch.
+When `save_after_each_batch` is enabled, the result store writes the updated CSV once,
+using atomic replacement, after every successfully handled logical batch and before the
+runner requests the next batch. It does not rewrite the CSV separately for every result
+inside that batch. When the option is disabled, results remain in memory and the final
+output is persisted after execution finishes.
 
 No new local result becomes available while the EDSL job groups for a logical batch are running. The configured inference batch size therefore bounds the logical work between checkpoint opportunities.
 
 ## Resume Behavior
 
-Before constructing pending requests, the runner checks whether each `ExperimentJobKey` already has a completed result.
+Before constructing pending requests, the runner checks whether each `ExperimentJobKey` already has a completed result. It creates the full canonical job sequence first and removes completed jobs without changing the relative order of the remaining jobs.
 
-Completed jobs are skipped when resuming an interrupted experiment. Batch boundaries are not durable identity and can change when a run resumes with fewer pending jobs.
+Completed jobs are skipped when resuming an interrupted experiment. Failed or
+incomplete records remain pending and are replaced when a later attempt succeeds. The
+result store writes records in canonical job order regardless of prior CSV row order or
+asynchronous completion order. Batch boundaries are not durable identity and can change
+when a run resumes with fewer pending jobs.
 
 ## Failure Handling
 
@@ -126,4 +203,25 @@ A systemic batch failure, such as missing or duplicate request identities, unexp
 
 ## Output
 
-The output preserves the scenario data and adds corresponding experiment results and error information. Results are persisted as CSV with one record per `ExperimentJobKey`, providing the input contract for regression analysis.
+The output preserves every source scenario column without EDSL prefixes and adds one
+record per `ExperimentJobKey`. It is persisted as CSV and provides the input contract
+for regression analysis.
+
+Each record contains:
+
+- `experiment_id`, `scenario_id`, `persona_id`, `model_config_id`, and the derived
+  `request_id`;
+- persona name and description;
+- the effective rendered `user_prompt` and `system_prompt`;
+- `generated_response` and the optional structured-response `comment`;
+- `picks`, serialized as a JSON array of `0` and `1` values in configured resume-column
+  order;
+- dynamic scalar columns `pick1` through `pickN`;
+- dynamic scalar columns `logprob1` through `logprobN`, where each value is the natural
+  log probability of the emitted `Yes` or `No` token associated with that applicant;
+- `error_type` and `error_message` for unsuccessful inference or domain parsing.
+
+Successful rows have all `N` picks and log probabilities and no error. Failed rows keep
+their identity and error information, leave result fields empty, and remain incomplete
+for resume purposes. The output does not persist provider raw responses or unstable EDSL
+bookkeeping such as scenario indices, agent indices, or generated agent names.

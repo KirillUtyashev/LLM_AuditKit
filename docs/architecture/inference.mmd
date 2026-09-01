@@ -18,7 +18,17 @@ classDiagram
         +prompt: str
         +system_prompt: Optional~str~
         +model_config_id: str
+        +response_format: Optional~DictResponseFormat~
         +metadata: Dict
+    }
+    class DictResponseFormat {
+        +fields: List~ResponseField~
+        +include_comment: bool
+    }
+    class ResponseField {
+        +name: str
+        +value_type: str
+        +description: str
     }
     class RenderedPrompt {
         +request_id: str
@@ -40,8 +50,15 @@ classDiagram
         +request_id: str
         +model_config_id: str
         +content: Optional~str~
+        +structured_content: Optional~Dict~
+        +comment: Optional~str~
+        +token_logprobs: List~TokenLogprob~
         +metadata: Dict
         +error: Optional~InferenceError~
+    }
+    class TokenLogprob {
+        +token: str
+        +logprob: float
     }
     class InferenceError {
         +type: str
@@ -71,14 +88,17 @@ classDiagram
         +run_async()
     }
     InferenceConfig --> ModelConfig
+    InferenceRequest --> DictResponseFormat
+    DictResponseFormat --> ResponseField
     InferenceOrchestrator --> InferenceConfig : validates and batches
     InferenceOrchestrator --> InferenceRequest : preserves identity
     InferenceOrchestrator --> InferenceBatchPreview : previews
     InferenceBatchPreview --> RenderedPrompt
     InferenceOrchestrator --> InferenceBatchResult : yields sequentially
     InferenceBatchResult --> InferenceResult
+    InferenceResult --> TokenLogprob
     InferenceResult --> InferenceError
     InferenceOrchestrator --> InferenceAdapter : delegates batches
     EDSLAdapter ..|> InferenceAdapter : implements
     EDSLAdapter --> ModelConfig : configures
-    EDSLAdapter --> EDSL : submits sequential model and system-prompt groups
+    EDSLAdapter --> EDSL : submits compatible response-format groups

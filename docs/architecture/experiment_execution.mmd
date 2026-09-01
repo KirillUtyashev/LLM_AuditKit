@@ -4,10 +4,17 @@ config:
 ---
 classDiagram
     class ExperimentConfig {
-        +dataset_path: Path
+        +experiment_id: str
+        +dataset_schema: ExperimentDatasetSchema
         +personas: List~Persona~
         +inference: InferenceConfig
-        +save_after_each_result: bool
+        +save_after_each_batch: bool
+    }
+    class ExperimentDatasetSchema {
+        +scenario_id_column: str
+        +job_posting_column: str
+        +resume_columns: List~str~
+        +context_columns: Dict~str, str~
     }
     class Persona {
         +id: str
@@ -34,9 +41,23 @@ classDiagram
         <<shared inference>>
     }
     class ExperimentJobKey {
+        +experiment_id: str
         +scenario_id: str
         +persona_id: str
         +model_config_id: str
+    }
+    class ExperimentOutcome {
+        +picks: List~int~
+        +logprobs: List~float~
+        +generated_response: str
+        +comment: Optional~str~
+    }
+    class ExperimentOutputRecord {
+        +key: ExperimentJobKey
+        +request_id: str
+        +outcome: Optional~ExperimentOutcome~
+        +error_type: Optional~str~
+        +error_message: Optional~str~
     }
     class ExperimentRunner {
         -inference_orchestrator: InferenceOrchestrator
@@ -45,18 +66,20 @@ classDiagram
         +run(dataset: DataFrame, config: ExperimentConfig) DataFrame
         +run_async(dataset: DataFrame, config: ExperimentConfig) DataFrame
         -build_requests(dataset: DataFrame, config: ExperimentConfig) List~InferenceRequest~
+        -build_prompt(row: Series, config: ExperimentConfig) str
+        -parse_result(result: InferenceResult, config: ExperimentConfig) ExperimentOutcome
     }
     class ExperimentResultStore {
         -output_path: Path
-        +initialize(dataset: DataFrame) DataFrame
-        +save_result(output_dataset: DataFrame, key: ExperimentJobKey, result: InferenceResult) void
-        +save_error(output_dataset: DataFrame, key: ExperimentJobKey, error: str) void
+        +initialize(dataset: DataFrame, config: ExperimentConfig) DataFrame
+        +save_batch(output_dataset: DataFrame, records: List~ExperimentOutputRecord~) void
         +is_complete(output_dataset: DataFrame, key: ExperimentJobKey) bool
     }
     class DataFrame {
         <<pandas>>
     }
     ExperimentConfig --> Persona
+    ExperimentConfig --> ExperimentDatasetSchema
     ExperimentConfig --> InferenceConfig
     ExperimentRunner --> ExperimentConfig
     ExperimentRunner --> ExperimentJobKey : derives request identity
@@ -65,8 +88,10 @@ classDiagram
     ExperimentRunner --> InferenceOrchestrator : consumes batches
     InferenceOrchestrator --> InferenceBatchResult : yields sequentially
     InferenceBatchResult --> InferenceResult
-    ExperimentRunner --> ExperimentResultStore : checkpoints results
+    ExperimentRunner --> ExperimentOutcome : parses
+    ExperimentRunner --> ExperimentOutputRecord : builds
+    ExperimentRunner --> ExperimentResultStore : checkpoints completed batches
     ExperimentRunner --> DataFrame : processes
     ExperimentResultStore --> ExperimentJobKey : indexes by
-    ExperimentResultStore --> InferenceResult : stores
+    ExperimentResultStore --> ExperimentOutputRecord : stores
     ExperimentResultStore --> DataFrame : updates and persists
