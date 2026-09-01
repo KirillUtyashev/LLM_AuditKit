@@ -75,4 +75,4 @@ classDiagram
     ExperimentResultStore --> InferenceResult : stores
     ExperimentResultStore --> DataFrame : updates and persists
     ExperimentResultStore --> RawExperimentResults : writes atomically
-    RawExperimentResults ..> RegressionDataPreparation : audit-partitioned input after issue 24 handoff
+    RawExperimentResults ..> RegressionDataPreparation : audit-partitioned handoff pending production issue 13

@@ -12,7 +12,8 @@ raw-to-regression-ready preparation runner and a separate fixed-effects
 estimation runner that returns plot-ready numerical results and can write them
 as CSV. The independent paper-style renderer reads those results and atomically
 writes a PNG; the same plot builder also accepts tidy results in an interactive
-R session.
+R session. A checked-in two-audit workflow verifies the public raw-preparation,
+grouped-estimation, and multi-panel-rendering boundary end to end.
 
 - Do not assume documented components are already implemented.
 - Do not add functionality, dependencies, interfaces, or placeholder modules outside the scope of the current task.
@@ -33,6 +34,8 @@ Follow [`docs/development_workflow.md`](docs/development_workflow.md) for issue 
 Read [`docs/paper_reference.md`](docs/paper_reference.md) before consulting the earlier paper implementation.
 
 Matching Mermaid diagrams live in `docs/architecture/`.
+Cross-issue regression assumptions and revalidation ownership are recorded in
+[`docs/integration/regression_analysis.md`](docs/integration/regression_analysis.md).
 
 When an architectural contract represented in a Mermaid diagram changes, update the relevant Markdown page and diagram in the same change. Keep the README summary and package metadata consistent with the detailed documentation.
 
@@ -47,7 +50,7 @@ When an architectural contract represented in a Mermaid diagram changes, update 
 - Keep `save_after_each_result` stage-specific and configurable. Incremental file writes must use an atomic replacement strategy.
 - The Python-to-R boundary uses raw experiment CSVs. Separate YAML-configured `Rscript` entry points prepare a regression-ready CSV, estimate one inspected dataset into plot-ready numerical results, and render figures independently from those results. Within R, estimation returns the same tidy table that the CLI can persist as CSV; plotting accepts that object, a list of compatible result tables, or equivalent result CSV paths.
 - Plot configuration must explicitly select both `outcome_variable` (the dependent variable) and `term` (the coefficient shown), unless a complete outcome-by-panel map replaces the scalar outcome. Estimation groups create separate fits; covariance clusters only control inference within each fit.
-- Preparation stamps one researcher-assigned stable `audit_id` onto every regression-ready row; never generate or infer it from paths or other metadata. One audit is one `model_config_id` (LLM product/version and parameters) × one `persona_id` × one distinguishable execution run or batch; city/year files may be shards of that audit. Current preparation inputs must already be partitioned to that scope because there is no row selector; #24 must resolve aggregate upstream output and run/batch provenance. `dataset_id` identifies an inspected analysis slice and `model_id` identifies a regression specification. Rendering preserves `(audit_id, dataset_id, model_id)` source provenance, while the configured `panel_variable` alone chooses panels; each panel contains one source triple, and selections must not silently remove a source or panel value. Audit comparisons must use the same right-hand-side formula, fixed effects, clustering, covariance type, estimation grouping, and inference contract; only an explicit outcome-by-panel map may vary the dependent variable.
+- Preparation stamps one researcher-assigned stable `audit_id` onto every regression-ready row; never generate or infer it from paths or other metadata. One audit is one `model_config_id` (LLM product/version and parameters) × one `persona_id` × one distinguishable execution run or batch; city/year files may be shards of that audit. Current preparation inputs must already be partitioned to that scope because there is no row selector. The verified public walkthrough uses audit-partitioned inputs; experiment issue #13 must retain that writer behavior or provide a validated partition adapter with explicit run/batch provenance. `dataset_id` identifies an inspected analysis slice and `model_id` identifies a regression specification. Rendering preserves `(audit_id, dataset_id, model_id)` source provenance, while the configured `panel_variable` alone chooses panels; each panel contains one source triple, and selections must not silently remove a source or panel value. Audit comparisons must use the same right-hand-side formula, fixed effects, clustering, covariance type, estimation grouping, and inference contract; only an explicit outcome-by-panel map may vary the dependent variable.
 
 ## Repository Layout
 
@@ -59,6 +62,7 @@ tests/              Automated tests
 tests/r/            R testthat suite and public synthetic fixtures
 examples/           User-facing examples
 docs/               Architecture and behavior documentation
+docs/integration/   Cross-issue handoff and revalidation records
 renv.lock            Authoritative R package environment
 ```
 
@@ -125,6 +129,7 @@ Run the complete or focused R test suite:
 ```bash
 Rscript tests/r/run_tests.R
 Rscript -e 'testthat::test_file("tests/r/test-preparation-config.R", reporter = "summary")'
+Rscript -e 'testthat::test_file("tests/r/test-experiment-results.R", reporter = "summary")'
 Rscript -e 'testthat::test_file("tests/r/test-preparation.R", reporter = "summary")'
 Rscript -e 'testthat::test_file("tests/r/test-regression-config.R", reporter = "summary")'
 Rscript -e 'testthat::test_file("tests/r/test-regression.R", reporter = "summary")'
@@ -133,6 +138,7 @@ Rscript -e 'testthat::test_file("tests/r/test-render-data.R", reporter = "summar
 Rscript -e 'testthat::test_file("tests/r/test-plot-api.R", reporter = "summary")'
 Rscript -e 'testthat::test_file("tests/r/test-paper-plot.R", reporter = "summary")'
 Rscript -e 'testthat::test_file("tests/r/test-render-runner.R", reporter = "summary")'
+Rscript -e 'testthat::test_file("tests/r/test-regression-end-to-end.R", reporter = "summary")'
 ```
 
 Prepare configured raw experiment results:
@@ -153,6 +159,20 @@ Render saved results, or run the public synthetic example:
 Rscript scripts/render_regression_plot.R --config path/to/render.yaml
 Rscript scripts/render_regression_plot.R --config examples/regression/render_synthetic.yaml
 ```
+
+Run the complete public two-audit walkthrough, pausing to inspect the prepared
+CSVs before estimation:
+
+```bash
+Rscript scripts/prepare_regression_data.R --config examples/regression/end_to_end/prepare_audit_a.yaml
+Rscript scripts/prepare_regression_data.R --config examples/regression/end_to_end/prepare_audit_b.yaml
+Rscript scripts/run_regression.R --config examples/regression/end_to_end/regress_audit_a.yaml
+Rscript scripts/run_regression.R --config examples/regression/end_to_end/regress_audit_b.yaml
+Rscript scripts/render_regression_plot.R --config examples/regression/end_to_end/render_audits.yaml
+```
+
+The command sequence assumes the required human inspection between preparation
+and estimation; do not hide that boundary in a production orchestrator.
 
 Load the locked interactive R API from a clean R session:
 

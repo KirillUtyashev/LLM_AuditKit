@@ -54,3 +54,6 @@ inference settings, estimation grouping, and repeated preparation provenance
 match. The dependent variable and plotted coefficient are explicit, separate
 selections; only an explicit outcome-by-panel map may vary the dependent
 variable across panels. No Python-to-R in-memory object exchange is required.
+The [regression integration handoff](integration/regression_analysis.md)
+records the verified public two-audit composition and the production
+experiment-writer assumptions that still require revalidation.

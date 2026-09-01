@@ -32,8 +32,9 @@ validation, grouped `fixest::feols` estimation, locked inference, an in-memory
 tidy result object, optional atomic CSV export, and the estimation CLI.
 Subissue #23 adds result validation, explicit outcome/coefficient plot
 selection, deterministic plot-data preparation, in-memory and CSV plotting,
-and the independent paper-style PNG renderer. Final regression-stage
-walkthrough and integration handoff remain in subissue #24.
+and the independent paper-style PNG renderer. Subissue #24 verifies the three
+entry points together with two public synthetic audits and records the
+[integration handoff](../integration/regression_analysis.md).
 
 ## Shared Configuration Rules
 
@@ -122,8 +123,9 @@ position.
 Within the current one-persona/one-model audit boundary, a repeated
 `scenario_id` is a duplicate `ExperimentJobKey` and is rejected. Consequently,
 preparation does not compare candidate sets or covariates across separate
-audits. Subissue #24 must validate that shared scenarios and candidates align
-before their separately prepared audit results are compared.
+audits. The public multi-audit workflow therefore performs a separate
+cross-audit alignment assertion before its results are compared. Production
+researchers must make the same check for the inspected datasets they combine.
 
 The intermediate implementation names `raw_pick` and `raw_log_probability`
 are reserved in addition to the published core columns, so configured
@@ -135,9 +137,10 @@ stable schema. It uses legacy fields such as `scenario.*`, `agent.*`, `pick1`,
 and `logprob1`, assumes four candidate positions, and lacks the modern stable
 IDs, result status, candidate count, and candidate IDs. The production loader
 therefore rejects it with missing-field diagnostics; it is a private manual
-compatibility reference, not a public fixture or a schema authority. Any later
-end-to-end smoke-test mapping must be explicit and documented rather than
-silently embedded in the production loader.
+compatibility reference, not a public fixture or a schema authority. The
+[integration handoff](../integration/regression_analysis.md#private-reference-smoke-test)
+records the explicit temporary mapping used for one manual smoke test; that
+mapping is intentionally absent from the production loader.
 
 ### `PreparationConfig`
 
@@ -195,7 +198,8 @@ each preparation or estimation input. No global registry prevents two separate
 artifacts from reusing an `audit_id`, and the current raw schema has no
 run/batch identifier from which to verify that part automatically. Researchers
 must therefore maintain that mapping outside the CSVs until the experiment
-handoff is finalized; subissue #24 records and rechecks it across artifacts.
+handoff is finalized. The integration handoff records this limitation and the
+production revalidation owned by experiment execution.
 
 The #21 function `prepare_regression_data()` performs those candidate-level
 transformations in memory from the configured CSV paths.
@@ -216,8 +220,10 @@ are excluded with a reported count; zero remaining rows is an error.
 Every row from every configured input path is in audit scope. Preparation has
 no persona/model row selector, so an aggregate experiment CSV containing
 several personas or model configurations cannot be passed unchanged to
-separate preparation calls. Subissue #24 must confirm either audit-partitioned
-upstream exports or an explicit validated splitter/adapter before preparation.
+separate preparation calls. The verified public workflow starts with
+audit-partitioned shards. Experiment issue #13 must retain that writer boundary
+or provide an explicit validated splitter/adapter with run/batch provenance
+before production integration.
 
 Across all configured experiment-result rows, `load_experiment_results()`
 requires exactly one nonempty `persona_id` and exactly one nonempty
@@ -718,6 +724,28 @@ configuration, input, or output. Estimation does not invoke rendering
 implicitly, which guarantees that a figure can be recreated in a fresh process
 from saved results alone.
 
+The checked-in public workflow runs two audit-partitioned raw datasets through
+those same entry points. Preparation remains separate so the two generated
+regression-ready CSVs can be inspected before estimation:
+
+```bash
+Rscript scripts/prepare_regression_data.R --config examples/regression/end_to_end/prepare_audit_a.yaml
+Rscript scripts/prepare_regression_data.R --config examples/regression/end_to_end/prepare_audit_b.yaml
+
+# Inspect outputs/regression/end_to_end/*/regression_ready.csv here.
+
+Rscript scripts/run_regression.R --config examples/regression/end_to_end/regress_audit_a.yaml
+Rscript scripts/run_regression.R --config examples/regression/end_to_end/regress_audit_b.yaml
+Rscript scripts/render_regression_plot.R --config examples/regression/end_to_end/render_audits.yaml
+```
+
+Each audit produces 64 candidate rows and 24 tidy result rows: four city-year
+fits by two requested coefficients by three confidence levels. The final
+1200-by-600 PNG contains eight selected `black` coefficients across two audit
+panels. The [example guide](../../examples/regression/README.md) explains the
+synthetic design and the [integration handoff](../integration/regression_analysis.md)
+records the verification and remaining production boundary work.
+
 For an interactive R workflow, source one public entry point from a clean
 session:
 
@@ -825,6 +853,7 @@ The full and focused R test commands are:
 ```bash
 Rscript tests/r/run_tests.R
 Rscript -e 'testthat::test_file("tests/r/test-preparation-config.R", reporter = "summary")'
+Rscript -e 'testthat::test_file("tests/r/test-experiment-results.R", reporter = "summary")'
 Rscript -e 'testthat::test_file("tests/r/test-preparation.R", reporter = "summary")'
 Rscript -e 'testthat::test_file("tests/r/test-regression-config.R", reporter = "summary")'
 Rscript -e 'testthat::test_file("tests/r/test-regression.R", reporter = "summary")'
@@ -833,6 +862,7 @@ Rscript -e 'testthat::test_file("tests/r/test-render-data.R", reporter = "summar
 Rscript -e 'testthat::test_file("tests/r/test-plot-api.R", reporter = "summary")'
 Rscript -e 'testthat::test_file("tests/r/test-paper-plot.R", reporter = "summary")'
 Rscript -e 'testthat::test_file("tests/r/test-render-runner.R", reporter = "summary")'
+Rscript -e 'testthat::test_file("tests/r/test-regression-end-to-end.R", reporter = "summary")'
 ```
 
 Subissue #20 introduces the `renv` scaffold, preparation-config and raw-loader
@@ -848,16 +878,22 @@ saved-result example, numeric plot-data and layer tests, PNG
 dimension/atomicity checks, and fresh-process tests for both rendering-only and
 the locked interactive loader. Its tests pass real multi-variable `fixest`
 output directly into coefficient-specific plot preparation without adapting
-the schema.
+the schema. Subissue #24 adds the public two-audit raw-to-PNG fixture and
+fresh-process workflow test, performs a temporary private legacy-sample
+compatibility smoke test, and records the integration handoff without adding a
+production legacy adapter.
 Existing Python checks continue to run with `python -m pytest`.
 
-## Subissue #24 and Upstream Revalidation
+## Verified Multi-Audit Walkthrough and Upstream Revalidation
 
-Subissue #24 owns the true multi-audit walkthrough: raw experiment CSVs go
-through separate audit preparation calls, researcher inspection, grouped
-`fixest` estimation, combined result sources, explicit audit panels, and a
-final figure. Its integration handoff records the upstream assumptions and the
-regression files, contracts, and tests that may need revisiting.
+Subissue #24 verifies the multi-audit mechanics with public synthetic data: raw
+experiment CSVs go through separate audit preparation calls, an explicit
+researcher-inspection checkpoint, grouped `fixest` estimation, combined result
+sources, explicit audit panels, and a final figure. The
+[integration handoff](../integration/regression_analysis.md) records the exact
+evidence, private compatibility smoke, upstream assumptions, and regression
+files, contracts, and tests that may need revisiting. This does not replace a
+production-data rerun after experiment execution is implemented.
 
 When the experiment-execution issue finalizes its raw writer, repeat this
 revalidation checklist before declaring cross-issue integration complete:

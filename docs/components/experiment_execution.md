@@ -124,12 +124,17 @@ An experiment configuration may schedule several personas and model
 configurations into one aggregate result table. The current regression
 preparation boundary does not filter such a table: each configured CSV set must
 already represent one persona, one model configuration, and one distinguishable
-run or batch before the researcher assigns its `audit_id`. Subissue #24 must
-therefore verify either that the finalized experiment writer can emit
-audit-partitioned CSVs or that an explicit, validated handoff adapter partitions
-the aggregate output first. Because `ExperimentJobKey` currently has no
-run/batch field, the writer or adapter must also preserve that provenance rather
-than asking preparation to infer it.
+run or batch before the researcher assigns its `audit_id`.
+
+The [regression integration handoff](../integration/regression_analysis.md)
+verifies the downstream workflow with audit-partitioned public fixtures and
+records a compatibility-only smoke test for the legacy private sample. It does
+not select the production handoff design. Issue #13 must either make the
+finalized writer emit audit-partitioned CSVs or provide an explicit, validated
+adapter that partitions aggregate output first. Because `ExperimentJobKey`
+currently has no run/batch field, the writer or adapter must also preserve that
+provenance rather than asking preparation to infer it. The temporary legacy
+sample mapping is not a production adapter.
 
 Candidate indices may describe the wide CSV layout but are not durable
 identities. The exact consumer-facing column convention and validation rules are

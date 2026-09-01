@@ -1,4 +1,71 @@
-# Render saved regression results
+# Regression examples
+
+## Complete synthetic workflow
+
+This public example starts with raw wide experiment CSV shards for two
+fictional audits, prepares each audit separately, preserves the researcher
+inspection boundary, estimates the same grouped fixed-effects specification,
+and renders the compatible results as two audit panels. Run it from the
+repository root after restoring the R environment.
+
+First prepare each audit:
+
+```bash
+Rscript -e 'renv::restore(prompt = FALSE)'
+Rscript scripts/prepare_regression_data.R --config examples/regression/end_to_end/prepare_audit_a.yaml
+Rscript scripts/prepare_regression_data.R --config examples/regression/end_to_end/prepare_audit_b.yaml
+```
+
+Before estimating anything, inspect:
+
+```text
+outputs/regression/end_to_end/audit_a/regression_ready.csv
+outputs/regression/end_to_end/audit_b/regression_ready.csv
+```
+
+Each file should contain 64 candidate rows: two cities by two years by four
+scenarios by four candidates. Each city-year group has 16 candidates and two
+`pick_top` selections because `ceiling(0.08 * 16) = 2`. Confirm that the audit,
+persona, model-configuration, scenario, and candidate identities describe the
+intended analysis before continuing. The automated fixture also checks that
+the shared scenarios, candidates, and `black`/`high` covariates align across
+the two audits; production researchers remain responsible for that check.
+
+After inspection, estimate and render:
+
+```bash
+Rscript scripts/run_regression.R --config examples/regression/end_to_end/regress_audit_a.yaml
+Rscript scripts/run_regression.R --config examples/regression/end_to_end/regress_audit_b.yaml
+Rscript scripts/render_regression_plot.R --config examples/regression/end_to_end/render_audits.yaml
+```
+
+Each estimator call fits `pick_threshold ~ black + high | scenario_id`
+separately for four city-year groups, clusters inference by `scenario_id`, and
+writes 24 tidy rows: four fits by two coefficients by three saved confidence
+levels. The renderer selects the 95% interval for `black` and writes eight
+points across two panels to:
+
+```text
+outputs/regression/end_to_end/multi_audit_black_coefficients.png
+```
+
+The image is 1200 x 600 pixels. All raw values, audit/model identities, and
+coefficients are invented to exercise the interfaces; they are not estimates
+from job posts or evidence about any real model. Generated files remain under
+the ignored `outputs/` directory.
+
+The complete workflow is covered in a fresh-process test:
+
+```bash
+Rscript -e 'testthat::test_file("tests/r/test-regression-end-to-end.R", reporter = "summary")'
+```
+
+The test copies the public inputs and configurations to a temporary tree,
+invokes the same three documented CLIs, checks deterministic prepared and
+result CSVs, and validates the PNG signature and dimensions. It does not
+expect byte-identical PNG rendering across operating systems.
+
+## Render-only saved-results example
 
 From the repository root, after restoring the R environment:
 
@@ -13,7 +80,7 @@ line, and lower opacity where the saved p-value is at least 0.05. No raw data,
 private reference checkout, or regression fitting is needed. The output is
 ignored by Git. A successful rerun replaces that PNG atomically.
 
-## What the example represents
+### What the render-only example represents
 
 The [configuration](render_synthetic.yaml) reads
 [a public synthetic result fixture](../../tests/r/fixtures/regression/render_results_synthetic.csv).
@@ -67,7 +134,7 @@ list order, and file paths do not define source or panel identity. Saved
 `audit_id`, `dataset_id`, and `model_id` values preserve each result source;
 the configured `panel_variable` chooses which saved field creates panels.
 
-## Use your own saved results
+### Use your own saved results
 
 Copy the YAML and change `results_paths`, `output_path`, `term`, the outcome
 selection, and the period/series/panel roles. Paths are relative to the YAML
@@ -97,9 +164,9 @@ slice.
 
 Results used in one figure may have different audit, dataset, and model
 identities across explicit panels, but all three must be constant within each
-panel. They must
-share explanatory variables, controls, fixed effects, clustering, covariance
-type, estimation-group, inference, and preparation metadata. A panel-specific
+panel. They must share explanatory variables, controls, fixed effects,
+clustering, covariance type, estimation-group, inference, and preparation
+metadata. A panel-specific
 dependent variable is allowed only through an explicit `outcome_by_panel` map.
 A different `model_id` does not waive those checks. The default figure is
 paper-style, not a pixel-identical copy of the historical output; it uses

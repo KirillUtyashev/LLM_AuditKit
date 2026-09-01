@@ -11,7 +11,8 @@ runner, and a separate fixed-effects estimation runner that writes plot-ready
 numerical results. The estimator also returns the same tidy results as an R
 object for interactive analysis. An independent paper-style renderer recreates
 figures from in-memory result tables or saved CSVs without rerunning a
-regression.
+regression. A public two-audit walkthrough verifies those three entry points
+together from raw CSV shards through a combined coefficient figure.
 
 ## Documentation
 
@@ -20,6 +21,10 @@ See the [package architecture](docs/architecture.md) for the planned hiring pipe
 Contributors should also follow the [engineering workflow](docs/development_workflow.md) for issues, branches, pull requests, and review.
 
 The private [paper reference repository](docs/paper_reference.md) preserves the earlier research code for historical context without making it part of this package.
+
+The [regression integration handoff](docs/integration/regression_analysis.md)
+records the verified public workflow, the private legacy-sample compatibility
+smoke test, and the remaining experiment-writer and CI touchpoints.
 
 ## Getting Started
 
@@ -54,6 +59,25 @@ Rscript -e 'renv::restore(prompt = FALSE)'
 Rscript tests/r/run_tests.R
 ```
 
+Run the complete public synthetic regression workflow in its deliberate three
+stages:
+
+```bash
+Rscript scripts/prepare_regression_data.R --config examples/regression/end_to_end/prepare_audit_a.yaml
+Rscript scripts/prepare_regression_data.R --config examples/regression/end_to_end/prepare_audit_b.yaml
+
+# Inspect the two regression-ready CSVs under outputs/regression/end_to_end/.
+
+Rscript scripts/run_regression.R --config examples/regression/end_to_end/regress_audit_a.yaml
+Rscript scripts/run_regression.R --config examples/regression/end_to_end/regress_audit_b.yaml
+Rscript scripts/render_regression_plot.R --config examples/regression/end_to_end/render_audits.yaml
+```
+
+The walkthrough uses invented public data for two separately prepared audits,
+four city-year estimates per audit, and one two-panel PNG. It is a mechanical
+example, not a research result. See the [regression examples](examples/regression/README.md)
+for the inspection checks and expected artifacts.
+
 Prepare raw experiment CSVs with:
 
 ```bash
@@ -83,9 +107,9 @@ explanatory variable receives its own estimate, standard error, p-value, and
 
 The regression YAML contract and tidy result schema are documented in the
 [regression analysis guide](docs/components/regression_analysis.md#2-fixed-effects-estimation).
-It also records the [subissue #24 walkthrough and upstream revalidation
-checklist](docs/components/regression_analysis.md#subissue-24-and-upstream-revalidation)
-to repeat after experiment execution finalizes its raw CSV schema.
+The completed [regression integration handoff](docs/integration/regression_analysis.md)
+records the walkthrough evidence and the upstream revalidation checklist to
+repeat after experiment execution finalizes its raw CSV schema.
 
 For an interactive estimate-and-plot workflow, start R from the repository and
 load the public R interface once:
