@@ -10,7 +10,8 @@ environment, a complete YAML-driven raw-to-regression-ready preparation
 runner, and a separate fixed-effects estimation runner that writes plot-ready
 numerical results. The estimator also returns the same tidy results as an R
 object for interactive analysis. An independent paper-style renderer recreates
-PNG figures from those results without rerunning a regression.
+figures from in-memory result tables or saved CSVs without rerunning a
+regression.
 
 ## Documentation
 
@@ -76,7 +77,30 @@ explanatory variable receives its own estimate, standard error, p-value, and
 The regression YAML contract and tidy result schema are documented in the
 [regression analysis guide](docs/components/regression_analysis.md#2-fixed-effects-estimation).
 
-Render a paper-style figure from saved numerical results with:
+For an interactive estimate-and-plot workflow, start R from the repository and
+load the public R interface once:
+
+```r
+source("R/regression/load.R")
+
+results <- estimate_regressions("path/to/regression.yaml")
+plot_config <- regression_plot_config(
+  outcome_variable = "pick_top",
+  term = "black",
+  period_variable = "year",
+  series_variable = "city"
+)
+figure <- plot_regression_results(results, plot_config)
+figure
+```
+
+The loader activates the repository's locked `renv` environment. In the plot
+configuration, `outcome_variable` selects the dependent variable and `term`
+selects the independent-variable coefficient shown on the y-axis. Result CSV
+paths can be passed in place of `results`, and compatible result objects from
+separate calls can be supplied as a list for explicitly labeled panels.
+
+Render a paper-style PNG from saved numerical results with:
 
 ```bash
 Rscript scripts/render_regression_plot.R --config path/to/render.yaml

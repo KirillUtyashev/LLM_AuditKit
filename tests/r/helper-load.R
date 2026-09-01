@@ -18,61 +18,7 @@ find_regression_project_root <- function(start = getwd()) {
 REGRESSION_PROJECT_ROOT <- find_regression_project_root()
 
 source(
-  file.path(REGRESSION_PROJECT_ROOT, "R", "regression", "preparation_config.R"),
-  local = TRUE
-)
-source(
-  file.path(REGRESSION_PROJECT_ROOT, "R", "regression", "experiment_results.R"),
-  local = TRUE
-)
-source(
-  file.path(REGRESSION_PROJECT_ROOT, "R", "regression", "preparation.R"),
-  local = TRUE
-)
-source(
-  file.path(
-    REGRESSION_PROJECT_ROOT,
-    "R",
-    "regression",
-    "preparation_runner.R"
-  ),
-  local = TRUE
-)
-source(
-  file.path(REGRESSION_PROJECT_ROOT, "R", "regression", "regression_config.R"),
-  local = TRUE
-)
-source(
-  file.path(REGRESSION_PROJECT_ROOT, "R", "regression", "regression_data.R"),
-  local = TRUE
-)
-source(
-  file.path(REGRESSION_PROJECT_ROOT, "R", "regression", "estimation.R"),
-  local = TRUE
-)
-source(
-  file.path(
-    REGRESSION_PROJECT_ROOT,
-    "R",
-    "regression",
-    "regression_runner.R"
-  ),
-  local = TRUE
-)
-source(
-  file.path(REGRESSION_PROJECT_ROOT, "R", "regression", "render_config.R"),
-  local = TRUE
-)
-source(
-  file.path(REGRESSION_PROJECT_ROOT, "R", "regression", "render_data.R"),
-  local = TRUE
-)
-source(
-  file.path(REGRESSION_PROJECT_ROOT, "R", "regression", "paper_plot.R"),
-  local = TRUE
-)
-source(
-  file.path(REGRESSION_PROJECT_ROOT, "R", "regression", "render_runner.R"),
+  file.path(REGRESSION_PROJECT_ROOT, "R", "regression", "load.R"),
   local = TRUE
 )
 

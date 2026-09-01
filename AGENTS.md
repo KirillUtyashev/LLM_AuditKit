@@ -11,7 +11,8 @@ the regression stage has a locked R environment plus a complete
 raw-to-regression-ready preparation runner and a separate fixed-effects
 estimation runner that returns plot-ready numerical results and can write them
 as CSV. The independent paper-style renderer reads those results and atomically
-writes a PNG.
+writes a PNG; the same plot builder also accepts tidy results in an interactive
+R session.
 
 - Do not assume documented components are already implemented.
 - Do not add functionality, dependencies, interfaces, or placeholder modules outside the scope of the current task.
@@ -44,7 +45,8 @@ When an architectural contract represented in a Mermaid diagram changes, update 
 - Template counts are configurable as `N`; do not hard-code four resumes or templates.
 - Resume and completion behavior must use stable scenario, persona, model-configuration, job, and candidate/resume identifiers. Never use a DataFrame row index or candidate position as durable identity.
 - Keep `save_after_each_result` stage-specific and configurable. Incremental file writes must use an atomic replacement strategy.
-- The Python-to-R boundary uses raw experiment CSVs. Separate YAML-configured `Rscript` entry points prepare a regression-ready CSV, estimate one inspected dataset into plot-ready numerical results, and render figures independently from those results. Within R, estimation returns the same tidy table that the CLI can persist as CSV.
+- The Python-to-R boundary uses raw experiment CSVs. Separate YAML-configured `Rscript` entry points prepare a regression-ready CSV, estimate one inspected dataset into plot-ready numerical results, and render figures independently from those results. Within R, estimation returns the same tidy table that the CLI can persist as CSV; plotting accepts that object, a list of compatible result tables, or equivalent result CSV paths.
+- Plot configuration must explicitly select both `outcome_variable` (the dependent variable) and `term` (the coefficient shown), unless a complete outcome-by-panel map replaces the scalar outcome. Estimation groups create separate fits; covariance clusters only control inference within each fit.
 
 ## Repository Layout
 
@@ -127,6 +129,7 @@ Rscript -e 'testthat::test_file("tests/r/test-regression-config.R", reporter = "
 Rscript -e 'testthat::test_file("tests/r/test-regression.R", reporter = "summary")'
 Rscript -e 'testthat::test_file("tests/r/test-render-config.R", reporter = "summary")'
 Rscript -e 'testthat::test_file("tests/r/test-render-data.R", reporter = "summary")'
+Rscript -e 'testthat::test_file("tests/r/test-plot-api.R", reporter = "summary")'
 Rscript -e 'testthat::test_file("tests/r/test-paper-plot.R", reporter = "summary")'
 Rscript -e 'testthat::test_file("tests/r/test-render-runner.R", reporter = "summary")'
 ```
@@ -148,6 +151,12 @@ Render saved results, or run the public synthetic example:
 ```bash
 Rscript scripts/render_regression_plot.R --config path/to/render.yaml
 Rscript scripts/render_regression_plot.R --config examples/regression/render_synthetic.yaml
+```
+
+Load the locked interactive R API from a clean R session:
+
+```r
+source("R/regression/load.R")
 ```
 
 Sync the optional paper reference implementation:

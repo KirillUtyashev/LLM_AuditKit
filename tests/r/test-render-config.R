@@ -8,6 +8,7 @@ source(
     "results_paths: [one.csv]",
     "output_path: output/figure.png",
     "term: black",
+    "outcome_variable: pick_threshold",
     "period_variable: period",
     "panel_variable: model_config_id"
   )
@@ -45,8 +46,9 @@ testthat::test_that("minimal render config exposes exact keys and defaults", {
   testthat::expect_identical(
     RENDER_CONFIG_KEYS,
     c(
-      "results_paths", "output_path", "term", "confidence_level",
-      "period_variable", "series_variable", "panel_variable", "outcome_by_panel",
+      "results_paths", "output_path", "term", "outcome_variable",
+      "confidence_level", "period_variable", "series_variable", "panel_variable",
+      "outcome_by_panel",
       "period_order", "series_order", "panel_order", "panel_labels", "x_label",
       "y_label", "y_limits", "y_break_interval", "significance_level",
       "panel_columns", "width", "height", "dpi"
@@ -60,6 +62,7 @@ testthat::test_that("minimal render config exposes exact keys and defaults", {
   testthat::expect_identical(config$results_paths, "one.csv")
   testthat::expect_identical(config$output_path, "output/figure.png")
   testthat::expect_identical(config$term, "black")
+  testthat::expect_identical(config$outcome_variable, "pick_threshold")
   testthat::expect_identical(config$confidence_level, 0.95)
   testthat::expect_identical(config$period_variable, "period")
   testthat::expect_identical(config$panel_variable, "model_config_id")
@@ -90,11 +93,15 @@ testthat::test_that("minimal render config exposes exact keys and defaults", {
   testthat::expect_false(dir.exists(dirname(config$resolved_output_path)))
   testthat::expect_identical(.render_as_config(config), config)
   testthat::expect_identical(.render_as_config(path), config)
+  testthat::expect_identical(.regression_plot_as_config(config), config)
+  testthat::expect_true(inherits(config, "regression_plot_config"))
 })
 
 testthat::test_that("explicit render settings preserve orders and named maps", {
+  lines <- .render_config_test_replace("results_paths", "[two.csv, ./one.csv]")
+  lines <- lines[!startsWith(lines, "outcome_variable:")]
   path <- .write_render_config_test(c(
-    .render_config_test_replace("results_paths", "[two.csv, ./one.csv]"),
+    lines,
     "confidence_level: 0.99",
     "series_variable: city",
     "outcome_by_panel: {model-b: pick_threshold, model-a: pick_top}",
@@ -120,6 +127,7 @@ testthat::test_that("explicit render settings preserve orders and named maps", {
   testthat::expect_identical(
     config$outcome_by_panel, c("model-b" = "pick_threshold", "model-a" = "pick_top")
   )
+  testthat::expect_null(config$outcome_variable)
   testthat::expect_identical(config$panel_labels, c("model-b" = "Panel A: Model B"))
   testthat::expect_identical(config$confidence_level, 0.99)
   testthat::expect_identical(config$y_limits, c(-0.6, 0.2))
@@ -165,13 +173,19 @@ testthat::test_that("render config rejects missing fields and malformed YAML", {
       .render_config_test_lines(), "typo: true"))),
     "unknown field.*typo"
   )
-  for (field in c("results_paths", "output_path", "term", "period_variable", "panel_variable")) {
+  for (field in c("results_paths", "output_path", "term", "period_variable")) {
     lines <- .render_config_test_lines()
     testthat::expect_error(
       load_render_config(.write_render_config_test(lines[!startsWith(lines, paste0(field, ":"))])),
       paste0("missing required field.*", field)
     )
   }
+  without_outcome <- .render_config_test_lines()
+  without_outcome <- without_outcome[!startsWith(without_outcome, "outcome_variable:")]
+  testthat::expect_error(
+    load_render_config(.write_render_config_test(without_outcome)),
+    "exactly one.*outcome_variable.*outcome_by_panel"
+  )
   testthat::expect_error(
     load_render_config(.write_render_config_test("results_paths: [")),
     "YAML could not be parsed"
@@ -184,13 +198,32 @@ testthat::test_that("render config rejects missing fields and malformed YAML", {
 })
 
 testthat::test_that("render strings, literal columns and dimensions are strict", {
-  for (field in c("output_path", "term", "period_variable", "panel_variable", "x_label", "y_label")) {
+  for (field in c("output_path", "term", "period_variable", "x_label", "y_label")) {
     for (invalid in c("null", "''", "' '", "123", "true", "[black]", "{}")) {
       testthat::expect_error(
         load_render_config(.write_render_config_test(.render_config_test_replace(field, invalid))),
         paste0(field, ".*one nonempty string")
       )
     }
+  }
+  for (invalid in c("''", "' '", "123", "true", "[black]", "{}")) {
+    testthat::expect_error(
+      load_render_config(.write_render_config_test(
+        .render_config_test_replace("outcome_variable", invalid)
+      )),
+      "outcome_variable.*one nonempty string"
+    )
+  }
+  for (field in c("panel_variable", "series_variable")) {
+    for (invalid in c("''", "' '", "123", "true", "[city]", "{}")) {
+      testthat::expect_error(
+        load_render_config(.write_render_config_test(.render_config_test_replace(field, invalid))),
+        paste0(field, ".*one nonempty string")
+      )
+    }
+    testthat::expect_no_error(
+      load_render_config(.write_render_config_test(.render_config_test_replace(field, "null")))
+    )
   }
   for (field in c("period_variable", "panel_variable", "series_variable")) {
     for (invalid in c("'year + city'", "if", "'bad-name'", "'a.b'", "'1year'")) {
@@ -210,6 +243,139 @@ testthat::test_that("render strings, literal columns and dimensions are strict",
   testthat::expect_error(
     load_render_config(.write_render_config_test(.render_config_test_replace("series_order", "[Toronto]"))),
     "series_order.*must be.*series_variable.*null"
+  )
+})
+
+testthat::test_that("render outcome selection and optional panels are coherent", {
+  scalar_without_panel <- .render_config_test_replace("panel_variable", "null")
+  config <- load_render_config(.write_render_config_test(scalar_without_panel))
+  testthat::expect_null(config$panel_variable)
+  testthat::expect_identical(config$outcome_variable, "pick_threshold")
+
+  omitted_panel <- .render_config_test_lines()
+  omitted_panel <- omitted_panel[!startsWith(omitted_panel, "panel_variable:")]
+  omitted_config <- load_render_config(.write_render_config_test(omitted_panel))
+  testthat::expect_null(omitted_config$panel_variable)
+
+  testthat::expect_error(
+    load_render_config(.write_render_config_test(c(
+      .render_config_test_lines(),
+      "outcome_by_panel: {model_config_id: pick_top}"
+    ))),
+    "exactly one.*outcome_variable.*outcome_by_panel"
+  )
+
+  map_without_panel <- .render_config_test_replace("panel_variable", "null")
+  map_without_panel <- map_without_panel[
+    !startsWith(map_without_panel, "outcome_variable:")
+  ]
+  testthat::expect_error(
+    load_render_config(.write_render_config_test(c(
+      map_without_panel,
+      "outcome_by_panel: {model_config_id: pick_top}"
+    ))),
+    "outcome_by_panel.*requires.*panel_variable"
+  )
+
+  for (line in c(
+    "panel_order: [model_config_id]",
+    "panel_labels: {model_config_id: 'Panel A'}"
+  )) {
+    testthat::expect_error(
+      load_render_config(.write_render_config_test(c(scalar_without_panel, line))),
+      "must be empty.*panel_variable.*null"
+    )
+  }
+})
+
+testthat::test_that("R-native plot config validates the in-memory contract", {
+  config <- regression_plot_config(
+    term = "black",
+    outcome_variable = "pick_threshold",
+    period_variable = "year",
+    series_variable = "city",
+    panel_variable = "model_config_id",
+    period_order = c(2020, 1970),
+    series_order = c("Toronto", "Montreal"),
+    panel_order = c("baseline", "controls"),
+    panel_labels = c(baseline = "Panel A", controls = "Panel B"),
+    x_label = "Year",
+    y_label = "Black coefficient"
+  )
+  testthat::expect_s3_class(config, "regression_plot_config")
+  testthat::expect_identical(names(config), REGRESSION_PLOT_CONFIG_KEYS)
+  testthat::expect_identical(config$outcome_variable, "pick_threshold")
+  testthat::expect_identical(config$period_order, c("2020", "1970"))
+  testthat::expect_identical(.regression_plot_as_config(config), config)
+
+  mapped <- regression_plot_config(
+    term = "black",
+    period_variable = "year",
+    panel_variable = "model_config_id",
+    outcome_by_panel = c(baseline = "pick_top", controls = "pick_threshold")
+  )
+  testthat::expect_null(mapped$outcome_variable)
+  testthat::expect_identical(
+    mapped$outcome_by_panel,
+    c(baseline = "pick_top", controls = "pick_threshold")
+  )
+
+  testthat::expect_error(
+    regression_plot_config(term = "black", period_variable = "year"),
+    "exactly one.*outcome_variable.*outcome_by_panel"
+  )
+  testthat::expect_error(
+    regression_plot_config(
+      term = "black", period_variable = "year",
+      outcome_variable = "pick_top",
+      outcome_by_panel = c(baseline = "pick_threshold")
+    ),
+    "exactly one.*outcome_variable.*outcome_by_panel"
+  )
+  testthat::expect_error(
+    regression_plot_config(
+      term = "black", period_variable = "year",
+      outcome_by_panel = c(baseline = "pick_threshold")
+    ),
+    "outcome_by_panel.*requires.*panel_variable"
+  )
+  testthat::expect_error(
+    regression_plot_config(
+      term = "black", outcome_variable = "pick_top", period_variable = "year",
+      panel_order = "baseline"
+    ),
+    "must be empty.*panel_variable.*null"
+  )
+  testthat::expect_error(
+    regression_plot_config(
+      term = "black", outcome_variable = "pick_top", period_variable = "year",
+      outcome_by_panel = list(baseline = "pick_threshold")
+    ),
+    "outcome_by_panel.*named character vector"
+  )
+  testthat::expect_error(
+    regression_plot_config(
+      term = "black", outcome_variable = "pick_top", period_variable = "year",
+      period_order = list(2020, 1970)
+    ),
+    "period_order.*atomic"
+  )
+  testthat::expect_error(
+    regression_plot_config(
+      term = "black", outcome_variable = "bad-name", period_variable = "year"
+    ),
+    "outcome_variable.*invalid column name"
+  )
+  testthat::expect_error(
+    regression_plot_config(
+      term = "black", period_variable = "year", panel_variable = "panel",
+      outcome_by_panel = c(baseline = "bad-name")
+    ),
+    "outcome_by_panel.*invalid column name"
+  )
+  testthat::expect_error(
+    .regression_plot_as_config(list()),
+    "regression_plot_config.*render_config.*YAML"
   )
 })
 

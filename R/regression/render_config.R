@@ -1,17 +1,26 @@
-RENDER_CONFIG_KEYS <- c(
-  "results_paths", "output_path", "term", "confidence_level",
-  "period_variable", "series_variable", "panel_variable", "outcome_by_panel",
+REGRESSION_PLOT_CONFIG_KEYS <- c(
+  "term", "outcome_variable", "confidence_level", "period_variable",
+  "series_variable", "panel_variable", "outcome_by_panel",
   "period_order", "series_order", "panel_order", "panel_labels", "x_label",
   "y_label", "y_limits", "y_break_interval", "significance_level",
-  "panel_columns", "width", "height", "dpi"
+  "panel_columns"
+)
+
+RENDER_CONFIG_KEYS <- c(
+  "results_paths", "output_path", REGRESSION_PLOT_CONFIG_KEYS,
+  "width", "height", "dpi"
 )
 
 .render_config_abort <- function(config_path, format, ...) {
+  detail <- sprintf(format, ...)
+  if (is.null(config_path)) {
+    stop(sprintf("Invalid regression plot config: %s", detail), call. = FALSE)
+  }
   stop(
     sprintf(
       "Invalid render config '%s': %s",
       config_path,
-      sprintf(format, ...)
+      detail
     ),
     call. = FALSE
   )
@@ -148,6 +157,243 @@ RENDER_CONFIG_KEYS <- c(
   value
 }
 
+.render_config_direct_sequence <- function(value, field, config_path) {
+  if (
+    !(is.character(value) || is.numeric(value) || is.logical(value)) ||
+      is.object(value)
+  ) {
+    .render_config_abort(
+      config_path,
+      "'%s' must be an atomic character, numeric, or logical vector.",
+      field
+    )
+  }
+  values <- vapply(as.list(value), function(element) {
+    valid <- length(element) == 1L && !is.na(element)
+    if (valid && is.character(element)) {
+      valid <- nzchar(trimws(element))
+    }
+    if (valid && is.numeric(element)) {
+      valid <- is.finite(element)
+    }
+    if (!valid) {
+      .render_config_abort(
+        config_path,
+        "'%s' must contain only nonempty strings, finite numbers, or logical values.",
+        field
+      )
+    }
+    as.character(element)
+  }, character(1), USE.NAMES = FALSE)
+  duplicate <- duplicated(values)
+  if (any(duplicate)) {
+    .render_config_abort(
+      config_path,
+      "'%s' contains duplicate value '%s'.",
+      field,
+      values[which(duplicate)[1L]]
+    )
+  }
+  values
+}
+
+.render_config_direct_map <- function(value, field, config_path) {
+  if (!is.character(value) || is.object(value)) {
+    .render_config_abort(
+      config_path, "'%s' must be a named character vector.", field
+    )
+  }
+  if (length(value) == 0L) {
+    return(character())
+  }
+  keys <- names(value)
+  if (
+    is.null(keys) || anyNA(keys) || any(!nzchar(trimws(keys))) ||
+      anyNA(value) || any(!nzchar(trimws(value)))
+  ) {
+    .render_config_abort(
+      config_path,
+      "'%s' must be a named character vector with nonempty names and values.",
+      field
+    )
+  }
+  if (anyDuplicated(keys)) {
+    .render_config_abort(config_path, "'%s' has duplicate mapping keys.", field)
+  }
+  value
+}
+
+.validate_regression_plot_config <- function(raw, config_path = NULL, yaml = FALSE) {
+  sequence_value <- function(field) {
+    if (yaml) {
+      .render_config_sequence(raw[[field]], field, config_path)
+    } else {
+      .render_config_direct_sequence(raw[[field]], field, config_path)
+    }
+  }
+  map_value <- function(field) {
+    if (yaml) {
+      .render_config_map(raw[[field]], field, config_path)
+    } else {
+      .render_config_direct_map(raw[[field]], field, config_path)
+    }
+  }
+
+  config <- list()
+  config$term <- .render_config_string(raw$term, "term", config_path)
+  config["outcome_variable"] <- list(if (is.null(raw$outcome_variable)) {
+    NULL
+  } else {
+    .render_config_column(raw$outcome_variable, "outcome_variable", config_path)
+  })
+  config$confidence_level <- .render_config_number(
+    raw$confidence_level, "confidence_level", config_path
+  )
+  if (!config$confidence_level %in% c(0.90, 0.95, 0.99)) {
+    .render_config_abort(
+      config_path, "'confidence_level' must be one of 0.90, 0.95, or 0.99."
+    )
+  }
+  config$period_variable <- .render_config_column(
+    raw$period_variable, "period_variable", config_path
+  )
+  for (field in c("series_variable", "panel_variable")) {
+    config[field] <- list(if (is.null(raw[[field]])) {
+      NULL
+    } else {
+      .render_config_column(raw[[field]], field, config_path)
+    })
+  }
+  dimensions <- unlist(
+    config[c("period_variable", "series_variable", "panel_variable")],
+    use.names = FALSE
+  )
+  if (anyDuplicated(dimensions)) {
+    .render_config_abort(
+      config_path,
+      "'period_variable' and non-null 'series_variable' and 'panel_variable' must be distinct."
+    )
+  }
+
+  config$outcome_by_panel <- map_value("outcome_by_panel")
+  if (length(config$outcome_by_panel) > 0L) {
+    config$outcome_by_panel[] <- vapply(
+      config$outcome_by_panel,
+      .render_config_column,
+      character(1),
+      field = "outcome_by_panel",
+      config_path = config_path,
+      USE.NAMES = FALSE
+    )
+  }
+  has_outcome <- !is.null(config$outcome_variable)
+  has_outcome_map <- length(config$outcome_by_panel) > 0L
+  if (identical(has_outcome, has_outcome_map)) {
+    .render_config_abort(
+      config_path,
+      "exactly one of non-null 'outcome_variable' or nonempty 'outcome_by_panel' must be supplied."
+    )
+  }
+  if (has_outcome_map && is.null(config$panel_variable)) {
+    .render_config_abort(
+      config_path,
+      "'outcome_by_panel' requires a non-null 'panel_variable'."
+    )
+  }
+
+  for (field in c("period_order", "series_order", "panel_order")) {
+    config[[field]] <- sequence_value(field)
+  }
+  config$panel_labels <- map_value("panel_labels")
+  if (is.null(config$series_variable) && length(config$series_order) > 0L) {
+    .render_config_abort(
+      config_path, "'series_order' must be empty when 'series_variable' is null."
+    )
+  }
+  if (
+    is.null(config$panel_variable) &&
+      (length(config$panel_order) > 0L || length(config$panel_labels) > 0L)
+  ) {
+    .render_config_abort(
+      config_path,
+      "'panel_order' and 'panel_labels' must be empty when 'panel_variable' is null."
+    )
+  }
+
+  for (field in c("x_label", "y_label")) {
+    config[[field]] <- .render_config_string(raw[[field]], field, config_path)
+  }
+  valid_limits <- if (yaml) {
+    inherits(raw$y_limits, "render_yaml_sequence")
+  } else {
+    is.numeric(raw$y_limits) && !is.object(raw$y_limits)
+  }
+  if (!valid_limits || length(raw$y_limits) != 2L) {
+    qualifier <- if (yaml) "a YAML list" else "a numeric vector"
+    .render_config_abort(
+      config_path,
+      "'y_limits' must be %s of two finite increasing bounds.",
+      qualifier
+    )
+  }
+  config$y_limits <- vapply(raw$y_limits, function(value) {
+    .render_config_number(value, "y_limits", config_path)
+  }, numeric(1), USE.NAMES = FALSE)
+  if (config$y_limits[1L] >= config$y_limits[2L]) {
+    .render_config_abort(config_path, "'y_limits' must have increasing bounds.")
+  }
+  config$y_break_interval <- .render_config_positive_number(
+    raw$y_break_interval, "y_break_interval", config_path
+  )
+  config$significance_level <- .render_config_number(
+    raw$significance_level, "significance_level", config_path
+  )
+  if (config$significance_level < 0 || config$significance_level > 1) {
+    .render_config_abort(config_path, "'significance_level' must be in [0, 1].")
+  }
+  config$panel_columns <- .render_config_positive_integer(
+    raw$panel_columns, "panel_columns", config_path
+  )
+  break_ratio <- (config$y_limits[2L] - config$y_limits[1L]) /
+    config$y_break_interval
+  if (!is.finite(break_ratio) || floor(break_ratio) + 1 > 10000) {
+    .render_config_abort(
+      config_path,
+      "'y_limits' and 'y_break_interval' must imply at most 10,000 y-axis breaks; increase the spacing or narrow the limits."
+    )
+  }
+
+  structure(
+    config[REGRESSION_PLOT_CONFIG_KEYS],
+    class = c("regression_plot_config", "list")
+  )
+}
+
+regression_plot_config <- function(
+  term,
+  period_variable,
+  outcome_variable = NULL,
+  confidence_level = 0.95,
+  series_variable = NULL,
+  panel_variable = NULL,
+  outcome_by_panel = character(),
+  period_order = character(),
+  series_order = character(),
+  panel_order = character(),
+  panel_labels = character(),
+  x_label = "Period",
+  y_label = "Coefficient estimate",
+  y_limits = c(-0.3, 0.3),
+  y_break_interval = 0.1,
+  significance_level = 0.05,
+  panel_columns = 2L
+) {
+  .validate_regression_plot_config(
+    mget(REGRESSION_PLOT_CONFIG_KEYS, envir = environment(), inherits = FALSE),
+    yaml = FALSE
+  )
+}
+
 load_render_config <- function(config_path) {
   if (
     !is.character(config_path) || length(config_path) != 1L ||
@@ -200,9 +446,7 @@ load_render_config <- function(config_path) {
       config_path, "unknown field(s): %s", paste(unknown, collapse = ", ")
     )
   }
-  required <- c(
-    "results_paths", "output_path", "term", "period_variable", "panel_variable"
-  )
+  required <- c("results_paths", "output_path", "term", "period_variable")
   missing <- setdiff(required, names(raw))
   if (length(missing) > 0L) {
     .render_config_abort(
@@ -210,8 +454,10 @@ load_render_config <- function(config_path) {
     )
   }
   defaults <- list(
+    outcome_variable = NULL,
     confidence_level = 0.95,
     series_variable = NULL,
+    panel_variable = NULL,
     outcome_by_panel = .render_config_yaml_mapping(list()),
     period_order = .render_config_yaml_sequence(list()),
     series_order = .render_config_yaml_sequence(list()),
@@ -231,82 +477,22 @@ load_render_config <- function(config_path) {
     raw[field] <- defaults[field]
   }
 
-  config <- list()
-  config$results_paths <- .render_config_sequence(
+  results_paths <- .render_config_sequence(
     raw$results_paths, "results_paths", config_path,
     strings_only = TRUE, allow_empty = FALSE
   )
-  for (field in c("output_path", "term", "x_label", "y_label")) {
-    config[[field]] <- .render_config_string(raw[[field]], field, config_path)
-  }
-  for (field in c("period_variable", "panel_variable")) {
-    config[[field]] <- .render_config_column(raw[[field]], field, config_path)
-  }
-  config["series_variable"] <- list(if (is.null(raw$series_variable)) {
-    NULL
-  } else {
-    .render_config_column(raw$series_variable, "series_variable", config_path)
-  })
-  dimensions <- unlist(config[c(
-    "period_variable", "panel_variable", "series_variable"
-  )], use.names = FALSE)
-  if (anyDuplicated(dimensions)) {
-    .render_config_abort(
-      config_path,
-      "'period_variable', 'panel_variable', and non-null 'series_variable' must be distinct."
-    )
-  }
-  for (field in c("period_order", "series_order", "panel_order")) {
-    config[[field]] <- .render_config_sequence(raw[[field]], field, config_path)
-  }
-  if (is.null(config$series_variable) && length(config$series_order) > 0L) {
-    .render_config_abort(
-      config_path, "'series_order' must be [] when 'series_variable' is null."
-    )
-  }
-  for (field in c("outcome_by_panel", "panel_labels")) {
-    config[[field]] <- .render_config_map(raw[[field]], field, config_path)
-  }
-
-  config$confidence_level <- .render_config_number(
-    raw$confidence_level, "confidence_level", config_path
+  output_path <- .render_config_string(raw$output_path, "output_path", config_path)
+  plot_config <- .validate_regression_plot_config(
+    raw[REGRESSION_PLOT_CONFIG_KEYS], config_path = config_path, yaml = TRUE
   )
-  if (!config$confidence_level %in% c(0.90, 0.95, 0.99)) {
-    .render_config_abort(
-      config_path, "'confidence_level' must be one of 0.90, 0.95, or 0.99."
-    )
-  }
-  if (!inherits(raw$y_limits, "render_yaml_sequence") || length(raw$y_limits) != 2L) {
-    .render_config_abort(
-      config_path, "'y_limits' must be a YAML list of two finite increasing bounds."
-    )
-  }
-  config$y_limits <- vapply(raw$y_limits, function(value) {
-    .render_config_number(value, "y_limits", config_path)
-  }, numeric(1), USE.NAMES = FALSE)
-  if (config$y_limits[1L] >= config$y_limits[2L]) {
-    .render_config_abort(config_path, "'y_limits' must have increasing bounds.")
-  }
-  for (field in c("y_break_interval", "width", "height")) {
-    config[[field]] <- .render_config_positive_number(raw[[field]], field, config_path)
-  }
-  config$significance_level <- .render_config_number(
-    raw$significance_level, "significance_level", config_path
+  width <- .render_config_positive_number(raw$width, "width", config_path)
+  height <- .render_config_positive_number(raw$height, "height", config_path)
+  dpi <- .render_config_positive_integer(raw$dpi, "dpi", config_path)
+  config <- c(
+    list(results_paths = results_paths, output_path = output_path),
+    unclass(plot_config),
+    list(width = width, height = height, dpi = dpi)
   )
-  if (config$significance_level < 0 || config$significance_level > 1) {
-    .render_config_abort(config_path, "'significance_level' must be in [0, 1].")
-  }
-  for (field in c("panel_columns", "dpi")) {
-    config[[field]] <- .render_config_positive_integer(raw[[field]], field, config_path)
-  }
-  break_ratio <- (config$y_limits[2L] - config$y_limits[1L]) /
-    config$y_break_interval
-  if (!is.finite(break_ratio) || floor(break_ratio) + 1 > 10000) {
-    .render_config_abort(
-      config_path,
-      "'y_limits' and 'y_break_interval' must imply at most 10,000 y-axis breaks; increase the spacing or narrow the limits."
-    )
-  }
   for (field in c("width", "height")) {
     pixels <- config[[field]] * config$dpi
     if (!is.finite(pixels) || pixels < 1 || pixels > .Machine$integer.max) {
@@ -376,8 +562,21 @@ load_render_config <- function(config_path) {
         resolved_output_path = resolved_output_path
       )
     ),
-    class = c("render_config", "list")
+    class = c("render_config", "regression_plot_config", "list")
   )
+}
+
+.regression_plot_as_config <- function(config) {
+  if (is.character(config) && length(config) == 1L && !is.na(config)) {
+    config <- load_render_config(config)
+  }
+  if (!inherits(config, "regression_plot_config")) {
+    stop(
+      "'config' must be a regression_plot_config, render_config, or one YAML config path.",
+      call. = FALSE
+    )
+  }
+  config
 }
 
 .render_as_config <- function(config) {

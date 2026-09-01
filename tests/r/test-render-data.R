@@ -24,8 +24,11 @@
   }
   values <- c(
     output_path = "figure.png", term = "black", period_variable = "period",
-    panel_variable = "model_config_id"
+    panel_variable = "model_config_id", outcome_variable = "pick_top"
   )
+  if ("outcome_by_panel" %in% names(settings)) {
+    values <- values[names(values) != "outcome_variable"]
+  }
   values[names(settings)] <- settings
   path <- file.path(directory, "render.yaml")
   writeLines(c(
@@ -92,8 +95,11 @@ testthat::test_that("plot preparation uses the exact selected numerical results"
 
 testthat::test_that("mixed panel outcomes must be selected explicitly and completely", {
   data <- .render_data_test_fixture(mixed_outcomes = TRUE)
-  testthat::expect_error(prepare_regression_plot_data(.render_data_test_config(data)),
-    "multiple outcomes.*outcome_by_panel")
+  scalar <- prepare_regression_plot_data(.render_data_test_config(data))
+  testthat::expect_identical(scalar$data$outcome_variable, rep("pick_top", 6L))
+  testthat::expect_identical(scalar$panel_order, "model_a")
+  testthat::expect_error(prepare_regression_plot_data(.render_data_test_config(
+    data, c(outcome_variable = "missing"))), "no rows match outcome_variable 'missing'")
   mapping <- "{model_a: pick_top, model_b: pick_threshold, model_c: pick_threshold, model_d: pick_threshold}"
   prepared <- prepare_regression_plot_data(.render_data_test_config(
     data, c(outcome_by_panel = mapping)
@@ -210,43 +216,89 @@ testthat::test_that("plot keys are tuple-safe and independent of model identifie
     .render_data_test_config(tricky))$data), 2L)
 })
 
-testthat::test_that("incompatible selected specifications fail with the differing field", {
+testthat::test_that("specifications may differ across panels but not within one panel", {
   data <- .render_data_test_fixture()
-  changes <- list(
-    dataset_id = "other_dataset", term = "other_term", explanatory_variables = "black|high",
-    control_variables = "other_control", fixed_effects = "other_fe",
-    estimator = "other_estimator", estimator_version = "2.0",
-    inference_contract_id = "other_contract", preparation_top_share = .2,
-    preparation_probability_threshold = .9,
+  global_changes <- list(
+    dataset_id = "other_dataset", estimator = "other_estimator",
+    estimator_version = "2.0", inference_contract_id = "other_contract",
+    preparation_top_share = .2, preparation_probability_threshold = .9,
     preparation_ranking_group_variables = "city",
     preparation_scenario_covariates = "period",
     preparation_candidate_covariates = "black"
   )
-  # term is selected before compatibility checks, so unused terms may coexist.
-  for (field in setdiff(names(changes), "term")) {
+  model_b <- data$model_config_id == "model_b"
+  for (field in names(global_changes)) {
     changed <- data
-    changed[changed$model_config_id == "model_b", field] <- changes[[field]]
-    testthat::expect_error(prepare_regression_plot_data(.render_data_test_config(changed)),
-      paste0("incompatible '", field, "'"))
+    changed[model_b, field] <- global_changes[[field]]
+    testthat::expect_error(
+      prepare_regression_plot_data(.render_data_test_config(changed)),
+      paste0("incompatible '", field, "'.*across selected results")
+    )
   }
+
+  panel_changes <- list(
+    explanatory_variables = "black|high", control_variables = "other_control",
+    fixed_effects = "other_fe"
+  )
+  for (field in names(panel_changes)) {
+    changed <- data
+    changed[model_b & changed$period == 1970, field] <- panel_changes[[field]]
+    testthat::expect_error(
+      prepare_regression_plot_data(.render_data_test_config(changed)),
+      paste0("incompatible '", field, "'.*within panel 'model_b'")
+    )
+  }
+
+  separate_specification <- data
+  separate_specification$model_id[model_b] <- "other_model"
+  separate_specification$explanatory_variables[model_b] <- "black|high"
+  separate_specification$control_variables[model_b] <- "other_control"
+  separate_specification$fixed_effects[model_b] <- "other_fe"
+  testthat::expect_identical(
+    nrow(prepare_regression_plot_data(
+      .render_data_test_config(separate_specification)
+    )$data),
+    24L
+  )
+
+  grouped <- data
+  grouped$city <- "Toronto"
+  grouped$estimation_group_variables[model_b] <-
+    "model_config_id|period|city"
+  testthat::expect_error(
+    prepare_regression_plot_data(.render_data_test_config(grouped)),
+    "incompatible 'estimation_group_variables'.*across selected results"
+  )
+
+  clustered <- data
+  clustered$vcov_type[model_b] <- "cluster"
+  clustered$cluster_variables[model_b] <- "position_fe"
+  clustered$cluster_counts[model_b] <- "position_fe=20"
+  testthat::expect_identical(
+    nrow(prepare_regression_plot_data(.render_data_test_config(clustered))$data),
+    24L
+  )
+  clustered[
+    model_b & clustered$period == 1970,
+    "cluster_variables"
+  ] <- "year"
+  clustered[
+    model_b & clustered$period == 1970,
+    "cluster_counts"
+  ] <- "year=6"
+  testthat::expect_error(
+    prepare_regression_plot_data(.render_data_test_config(clustered)),
+    "incompatible 'cluster_variables'.*within panel 'model_b'"
+  )
+})
+
+testthat::test_that("unselected terms may carry unrelated specifications", {
+  data <- .render_data_test_fixture()
   unused <- data
   unused$term <- "other_term"
   unused$estimator_version <- "unrelated_version"
   actual <- prepare_regression_plot_data(.render_data_test_config(rbind(data, unused)))
   testthat::expect_identical(nrow(actual$data), 24L)
-
-  grouped <- data
-  grouped$city <- "Toronto"
-  rows <- grouped$model_config_id == "model_b"
-  grouped$estimation_group_variables[rows] <- "model_config_id|period|city"
-  testthat::expect_error(prepare_regression_plot_data(.render_data_test_config(grouped)),
-    "incompatible 'estimation_group_variables'")
-  clustered <- data
-  clustered$vcov_type[rows] <- "cluster"
-  clustered$cluster_variables[rows] <- "position_fe"
-  clustered$cluster_counts[rows] <- "position_fe=20"
-  testthat::expect_error(prepare_regression_plot_data(.render_data_test_config(clustered)),
-    "incompatible 'cluster_variables'")
 })
 
 testthat::test_that("saved interval rows cannot disagree on their shared statistics", {
@@ -403,8 +455,8 @@ testthat::test_that("the estimator's saved CSV feeds rendering without schema ad
   writeLines(c(
     paste0("data_path: ", yaml_quote(regression_fixture("regression_ready_known.csv"))),
     "dataset_id: known_fixture", "model_id: clustered_example",
-    "outcome_variable: pick_top", "explanatory_variables: [black]",
-    "control_variables: [high]", "fixed_effects: [position_fe]",
+    "outcome_variable: pick_top", "explanatory_variables: [black, high]",
+    "control_variables: []", "fixed_effects: [position_fe]",
     "cluster_variables: [position_fe]", "estimation_group_variables: [period]",
     "output_directory: saved"
   ), regression_path)
@@ -413,15 +465,77 @@ testthat::test_that("the estimator's saved CSV feeds rendering without schema ad
   writeLines(c(
     "results_paths: [saved/regression_results.csv]", "output_path: figure.png",
     "term: black", "confidence_level: .99", "period_variable: period",
-    "panel_variable: outcome_variable"
+    "panel_variable: outcome_variable", "outcome_variable: pick_top"
   ), render_path)
   prepared <- prepare_regression_plot_data(render_path)
+  in_memory <- prepare_regression_plot_data(
+    results,
+    regression_plot_config(
+      term = "black",
+      outcome_variable = "pick_top",
+      confidence_level = .99,
+      period_variable = "period",
+      panel_variable = "outcome_variable"
+    )
+  )
   expected <- results[results$term == "black" & results$confidence_level == .99, ]
   testthat::expect_identical(nrow(prepared$data), 2L)
+  testthat::expect_identical(in_memory$data, prepared$data)
   testthat::expect_identical(prepared$panel_order, "pick_top")
   testthat::expect_identical(prepared$data$estimator, rep("fixest::feols", 2))
   testthat::expect_identical(prepared$data$cluster_counts, rep("position_fe=4", 2))
   for (field in c("estimate", "std_error", "p_value", "conf_low", "conf_high")) {
     testthat::expect_equal(prepared$data[[field]], expected[[field]], tolerance = 1e-14)
   }
+
+  high <- prepare_regression_plot_data(
+    results,
+    regression_plot_config(
+      term = "high",
+      outcome_variable = "pick_top",
+      confidence_level = .99,
+      period_variable = "period",
+      panel_variable = "outcome_variable"
+    )
+  )
+  expected_high <- results[
+    results$term == "high" & results$confidence_level == .99,
+  ]
+  testthat::expect_identical(nrow(high$data), 2L)
+  testthat::expect_identical(unique(high$data$term), "high")
+  for (field in c("estimate", "std_error", "p_value", "conf_low", "conf_high")) {
+    testthat::expect_equal(
+      high$data[[field]], expected_high[[field]], tolerance = 1e-14
+    )
+  }
+
+  baseline_path <- file.path(directory, "baseline.yaml")
+  writeLines(c(
+    paste0("data_path: ", yaml_quote(regression_fixture("regression_ready_known.csv"))),
+    "dataset_id: known_fixture", "model_id: baseline_example",
+    "outcome_variable: pick_top", "explanatory_variables: [black]",
+    "control_variables: []", "fixed_effects: [position_fe]",
+    "cluster_variables: [position_fe]", "estimation_group_variables: [period]",
+    "output_directory: baseline_saved"
+  ), baseline_path)
+  baseline <- estimate_regressions(baseline_path)
+  separate_panels <- prepare_regression_plot_data(
+    list(baseline, results),
+    regression_plot_config(
+      term = "black",
+      outcome_variable = "pick_top",
+      period_variable = "period",
+      panel_variable = "model_id",
+      panel_order = c("baseline_example", "clustered_example")
+    )
+  )
+  testthat::expect_identical(
+    separate_panels$panel_order,
+    c("baseline_example", "clustered_example")
+  )
+  testthat::expect_identical(nrow(separate_panels$data), 4L)
+  testthat::expect_identical(
+    unique(separate_panels$data$explanatory_variables),
+    c("black", "black|high")
+  )
 })

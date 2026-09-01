@@ -26,15 +26,14 @@ classDiagram
         +estimation_group_variables: List~str~ = []
         +output_directory: Path
     }
-    class RenderConfig {
-        <<YAML>>
-        +results_paths: List~Path~
-        +output_path: Path
+    class RegressionPlotConfig {
+        <<R object>>
         +term: str
+        +outcome_variable: Optional~str~
         +confidence_level: float
         +period_variable: str
         +series_variable: Optional~str~
-        +panel_variable: str
+        +panel_variable: Optional~str~
         +outcome_by_panel: Map
         +period_order: List
         +series_order: List
@@ -46,6 +45,11 @@ classDiagram
         +y_break_interval: float
         +significance_level: float
         +panel_columns: int
+    }
+    class RenderConfig {
+        <<YAML / R object>>
+        +results_paths: List~Path~
+        +output_path: Path
         +width: float
         +height: float
         +dpi: int
@@ -62,6 +66,11 @@ classDiagram
         <<Rscript>>
         +run(config_path: Path) void
     }
+    class InteractiveLoader {
+        <<R source>>
+        +activate_locked_environment() void
+        +load_regression_api() void
+    }
     class RegressionDataPreparation {
         <<R>>
         +prepare(config: PreparationConfig) RegressionReadyData
@@ -74,6 +83,7 @@ classDiagram
     class PaperStyleRenderer {
         <<R>>
         +renderer_packages: ggplot2_patchwork
+        +plot(results: RegressionResults, config: RegressionPlotConfig) PaperPlot
         +render(config: RenderConfig) PaperPlot
     }
     class RawExperimentResults {
@@ -96,6 +106,7 @@ classDiagram
         +estimator: fixest_feols
         +inference_contract_id: str
         +outcome_variable: str
+        +term: str
         +estimate: float
         +std_error: float
         +n_input: int
@@ -109,7 +120,7 @@ classDiagram
         +preparation_provenance: repeated
     }
     class PaperPlot {
-        <<PNG>>
+        <<patchwork / PNG>>
     }
 
     PreparationCLI --> PreparationConfig : loads
@@ -122,7 +133,11 @@ classDiagram
     FixedEffectsEstimator --> RegressionReadyData : reads exactly one
     FixedEffectsEstimator --> RegressionResults : returns; optionally writes
 
+    RegressionPlotConfig <|-- RenderConfig
     RenderCLI --> RenderConfig : loads
     RenderCLI --> PaperStyleRenderer : invokes
-    PaperStyleRenderer --> RegressionResults : reads one or more
-    PaperStyleRenderer --> PaperPlot : writes
+    InteractiveLoader --> FixedEffectsEstimator : exposes
+    InteractiveLoader --> PaperStyleRenderer : exposes
+    PaperStyleRenderer --> RegressionPlotConfig : uses
+    PaperStyleRenderer --> RegressionResults : validates one or more
+    PaperStyleRenderer --> PaperPlot : returns or writes

@@ -14,7 +14,7 @@ Raw experiment CSVs
     -> fixed-effects estimation
     -> plot-ready regression-results R object (optionally CSV)
     -> paper-style rendering
-    -> PNG
+    -> patchwork object (optionally PNG)
 ```
 
 The CSV between preparation and estimation is an intentional inspection
@@ -30,7 +30,8 @@ dynamic candidate preparation, selection outcomes, status reporting, and the
 preparation CLI. Subissue #22 adds regression-configuration and prepared-data
 validation, grouped `fixest::feols` estimation, locked inference, an in-memory
 tidy result object, optional atomic CSV export, and the estimation CLI.
-Subissue #23 adds saved-result validation, deterministic plot-data preparation,
+Subissue #23 adds result validation, explicit outcome/coefficient plot
+selection, deterministic plot-data preparation, in-memory and CSV plotting,
 and the independent paper-style PNG renderer. Final regression-stage
 walkthrough and integration handoff remain in subissue #24.
 
@@ -441,30 +442,39 @@ returns the same object.
 
 ## 3. Paper-Style Rendering
 
-Rendering is an independent process that reads one or more compatible saved
-result CSVs and produces exactly one configured PNG. It never reads the
-regression-ready data and never re-estimates a model.
+Rendering never reads regression-ready data and never re-estimates a model.
+The interactive interface accepts one tidy result table, a nonempty list of
+tables, or one or more result CSV paths and returns a composable `patchwork`
+object. The independent file interface reads configured CSVs and atomically
+writes one PNG.
 
-“Compatible” means selected rows agree exactly on `dataset_id`, `term`, all
-serialized model-variable lists, `vcov_type`, `estimator`,
-`estimator_version`, `inference_contract_id`, and all preparation-provenance
-fields. Only the explicitly mapped outcome, panel/period/series group values,
-observation and cluster counts, and numerical estimates may differ. The
-researcher-defined `model_id` may differ, but it never waives those substantive
-compatibility checks and cannot create duplicate plotting keys. The canonical
-renderer rejects heterogeneous specifications; researchers render those as
-separately labeled figures instead of placing incomparable estimates in one
-grid.
+Selected rows must agree globally on `dataset_id`, `term`,
+`estimation_group_variables`, `estimator`, `estimator_version`,
+`inference_contract_id`, and every preparation-provenance field. Within each
+explicit panel they must also agree on the explanatory-variable, control,
+fixed-effect, cluster, and covariance specifications. Those model
+specifications may differ across panels, which lets researchers combine
+separately run regressions without silently changing a specification within a
+panel. The researcher-defined `model_id` may differ, but it never waives the
+substantive checks or permits duplicate plotting keys. When no panel variable
+is configured, the entire selection is one panel and therefore one
+specification.
 
 Each input is validated against the complete saved-result schema above,
 including finite statistics, coherent observation/cluster counts, and valid
 preparation metadata. Repeated interval rows for one coefficient must agree
-on their shared statistics and have nested bounds. A saved slice may contain
-only the chosen confidence level; all three levels are not required to render.
+on their shared statistics and have nested bounds. Estimator-produced
+`regression_results` objects always retain 90%, 95%, and 99% intervals. An
+equivalent external or saved slice may contain only the chosen confidence
+level; all three levels are not required merely to render that slice.
 The renderer does not check a historical estimator version against the current
 R installation or load that estimator. It consumes the saved inference.
 
-### `RenderConfig`
+### Plot Configuration and `RenderConfig`
+
+`regression_plot_config()` constructs the R-native plotting configuration.
+The YAML `RenderConfig` uses the same plot fields and additionally supplies
+result paths, one PNG output path, and physical output dimensions.
 
 ```yaml
 results_paths:
@@ -516,14 +526,15 @@ dpi: 300
 
 | Field | Required | Validation, meaning, and default |
 | --- | --- | --- |
-| `results_paths` | yes | Nonempty ordered list of distinct readable result CSVs. |
-| `output_path` | yes | PNG path distinct from all result inputs. |
-| `term` | yes | One nonempty coefficient name to select. |
+| `results_paths` | file config only | Nonempty ordered list of distinct readable result CSVs. |
+| `output_path` | file config only | PNG path distinct from all result inputs. |
+| `term` | yes | One nonempty coefficient name to select; this is the independent-variable coefficient shown on the y-axis. |
+| `outcome_variable` | conditional | One dependent-variable name to select. Supply this or a nonempty `outcome_by_panel`, never both. |
 | `confidence_level` | no | One of `0.90`, `0.95`, or `0.99`; default `0.95`. |
 | `period_variable` | yes | Result column used for the horizontal axis. |
 | `series_variable` | no | `null` for fixed-blue panels or a result column for the colored-series variant; default `null`. |
-| `panel_variable` | yes | Result column used to divide panels. |
-| `outcome_by_panel` | no | Panel-value-to-outcome mapping; default `{}` requires one common selected outcome. A nonempty map must cover every selected panel exactly. |
+| `panel_variable` | no | Result column used to divide panels; default `null` produces one panel. |
+| `outcome_by_panel` | conditional | Panel-value-to-dependent-variable mapping. A nonempty map requires `panel_variable` and must cover every selected panel exactly. Supply this or `outcome_variable`, never both. |
 | `period_order` | no | Complete permutation of selected period values; default `[]` uses ascending observed values. |
 | `series_order` | no | Complete permutation of selected series values; default `[]` uses ascending observed values. Must be `[]` when `series_variable` is `null`. |
 | `panel_order` | no | Complete permutation of selected panel values; default `[]` uses ascending observed values. |
@@ -533,20 +544,27 @@ dpi: 300
 | `y_break_interval` | no | Positive finite spacing; default `0.1`; together with the limits must imply at most 10,000 ticks. |
 | `significance_level` | no | Value in `[0, 1]`; default `0.05`. |
 | `panel_columns` | no | Positive integer; default `2`. |
-| `width`, `height` | no | Positive finite inches; defaults `12` and `8`; each dimension times DPI must be between 1 and R's maximum integer pixel count. |
-| `dpi` | no | Positive integer PNG resolution; default `300`. |
+| `width`, `height` | no | File rendering only: positive finite inches; defaults `12` and `8`; each dimension times DPI must be between 1 and R's maximum integer pixel count. |
+| `dpi` | no | File rendering only: positive integer PNG resolution; default `300`. |
+
+Dependent-variable and coefficient selection are deliberately separate.
+`outcome_variable: pick_top` with `term: black`, for example, plots the `black`
+coefficient from regressions whose dependent variable is `pick_top`. Multiple
+requested independent variables coexist in the tidy results; changing `term`
+selects another saved coefficient without rerunning the model.
 
 `outcome_by_panel` makes the paper's mixed-outcome display explicit: its Gemini
 panel uses `pick_top`, while its other three panels use the modern
-`pick_threshold` name for the historical `pick_99`. When the mapping is empty,
-selected rows must contain one common `outcome_variable`; when it is nonempty,
-each panel is filtered to its mapped outcome and no additional outcome is
-allowed for that panel.
+`pick_threshold` name for the historical `pick_99`. Exactly one outcome mode is
+required. A scalar outcome applies to every panel. A nonempty map filters each
+panel to its mapped outcome and permits no additional outcome for that panel.
+With `panel_variable: null`, panel order and labels must be empty and the single
+panel title is the selected outcome.
 
 A nonempty order list must contain every distinct selected value exactly once;
 unknown, duplicate, or omitted values are errors. Orders never filter data. To
-render a subset, the researcher supplies a separately saved, inspected result
-CSV rather than relying on an accidental factor-level drop.
+render a subset, the researcher supplies an explicitly inspected result-table
+slice or saved CSV rather than relying on an accidental factor-level drop.
 
 Values are compared as their saved scalar tokens. Default ordering is numeric
 when all tokens parse as finite numbers, otherwise lexicographic. Ascending
@@ -559,9 +577,9 @@ display only; even identical labels do not merge distinct panels.
 Outcome-map coverage is checked after term/interval selection and before
 filtering outcomes. Compatibility and plotting-key checks then use the
 selected rows. An estimation-group dimension not mapped to period, panel, or
-series must be constant in those rows; a changing hidden dimension is an error.
-Unbalanced grids are allowed: missing panel/period/series combinations remain
-missing, with no imputation or recentering of the remaining series.
+series must be constant within each panel; a changing hidden dimension is an
+error. Unbalanced grids are allowed: missing panel/period/series combinations
+remain missing, with no imputation or recentering of the remaining series.
 
 The canonical paper-style renderer uses:
 
@@ -592,13 +610,13 @@ Rendering uses R's configured native PNG backend; fonts and antialiasing can
 differ by operating system, so byte-identical images are not promised.
 
 The renderer validates that the selected term, interval level, outcome, period,
-series, and panel fields exist. After term, confidence-level, and outcome
-selection, `(panel_variable, period_variable)` must identify each row when
-`series_variable` is null; otherwise `(panel_variable, period_variable,
-series_variable)` must identify each row. Missing selections, panels absent
-from a nonempty outcome mapping, and duplicate plotting keys are errors. The
-renderer uses the saved interval bounds and exact p-values; significance
-styling is not used as a substitute for the numerical result artifact.
+and configured series/panel fields exist. After term, confidence-level, and
+outcome selection, period identifies each row in a one-panel, one-series plot.
+Configured panel and series values are added to that plotting key. Missing
+selections, panels absent from a nonempty outcome mapping, and duplicate keys
+are errors. The renderer uses the saved interval bounds and exact p-values;
+significance styling is not used as a substitute for the numerical result
+artifact.
 
 “Paper-style” refers to the historical visual grammar and panel arrangement,
 not a promise of numerically identical intervals. The authoritative result
@@ -621,6 +639,43 @@ configuration, input, or output. Estimation does not invoke rendering
 implicitly, which guarantees that a figure can be recreated in a fresh process
 from saved results alone.
 
+For an interactive R workflow, source one public entry point from a clean
+session:
+
+```r
+source("R/regression/load.R")
+
+results <- estimate_regressions("path/to/regression.yaml")
+config <- regression_plot_config(
+  outcome_variable = "pick_top",
+  term = "black",
+  period_variable = "year",
+  series_variable = "city",
+  x_label = "Year",
+  y_label = "Black coefficient estimate"
+)
+figure <- plot_regression_results(results, config)
+figure
+```
+
+The loader derives the repository root from its own path, activates the locked
+`renv` library, and loads the preparation, estimation, and plotting APIs. If a
+conflicting direct runtime package is already loaded, it fails with an
+instruction to restart R before continuing. The example expects the regression
+configuration to include `estimation_group_variables: [city, year]`; each
+city-year fit contributes one point for the selected `black` term. Selecting a
+different term from the same multi-variable regression needs only a new plot
+configuration.
+
+`plot_regression_results()` also accepts a nonempty list of result tables or a
+character vector of result CSV paths. To put separately run specifications in
+different panels, give each call a distinct `model_id`, use
+`panel_variable = "model_id"`, and supply clear panel labels. Dataset,
+preparation, estimator, inference, and estimation-group metadata must still
+match globally; formula and covariance specifications may differ only across
+explicit panels. Use `outcome_by_panel` instead of `outcome_variable` when the
+panels have different dependent variables.
+
 Run the [public synthetic rendering example](../../examples/regression/README.md)
 without preparation or estimation:
 
@@ -632,14 +687,16 @@ It writes a four-panel PNG from a checked-in, explicitly illustrative result
 CSV. The general-purpose numerical CSV is left unchanged and can also be used
 in a researcher's own plotting workflow.
 
-The R modules keep numeric preparation and graphics separate:
-`load_regression_results(config)` validates and combines saved CSVs;
-`prepare_regression_plot_data(config)` selects rows and returns their original
-values plus explicit panel/period/series order, positions, and opacity;
-`build_regression_plot(prepared)` builds the figure without I/O; and
-`render_regression_plot(config)` writes it atomically. The config argument is a
-render YAML path or the validated result of `load_render_config()`, not an
-in-memory raw dataset or fitted model.
+The R modules keep numeric preparation and graphics separate.
+`validate_regression_results(results)` validates one table or a list without
+mutating it; `read_regression_results(paths)` applies the same validation to
+CSV paths. `prepare_regression_plot_data(results, config)` selects rows and
+returns their original values plus explicit panel/period/series order,
+positions, and opacity. `build_regression_plot(prepared)` builds the figure
+without I/O, `plot_regression_results(results, config)` is their interactive
+composition, and `render_regression_plot(config)` writes a YAML-configured PNG
+atomically. The interactive input is a tidy result object or equivalent CSV,
+not raw experiment data or a bare `feols` fit.
 
 ## R Environment and Test Contract
 
@@ -692,6 +749,7 @@ Rscript -e 'testthat::test_file("tests/r/test-regression-config.R", reporter = "
 Rscript -e 'testthat::test_file("tests/r/test-regression.R", reporter = "summary")'
 Rscript -e 'testthat::test_file("tests/r/test-render-config.R", reporter = "summary")'
 Rscript -e 'testthat::test_file("tests/r/test-render-data.R", reporter = "summary")'
+Rscript -e 'testthat::test_file("tests/r/test-plot-api.R", reporter = "summary")'
 Rscript -e 'testthat::test_file("tests/r/test-paper-plot.R", reporter = "summary")'
 Rscript -e 'testthat::test_file("tests/r/test-render-runner.R", reporter = "summary")'
 ```
@@ -704,10 +762,12 @@ multi-city, multi-year, dynamic-`N` fixtures. Subissue #22 adds the locked
 `fixest` estimator, strict regression-ready input validation, grouped
 multi-variable estimation, an in-memory tidy result object, optional atomic
 90/95/99% interval CSV export, and the estimation CLI.
-Subissue #23 adds independent rendering, a public saved-result example, numeric
-plot-data and layer tests, PNG dimension/atomicity checks, and fresh-process
-tests that do not load `fixest`. Its tests also pass a real synthetic-data
-estimation output directly into plot preparation without adapting the schema.
+Subissue #23 adds independent file and in-memory rendering, a public
+saved-result example, numeric plot-data and layer tests, PNG
+dimension/atomicity checks, and fresh-process tests for both rendering-only and
+the locked interactive loader. Its tests pass real multi-variable `fixest`
+output directly into coefficient-specific plot preparation without adapting
+the schema.
 Existing Python checks continue to run with `python -m pytest`.
 
 ## Artifact Example
@@ -728,15 +788,16 @@ testing.
 
 - Preparation, estimation, numerical extraction, and rendering remain separate
   pure responsibilities behind thin R CLIs.
-- Raw experiment output, regression-ready data, and plot-ready results cross
-  responsibility boundaries as CSV files rather than in-memory Python/R
-  objects.
+- Raw experiment output crosses the Python-to-R boundary as CSV, and the
+  regression-ready CSV remains an intentional researcher-inspection boundary.
+  Within R, plot-ready numerical results use the same validated schema whether
+  retained as a data frame or persisted as CSV.
 - Stable upstream identities are preserved; local row positions and per-file
   factor codes are not durable keys.
 - Model variables, fixed effects, clusters, grouping, paths, and plot semantics
   are configuration-driven rather than hard-coded.
 - Numerical results are authoritative; figures are disposable renderings of
-  those saved values.
+  those validated values.
 
 The historical behavior consulted for this contract is pinned at
 `KirillUtyashev/job-parsing-code@c9391854ea55806ec252625cd2f48fb9edb156cd`,

@@ -42,6 +42,8 @@ R-based regression-analysis stage, a YAML-configured preparation command writes
 a candidate-level regression-ready CSV for researcher inspection. A separate
 YAML-configured estimator transforms one inspected dataset into plot-ready
 numerical results. It returns the tidy table in an interactive R session and
-can persist it as CSV. An independent renderer produces PNG
-figures from those results. No Python-to-R in-memory object exchange is
-required.
+can persist it as CSV. An independent renderer accepts one result table, a
+compatible list of tables, or saved result CSVs and produces either a
+composable in-session plot or an atomic PNG. The dependent variable and plotted
+coefficient are explicit, separate selections. No Python-to-R in-memory object
+exchange is required.

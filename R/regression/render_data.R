@@ -1,12 +1,16 @@
 RENDER_CONFIDENCE_LEVELS <- c(0.90, 0.95, 0.99)
 
-RENDER_COMPATIBILITY_COLUMNS <- c(
-  "dataset_id", "term", "explanatory_variables", "control_variables",
-  "fixed_effects", "cluster_variables", "estimation_group_variables",
-  "vcov_type", "estimator", "estimator_version", "inference_contract_id",
+RENDER_GLOBAL_COMPATIBILITY_COLUMNS <- c(
+  "dataset_id", "term", "estimation_group_variables", "estimator",
+  "estimator_version", "inference_contract_id",
   "preparation_top_share", "preparation_probability_threshold",
   "preparation_ranking_group_variables", "preparation_scenario_covariates",
   "preparation_candidate_covariates"
+)
+
+RENDER_PANEL_COMPATIBILITY_COLUMNS <- c(
+  "explanatory_variables", "control_variables", "fixed_effects",
+  "cluster_variables", "vcov_type"
 )
 
 .render_data_abort <- function(source, format, ...) {
@@ -14,6 +18,15 @@ RENDER_COMPATIBILITY_COLUMNS <- c(
     sprintf("Invalid regression results '%s': %s", source, sprintf(format, ...)),
     call. = FALSE
   )
+}
+
+.render_result_column <- function(values, field, source) {
+  if (!is.atomic(values) || !is.null(dim(values))) {
+    .render_data_abort(
+      source, "column '%s' must be one atomic vector, not a list or matrix.", field
+    )
+  }
+  as.character(values)
 }
 
 .render_read_csv <- function(path, source) {
@@ -54,8 +67,10 @@ RENDER_COMPATIBILITY_COLUMNS <- c(
 }
 
 .render_numeric <- function(values, field, source) {
+  values <- .render_result_column(values, field, source)
   parsed <- suppressWarnings(as.numeric(values))
-  invalid <- !nzchar(trimws(values)) | is.na(parsed) | !is.finite(parsed)
+  invalid <- is.na(values) | !nzchar(trimws(values)) |
+    is.na(parsed) | !is.finite(parsed)
   if (any(invalid)) {
     .render_data_abort(
       source, "column '%s' must be finite numeric data; invalid data row %d.",
@@ -66,6 +81,11 @@ RENDER_COMPATIBILITY_COLUMNS <- c(
 }
 
 .render_metadata_names <- function(value, field, source, allow_empty = TRUE) {
+  if (
+    length(value) != 1L || is.na(value) || !is.character(value)
+  ) {
+    .render_data_abort(source, "column '%s' has an invalid ordered name list.", field)
+  }
   if (identical(value, "") && allow_empty) {
     return(character())
   }
@@ -117,18 +137,45 @@ RENDER_COMPATIBILITY_COLUMNS <- c(
 }
 
 .render_validate_result_file <- function(raw, source) {
+  if (!is.data.frame(raw)) {
+    .render_data_abort(source, "input must be a data.frame.")
+  }
+  if (nrow(raw) == 0L) {
+    .render_data_abort(source, "input must contain at least one result row.")
+  }
+  if (
+    is.null(names(raw)) || any(is.na(names(raw))) ||
+      any(!nzchar(trimws(names(raw)))) || anyDuplicated(names(raw))
+  ) {
+    .render_data_abort(source, "column names must be nonempty and distinct.")
+  }
   missing <- setdiff(REGRESSION_RESULT_CORE_COLUMNS, names(raw))
   if (length(missing) > 0L) {
     .render_data_abort(
       source, "missing required result column(s): %s", paste(missing, collapse = ", ")
     )
   }
+  character_fields <- setdiff(
+    REGRESSION_RESULT_CORE_COLUMNS,
+    c(
+      "estimate", "std_error", "statistic", "p_value", "confidence_level",
+      "conf_low", "conf_high", "preparation_top_share",
+      "preparation_probability_threshold", "n_input", "n_complete", "n_used",
+      "n_missing_dropped", "n_estimator_dropped", "n_dropped"
+    )
+  )
+  for (field in character_fields) {
+    raw[[field]] <- .render_result_column(raw[[field]], field, source)
+    if (any(is.na(raw[[field]]))) {
+      .render_data_abort(source, "column '%s' must not contain missing values.", field)
+    }
+  }
   nonempty <- c(
     "dataset_id", "model_id", "estimator", "estimator_version",
     "inference_contract_id", "outcome_variable", "term", "vcov_type"
   )
   for (field in nonempty) {
-    if (any(!nzchar(trimws(raw[[field]])))) {
+    if (any(is.na(raw[[field]]) | !nzchar(trimws(raw[[field]])))) {
       .render_data_abort(source, "column '%s' must not contain empty values.", field)
     }
   }
@@ -170,17 +217,31 @@ RENDER_COMPATIBILITY_COLUMNS <- c(
       source, "undocumented result column(s): %s", paste(extras, collapse = ", ")
     )
   }
+  for (field in groups) {
+    raw[[field]] <- .render_result_column(raw[[field]], field, source)
+  }
   for (value in unique(raw$estimation_group_variables)) {
     fields <- .render_metadata_names(value, "estimation_group_variables", source)
     rows <- raw$estimation_group_variables == value
     for (field in fields) {
-      if (any(!nzchar(trimws(raw[[field]][rows])))) {
+      if (any(is.na(raw[[field]][rows]) | !nzchar(trimws(raw[[field]][rows])))) {
         .render_data_abort(source, "estimation-group column '%s' has empty values.", field)
       }
     }
   }
 
-  data <- raw[c(REGRESSION_RESULT_CORE_COLUMNS, groups)]
+  fields <- c(REGRESSION_RESULT_CORE_COLUMNS, groups)
+  columns <- lapply(fields, function(field) raw[[field]])
+  names(columns) <- fields
+  # Normalize away source-specific S3 classes and attributes. In particular,
+  # a regression_results object and its exported CSV must produce the same
+  # validated table without mutating the richer caller-owned object.
+  data <- as.data.frame(
+    columns,
+    optional = TRUE,
+    stringsAsFactors = FALSE,
+    check.names = FALSE
+  )
   numeric_fields <- c(
     "estimate", "std_error", "statistic", "p_value", "confidence_level",
     "conf_low", "conf_high", "preparation_top_share",
@@ -229,25 +290,124 @@ RENDER_COMPATIBILITY_COLUMNS <- c(
   data
 }
 
-load_regression_results <- function(config) {
-  config <- .render_as_config(config)
-  files <- Map(
-    function(path, label) {
-      .render_validate_result_file(.render_read_csv(path, label), label)
-    },
-    config$resolved_results_paths, config$results_paths
+.render_combine_result_tables <- function(tables, sources) {
+  validated <- Map(
+    function(data, source) .render_validate_result_file(data, source),
+    tables,
+    sources
   )
-  columns <- unique(unlist(lapply(files, names), use.names = FALSE))
-  files <- lapply(files, function(data) {
+  columns <- unique(unlist(lapply(validated, names), use.names = FALSE))
+  validated <- lapply(validated, function(data) {
     for (field in setdiff(columns, names(data))) {
       data[[field]] <- NA_character_
     }
     data[columns]
   })
-  data <- do.call(rbind, files)
+  data <- do.call(rbind, validated)
   row.names(data) <- NULL
   .render_validate_interval_rows(data)
   data
+}
+
+.render_result_object_tables <- function(results) {
+  if (is.data.frame(results)) {
+    return(list(tables = list(results), sources = "in-memory results"))
+  }
+  if (!is.list(results) || inherits(results, "regression_plot_config")) {
+    stop(
+      paste0(
+        "'results' must be one tidy regression-results data.frame or a ",
+        "nonempty list of them."
+      ),
+      call. = FALSE
+    )
+  }
+  if (length(results) == 0L) {
+    stop("'results' must not be an empty list.", call. = FALSE)
+  }
+  valid <- vapply(results, is.data.frame, logical(1))
+  if (!all(valid)) {
+    stop(
+      sprintf(
+        "'results' element %d must be a tidy regression-results data.frame.",
+        which(!valid)[[1L]]
+      ),
+      call. = FALSE
+    )
+  }
+  labels <- names(results)
+  if (is.null(labels)) {
+    labels <- rep("", length(results))
+  }
+  missing_labels <- is.na(labels) | !nzchar(trimws(labels))
+  labels[missing_labels] <- sprintf("element %d", which(missing_labels))
+  list(
+    tables = unname(results),
+    sources = sprintf("in-memory results %s", labels)
+  )
+}
+
+validate_regression_results <- function(results) {
+  collection <- .render_result_object_tables(results)
+  .render_combine_result_tables(collection$tables, collection$sources)
+}
+
+read_regression_results <- function(results_paths) {
+  if (
+    !is.character(results_paths) || length(results_paths) == 0L ||
+      anyNA(results_paths) || any(!nzchar(trimws(results_paths)))
+  ) {
+    stop("'results_paths' must be a nonempty character vector of CSV paths.",
+      call. = FALSE)
+  }
+  if (any(!grepl("\\.csv$", basename(results_paths), ignore.case = TRUE))) {
+    stop("Every regression-results path must end in '.csv'.", call. = FALSE)
+  }
+  missing <- !file.exists(results_paths)
+  if (any(missing)) {
+    stop(
+      sprintf(
+        "Regression-results CSV does not exist: %s",
+        results_paths[which(missing)[[1L]]]
+      ),
+      call. = FALSE
+    )
+  }
+  directories <- file.info(results_paths)$isdir %in% TRUE
+  if (any(directories)) {
+    stop(
+      sprintf(
+        "Regression-results path is a directory: %s",
+        results_paths[which(directories)[[1L]]]
+      ),
+      call. = FALSE
+    )
+  }
+  unreadable <- file.access(results_paths, 4L) != 0L
+  if (any(unreadable)) {
+    stop(
+      sprintf(
+        "Regression-results CSV is not readable: %s",
+        results_paths[which(unreadable)[[1L]]]
+      ),
+      call. = FALSE
+    )
+  }
+  resolved <- normalizePath(results_paths, winslash = "/", mustWork = TRUE)
+  if (anyDuplicated(resolved)) {
+    stop("'results_paths' must refer to distinct CSV files.", call. = FALSE)
+  }
+  files <- Map(
+    function(path, label) .render_read_csv(path, label),
+    resolved,
+    results_paths
+  )
+  .render_combine_result_tables(files, results_paths)
+}
+
+load_regression_results <- function(config) {
+  config <- .render_as_config(config)
+  read_regression_results(config$resolved_results_paths)
 }
 
 .render_validate_interval_rows <- function(data) {
@@ -365,9 +525,42 @@ load_regression_results <- function(config) {
   10 * seq_along(period_order)
 }
 
-prepare_regression_plot_data <- function(config) {
-  config <- .render_as_config(config)
-  data <- load_regression_results(config)
+prepare_regression_plot_data <- function(results = NULL, config = NULL) {
+  # Preserve the original one-argument file workflow while making the data
+  # source explicit for interactive use.
+  if (
+    is.null(config) &&
+      (
+        inherits(results, "regression_plot_config") ||
+          (is.character(results) && length(results) == 1L && !is.na(results))
+      )
+  ) {
+    config <- results
+    results <- NULL
+  }
+  if (is.null(config)) {
+    stop(
+      "'config' must be supplied when plotting in-memory regression results.",
+      call. = FALSE
+    )
+  }
+  config <- .regression_plot_as_config(config)
+  if (is.null(results)) {
+    if (!inherits(config, "render_config")) {
+      stop(
+        paste0(
+          "'results' must be supplied with an in-memory regression_plot_config; ",
+          "only a render_config can load result CSVs."
+        ),
+        call. = FALSE
+      )
+    }
+    data <- load_regression_results(config)
+  } else if (is.character(results)) {
+    data <- read_regression_results(results)
+  } else {
+    data <- validate_regression_results(results)
+  }
   selected <- data$term == config$term &
     data$confidence_level == config$confidence_level
   data <- data[selected, , drop = FALSE]
@@ -377,15 +570,24 @@ prepare_regression_plot_data <- function(config) {
       config$term, config$confidence_level
     )
   }
-  panel <- .render_selected_tokens(data, config$panel_variable)
+
   mapping <- config$outcome_by_panel
-  if (length(mapping) == 0L) {
-    if (length(unique(data$outcome_variable)) != 1L) {
+  if (!is.null(config$outcome_variable)) {
+    data <- data[data$outcome_variable == config$outcome_variable, , drop = FALSE]
+    if (nrow(data) == 0L) {
       .render_data_abort(
-        "selected data", "multiple outcomes require an explicit outcome_by_panel mapping."
+        "selected data",
+        "no rows match outcome_variable '%s', term '%s', and confidence level %.2f.",
+        config$outcome_variable, config$term, config$confidence_level
       )
     }
   } else {
+    if (is.null(config$panel_variable)) {
+      .render_data_abort(
+        "selected data", "outcome_by_panel requires a configured panel_variable."
+      )
+    }
+    panel <- .render_selected_tokens(data, config$panel_variable)
     observed_panels <- unique(panel)
     if (!setequal(names(mapping), observed_panels)) {
       .render_data_abort(
@@ -399,14 +601,11 @@ prepare_regression_plot_data <- function(config) {
       )
     }
     data <- data[keep, , drop = FALSE]
-    panel <- panel[keep]
   }
-  for (field in RENDER_COMPATIBILITY_COLUMNS) {
-    if (length(unique(data[[field]])) != 1L) {
-      .render_data_abort(
-        "selected data", "incompatible '%s' across selected results.", field
-      )
-    }
+  panel <- if (is.null(config$panel_variable)) {
+    rep(".single_panel", nrow(data))
+  } else {
+    .render_selected_tokens(data, config$panel_variable)
   }
   period <- .render_selected_tokens(data, config$period_variable)
   series <- if (is.null(config$series_variable)) {
@@ -414,16 +613,46 @@ prepare_regression_plot_data <- function(config) {
   } else {
     .render_selected_tokens(data, config$series_variable)
   }
-  group_fields <- .render_metadata_names(
-    data$estimation_group_variables[[1L]], "estimation_group_variables", "selected data"
+  dimensions <- c(
+    config$period_variable, config$panel_variable, config$series_variable
   )
-  dimensions <- c(config$period_variable, config$panel_variable, config$series_variable)
-  for (field in setdiff(group_fields, dimensions)) {
+  for (field in RENDER_GLOBAL_COMPATIBILITY_COLUMNS) {
     if (length(unique(data[[field]])) != 1L) {
       .render_data_abort(
-        "selected data", "unplotted estimation-group column '%s' varies; map it or supply a slice.",
-        field
+        "selected data", "incompatible '%s' across selected results.", field
       )
+    }
+  }
+  panel_rows <- unname(split(seq_len(nrow(data)), panel, drop = TRUE))
+  for (rows in panel_rows) {
+    panel_label <- panel[[rows[[1L]]]]
+    for (field in RENDER_PANEL_COMPATIBILITY_COLUMNS) {
+      if (length(unique(data[[field]][rows])) != 1L) {
+        .render_data_abort(
+          "selected data",
+          "incompatible '%s' within panel '%s'.",
+          field,
+          panel_label
+        )
+      }
+    }
+    group_fields <- .render_metadata_names(
+      data$estimation_group_variables[[rows[[1L]]]],
+      "estimation_group_variables",
+      "selected data"
+    )
+    for (field in setdiff(group_fields, dimensions)) {
+      if (length(unique(data[[field]][rows])) != 1L) {
+        .render_data_abort(
+          "selected data",
+          paste0(
+            "unplotted estimation-group column '%s' varies within panel ",
+            "'%s'; map it or supply a slice."
+          ),
+          field,
+          panel_label
+        )
+      }
     }
   }
   keys <- data.frame(panel = panel, period = period, series = series)
@@ -432,18 +661,26 @@ prepare_regression_plot_data <- function(config) {
       "selected data", "duplicate plotting keys for the configured panel, period, and series."
     )
   }
-  panel_order <- .render_order_values(panel, config$panel_order, "panel_order")
+  panel_order <- if (is.null(config$panel_variable)) {
+    ".single_panel"
+  } else {
+    .render_order_values(panel, config$panel_order, "panel_order")
+  }
   period_order <- .render_order_values(period, config$period_order, "period_order")
   series_order <- if (is.null(config$series_variable)) {
     character()
   } else {
     .render_order_values(series, config$series_order, "series_order")
   }
-  if (length(setdiff(names(config$panel_labels), panel_order)) > 0L) {
-    .render_data_abort("selected data", "panel_labels contains unknown panel keys.")
+  if (is.null(config$panel_variable)) {
+    panel_labels <- stats::setNames(config$outcome_variable, panel_order)
+  } else {
+    if (length(setdiff(names(config$panel_labels), panel_order)) > 0L) {
+      .render_data_abort("selected data", "panel_labels contains unknown panel keys.")
+    }
+    panel_labels <- stats::setNames(panel_order, panel_order)
+    panel_labels[names(config$panel_labels)] <- config$panel_labels
   }
-  panel_labels <- stats::setNames(panel_order, panel_order)
-  panel_labels[names(config$panel_labels)] <- config$panel_labels
   period_positions <- .render_period_positions(period_order)
   minimum_gap <- if (length(period_positions) > 1L) {
     min(diff(period_positions))
