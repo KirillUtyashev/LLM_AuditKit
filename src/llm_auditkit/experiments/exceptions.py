@@ -21,3 +21,11 @@ class ExperimentDatasetError(ExperimentValidationError):
 
 class ExperimentIdentityError(ExperimentValidationError):
     """Raised when a durable experiment job identity is invalid."""
+
+
+class ExperimentResultAssociationError(ExperimentException):
+    """Raised when inference results cannot be safely associated with planned jobs."""
+
+
+class ExperimentResponseParseError(ExperimentException):
+    """Raised internally when one model response cannot become an experiment outcome."""

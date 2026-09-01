@@ -1,16 +1,20 @@
-"""Public configuration and validation API for experiment execution."""
+"""Public domain API for experiment execution."""
 
 from .exceptions import (
     ExperimentConfigurationError,
     ExperimentDatasetError,
     ExperimentException,
     ExperimentIdentityError,
+    ExperimentResponseParseError,
+    ExperimentResultAssociationError,
     ExperimentValidationError,
 )
 from .models import (
     ExperimentConfig,
     ExperimentDatasetSchema,
     ExperimentJobKey,
+    ExperimentOutcome,
+    ExperimentOutputRecord,
     Persona,
     build_experiment_request_id,
 )
@@ -28,6 +32,10 @@ __all__ = [
     "ExperimentException",
     "ExperimentIdentityError",
     "ExperimentJobKey",
+    "ExperimentOutcome",
+    "ExperimentOutputRecord",
+    "ExperimentResponseParseError",
+    "ExperimentResultAssociationError",
     "ExperimentValidationError",
     "Persona",
     "build_experiment_request_id",

@@ -55,6 +55,10 @@ classDiagram
     class ExperimentOutputRecord {
         +key: ExperimentJobKey
         +request_id: str
+        +persona_name: str
+        +persona_description: str
+        +user_prompt: Optional~str~
+        +system_prompt: Optional~str~
         +outcome: Optional~ExperimentOutcome~
         +error_type: Optional~str~
         +error_message: Optional~str~

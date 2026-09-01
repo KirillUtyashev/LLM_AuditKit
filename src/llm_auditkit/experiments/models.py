@@ -51,6 +51,41 @@ class ExperimentJobKey:
     model_config_id: str
 
 
+@dataclass(slots=True)
+class ExperimentOutcome:
+    """Successfully parsed applicant decisions and their token log probabilities."""
+
+    picks: list[int]
+    logprobs: list[float]
+    generated_response: str
+    comment: str | None
+
+
+@dataclass(slots=True)
+class ExperimentOutputRecord:
+    """One normalized successful or failed experiment job outcome."""
+
+    key: ExperimentJobKey
+    request_id: str
+    persona_name: str
+    persona_description: str
+    user_prompt: str | None
+    system_prompt: str | None
+    outcome: ExperimentOutcome | None = None
+    error_type: str | None = None
+    error_message: str | None = None
+
+    @property
+    def is_successful(self) -> bool:
+        """Whether the record contains a complete parsed outcome."""
+
+        return (
+            self.outcome is not None
+            and self.error_type is None
+            and self.error_message is None
+        )
+
+
 def build_experiment_request_id(key: ExperimentJobKey) -> str:
     """Derive a deterministic collision-resistant request ID from a job key."""
 
