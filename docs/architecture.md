@@ -39,11 +39,13 @@ The inference layer owns model configuration, concurrency, retries, EDSL executi
 
 Experiment results cross the Python-to-R boundary as raw CSV files. Within the
 R-based regression-analysis stage, a YAML-configured preparation command writes
-a candidate-level regression-ready CSV for researcher inspection. A separate
+a candidate-level regression-ready CSV for researcher inspection and stamps it
+with one stable `audit_id`. A separate
 YAML-configured estimator transforms one inspected dataset into plot-ready
 numerical results. It returns the tidy table in an interactive R session and
 can persist it as CSV. An independent renderer accepts one result table, a
 compatible list of tables, or saved result CSVs and produces either a
-composable in-session plot or an atomic PNG. The dependent variable and plotted
-coefficient are explicit, separate selections. No Python-to-R in-memory object
-exchange is required.
+composable in-session plot or an atomic PNG. Separate audits can be explicit
+panels while city and year remain within-panel estimation dimensions. The
+dependent variable and plotted coefficient are explicit, separate selections.
+No Python-to-R in-memory object exchange is required.

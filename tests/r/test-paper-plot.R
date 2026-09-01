@@ -12,6 +12,7 @@
   )
   period_index <- match(data$.plot_period, periods)
   data$dataset_id <- "synthetic_plot_fixture"
+  data$audit_id <- data$.plot_panel
   data$model_id <- "black_baseline"
   data$outcome_variable <- "pick_top"
   data$term <- "black"

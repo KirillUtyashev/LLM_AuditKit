@@ -142,6 +142,7 @@ testthat::test_that("grouped IID fixed-effects results satisfy the tidy contract
   )
 
   testthat::expect_true(all(results$dataset_id == "known_fixture"))
+  testthat::expect_true(all(results$audit_id == "known_audit"))
   testthat::expect_true(all(results$model_id == "fe_iid"))
   testthat::expect_true(all(results$estimator == "fixest::feols"))
   testthat::expect_true(
@@ -533,6 +534,18 @@ testthat::test_that("regression-ready input semantics are validated", {
     "preparation_top_share.*mixes multiple preparation settings"
   )
 
+  mixed_audits <- .regression_execution_read_fixture()
+  mixed_audits$audit_id[[1L]] <- "another_audit"
+  testthat::expect_error(
+    estimate_regressions(
+      .regression_execution_config(
+        data = mixed_audits,
+        model_id = "mixed_audits"
+      )
+    ),
+    "audit_id.*one audit identity.*estimate separate audits separately"
+  )
+
   invalid_subset <- .regression_execution_read_fixture()
   negative_row <- which(invalid_subset$pick == 0L)[[1L]]
   invalid_subset$pick_top[[negative_row]] <- 1L
@@ -858,6 +871,13 @@ testthat::test_that("in-memory regression results can be written safely", {
   testthat::expect_error(
     write_regression_results(invalid_version, output_path),
     "estimator_version.*constant"
+  )
+  legacy_contract <- results
+  attr(legacy_contract, "regression_results_contract_id") <-
+    "llm_auditkit_regression_results_v1"
+  testthat::expect_error(
+    write_regression_results(legacy_contract, output_path),
+    "contract marker is missing or unsupported"
   )
   invalid_counts <- results
   tampered_term_rows <- seq_len(3L)

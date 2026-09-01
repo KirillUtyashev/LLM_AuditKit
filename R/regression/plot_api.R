@@ -4,8 +4,10 @@
 #' `run_regressions()`, an independently constructed table satisfying the same
 #' public result schema, a nonempty list of such tables, or one or more result
 #' CSV paths. Inputs are validated and in-memory objects are never modified. The
-#' returned patchwork object is printed automatically at the R console and can
-#' also be further composed or saved by the caller.
+#' saved `audit_id` can be used as `panel_variable` so each audit remains one
+#' panel while estimation-group fields such as city and year define its series
+#' and horizontal axis. The returned patchwork object is printed automatically
+#' at the R console and can also be further composed or saved by the caller.
 #'
 #' @param results One tidy regression-results data.frame, a nonempty list of
 #'   them, or a nonempty character vector of result CSV paths.

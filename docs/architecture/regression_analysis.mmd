@@ -7,6 +7,7 @@ classDiagram
         <<YAML>>
         +input_paths: List~Path~
         +output_path: Path
+        +audit_id: str
         +top_share: float = 0.08
         +probability_threshold: float = 0.99
         +ranking_group_variables: List~str~
@@ -95,6 +96,7 @@ classDiagram
     class RegressionReadyData {
         <<CSV>>
         +row_grain: candidate
+        +audit_id: str
         +pick: int
         +pick_top: int
         +pick_threshold: int
@@ -103,6 +105,7 @@ classDiagram
     class RegressionResults {
         <<R data.frame / CSV>>
         +row_grain: coefficient_interval
+        +audit_id: str
         +estimator: fixest_feols
         +inference_contract_id: str
         +outcome_variable: str

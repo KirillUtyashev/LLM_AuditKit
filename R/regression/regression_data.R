@@ -1,5 +1,6 @@
 REGRESSION_READY_REQUIRED_COLUMNS <- c(
   "source_file",
+  "audit_id",
   "scenario_id",
   "persona_id",
   "model_config_id",
@@ -268,6 +269,7 @@ REGRESSION_PREPARATION_PROVENANCE_COLUMNS <- c(
 .regression_type_convert <- function(raw) {
   protected_strings <- c(
     "source_file",
+    "audit_id",
     REGRESSION_LONG_KEY_COLUMNS,
     "city",
     "preparation_ranking_group_variables",
@@ -386,7 +388,12 @@ load_regression_data <- function(config) {
     )
   }
 
-  required_strings <- c("source_file", REGRESSION_LONG_KEY_COLUMNS, "city")
+  required_strings <- c(
+    "source_file",
+    "audit_id",
+    REGRESSION_LONG_KEY_COLUMNS,
+    "city"
+  )
   for (field in required_strings) {
     blank <- is.na(raw[[field]]) | !nzchar(trimws(raw[[field]]))
     if (any(blank)) {
@@ -397,6 +404,13 @@ load_regression_data <- function(config) {
         which(blank)[[1L]]
       )
     }
+  }
+
+  if (length(unique(raw$audit_id)) != 1L) {
+    .regression_data_abort(
+      source_file,
+      "column 'audit_id' must contain one audit identity; estimate separate audits separately."
+    )
   }
 
   duplicate_identity <- duplicated(raw[REGRESSION_LONG_KEY_COLUMNS]) |

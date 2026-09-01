@@ -47,6 +47,7 @@ When an architectural contract represented in a Mermaid diagram changes, update 
 - Keep `save_after_each_result` stage-specific and configurable. Incremental file writes must use an atomic replacement strategy.
 - The Python-to-R boundary uses raw experiment CSVs. Separate YAML-configured `Rscript` entry points prepare a regression-ready CSV, estimate one inspected dataset into plot-ready numerical results, and render figures independently from those results. Within R, estimation returns the same tidy table that the CLI can persist as CSV; plotting accepts that object, a list of compatible result tables, or equivalent result CSV paths.
 - Plot configuration must explicitly select both `outcome_variable` (the dependent variable) and `term` (the coefficient shown), unless a complete outcome-by-panel map replaces the scalar outcome. Estimation groups create separate fits; covariance clusters only control inference within each fit.
+- Preparation stamps one stable `audit_id` onto every regression-ready row. `dataset_id` identifies an inspected analysis slice and `model_id` identifies a regression specification. Audit and dataset IDs may differ across explicit plot panels but must be constant within each panel.
 
 ## Repository Layout
 

@@ -1,7 +1,7 @@
 RENDER_CONFIDENCE_LEVELS <- c(0.90, 0.95, 0.99)
 
 RENDER_GLOBAL_COMPATIBILITY_COLUMNS <- c(
-  "dataset_id", "term", "estimation_group_variables", "estimator",
+  "term", "estimation_group_variables", "estimator",
   "estimator_version", "inference_contract_id",
   "preparation_top_share", "preparation_probability_threshold",
   "preparation_ranking_group_variables", "preparation_scenario_covariates",
@@ -9,7 +9,8 @@ RENDER_GLOBAL_COMPATIBILITY_COLUMNS <- c(
 )
 
 RENDER_PANEL_COMPATIBILITY_COLUMNS <- c(
-  "explanatory_variables", "control_variables", "fixed_effects",
+  "audit_id", "dataset_id", "explanatory_variables", "control_variables",
+  "fixed_effects",
   "cluster_variables", "vcov_type"
 )
 
@@ -171,7 +172,7 @@ RENDER_PANEL_COMPATIBILITY_COLUMNS <- c(
     }
   }
   nonempty <- c(
-    "dataset_id", "model_id", "estimator", "estimator_version",
+    "dataset_id", "audit_id", "model_id", "estimator", "estimator_version",
     "inference_contract_id", "outcome_variable", "term", "vcov_type"
   )
   for (field in nonempty) {
@@ -427,7 +428,7 @@ load_regression_results <- function(config) {
 
 .render_validate_interval_group <- function(data, group_fields) {
   keys <- c(
-    "dataset_id", "model_id", "outcome_variable", "term",
+    "dataset_id", "audit_id", "model_id", "outcome_variable", "term",
     "estimation_group_variables", group_fields
   )
   ordered <- do.call(
@@ -477,6 +478,39 @@ load_regression_results <- function(config) {
     .render_data_abort("selected data", "plot dimension '%s' has empty values.", field)
   }
   values
+}
+
+.render_source_identities <- function(data) {
+  unique(data.frame(
+    audit_id = as.character(data$audit_id),
+    dataset_id = as.character(data$dataset_id),
+    stringsAsFactors = FALSE
+  ))
+}
+
+.render_require_source_coverage <- function(data, expected, selection) {
+  observed <- .render_source_identities(data)
+  retained <- vapply(seq_len(nrow(expected)), function(index) {
+    any(
+      observed$audit_id == expected$audit_id[[index]] &
+        observed$dataset_id == expected$dataset_id[[index]]
+    )
+  }, logical(1))
+  if (any(!retained)) {
+    missing <- expected[!retained, , drop = FALSE]
+    labels <- sprintf(
+      "audit_id='%s', dataset_id='%s'",
+      missing$audit_id,
+      missing$dataset_id
+    )
+    .render_data_abort(
+      "selected data",
+      "%s removed all rows for source(s): %s. Supply a compatible selection or an explicitly inspected result subset.",
+      selection,
+      paste(labels, collapse = "; ")
+    )
+  }
+  invisible(data)
 }
 
 .render_order_values <- function(values, configured, field) {
@@ -561,19 +595,29 @@ prepare_regression_plot_data <- function(results = NULL, config = NULL) {
   } else {
     data <- validate_regression_results(results)
   }
+  expected_sources <- .render_source_identities(data)
   selected <- data$term == config$term &
     data$confidence_level == config$confidence_level
   data <- data[selected, , drop = FALSE]
+  .render_require_source_coverage(
+    data,
+    expected_sources,
+    "the term and confidence-level selection"
+  )
   if (nrow(data) == 0L) {
     .render_data_abort(
       "selected data", "no rows match term '%s' and confidence level %.2f.",
       config$term, config$confidence_level
     )
   }
-
   mapping <- config$outcome_by_panel
   if (!is.null(config$outcome_variable)) {
     data <- data[data$outcome_variable == config$outcome_variable, , drop = FALSE]
+    .render_require_source_coverage(
+      data,
+      expected_sources,
+      "the outcome selection"
+    )
     if (nrow(data) == 0L) {
       .render_data_abort(
         "selected data",
@@ -595,13 +639,27 @@ prepare_regression_plot_data <- function(results = NULL, config = NULL) {
       )
     }
     keep <- data$outcome_variable == unname(mapping[panel])
-    if (!setequal(unique(panel[keep]), observed_panels)) {
+    filtered <- data[keep, , drop = FALSE]
+    .render_require_source_coverage(
+      filtered,
+      expected_sources,
+      "the outcome selection"
+    )
+    missing_panels <- setdiff(observed_panels, unique(panel[keep]))
+    if (length(missing_panels) > 0L) {
       .render_data_abort(
-        "selected data", "an outcome_by_panel selection has no saved result rows."
+        "selected data",
+        "the outcome_by_panel selection has no saved result rows for panel value(s): %s.",
+        paste(missing_panels, collapse = ", ")
       )
     }
-    data <- data[keep, , drop = FALSE]
+    data <- filtered
   }
+  .render_require_source_coverage(
+    data,
+    expected_sources,
+    "the outcome selection"
+  )
   panel <- if (is.null(config$panel_variable)) {
     rep(".single_panel", nrow(data))
   } else {

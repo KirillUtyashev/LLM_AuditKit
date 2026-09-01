@@ -9,6 +9,7 @@ testthat::test_that("minimal preparation config applies exact defaults", {
     c("raw_jobs_a.csv", "raw_jobs_b.csv")
   )
   testthat::expect_equal(config$output_path, "output/regression_ready.csv")
+  testthat::expect_identical(config$audit_id, "fixture_audit")
   testthat::expect_equal(config$top_share, 0.08)
   testthat::expect_equal(config$probability_threshold, 0.99)
   testthat::expect_identical(
@@ -23,6 +24,7 @@ testthat::test_that("minimal preparation config applies exact defaults", {
 testthat::test_that("fully specified preparation config preserves overrides", {
   config <- load_preparation_config(regression_fixture("preparation_full.yaml"))
 
+  testthat::expect_identical(config$audit_id, "fixture_audit")
   testthat::expect_equal(config$top_share, 0.2)
   testthat::expect_equal(config$probability_threshold, 0.95)
   testthat::expect_identical(
@@ -73,13 +75,36 @@ testthat::test_that("config rejects unknown, missing, and wrong-shape fields", {
 
   missing_output <- tempfile(fileext = ".yaml")
   writeLines(
-    c("input_paths:", sprintf("  - %s", yaml_quote(input))),
+    c(
+      "input_paths:",
+      sprintf("  - %s", yaml_quote(input)),
+      "audit_id: test_audit"
+    ),
     missing_output
   )
   testthat::expect_error(
     load_preparation_config(missing_output),
     "missing required field.*output_path"
   )
+
+  missing_audit <- write_test_config(input, output)
+  lines <- readLines(missing_audit, warn = FALSE)
+  writeLines(lines[!startsWith(lines, "audit_id:")], missing_audit)
+  testthat::expect_error(
+    load_preparation_config(missing_audit),
+    "missing required field.*audit_id"
+  )
+
+  for (replacement in c("audit_id: ''", "audit_id: []", "audit_id: null")) {
+    invalid_audit <- write_test_config(input, output)
+    lines <- readLines(invalid_audit, warn = FALSE)
+    lines[startsWith(lines, "audit_id:")] <- replacement
+    writeLines(lines, invalid_audit)
+    testthat::expect_error(
+      load_preparation_config(invalid_audit),
+      "audit_id.*one nonempty string"
+    )
+  }
 
   top_level_sequence <- tempfile(fileext = ".yaml")
   writeLines(c("- one", "- two"), top_level_sequence)
@@ -89,7 +114,10 @@ testthat::test_that("config rejects unknown, missing, and wrong-shape fields", {
   )
 
   malformed <- tempfile(fileext = ".yaml")
-  writeLines(c("input_paths: [", "output_path: out.csv"), malformed)
+  writeLines(
+    c("input_paths: [", "output_path: out.csv", "audit_id: test_audit"),
+    malformed
+  )
   testthat::expect_error(
     load_preparation_config(malformed),
     "YAML could not be parsed"

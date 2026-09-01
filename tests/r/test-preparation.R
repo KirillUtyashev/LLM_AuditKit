@@ -52,6 +52,7 @@ write_multi_config <- function(
       "input_paths:",
       paste0("  - ", inputs),
       sprintf("output_path: %s", yaml_quote(output)),
+      "audit_id: multi_fixture_audit",
       override_lines,
       "scenario_covariates:",
       "  - job_category",
@@ -86,6 +87,7 @@ testthat::test_that("preparation reshapes dynamic N and applies exact defaults",
   )
 
   testthat::expect_equal(nrow(data), 22L)
+  testthat::expect_identical(unique(data$audit_id), "multi_fixture_audit")
   testthat::expect_identical(
     names(data),
     c(

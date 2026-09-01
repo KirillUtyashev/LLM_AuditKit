@@ -11,12 +11,12 @@
     sprintf("output_path: '%s'", gsub("'", "''", output_path, fixed = TRUE)),
     "term: black",
     "period_variable: period",
-    "panel_variable: model_config_id",
+    "panel_variable: audit_id",
     "outcome_by_panel:",
-    "  model_a: pick_top",
-    "  model_b: pick_threshold",
-    "  model_c: pick_threshold",
-    "  model_d: pick_threshold",
+    "  audit_a: pick_top",
+    "  audit_b: pick_threshold",
+    "  audit_c: pick_threshold",
+    "  audit_d: pick_threshold",
     "width: 4",
     "height: 3",
     "dpi: 60"
@@ -147,7 +147,10 @@ testthat::test_that("validation failure leaves an existing artifact and devices 
   before_devices <- grDevices::dev.list()
   case$config$term <- "not_an_estimated_coefficient"
 
-  testthat::expect_error(render_regression_plot(case$config), "no rows match term")
+  testthat::expect_error(
+    render_regression_plot(case$config),
+    "term and confidence-level selection.*audit_id='audit_a'"
+  )
   testthat::expect_identical(.render_runner_bytes(case$config$resolved_output_path), previous)
   testthat::expect_identical(grDevices::dev.list(), before_devices)
   testthat::expect_length(.render_runner_temporary_files(case$config), 0L)

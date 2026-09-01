@@ -55,6 +55,7 @@ write_test_config <- function(
     c(
       input_lines,
       sprintf("output_path: %s", yaml_quote(output_path)),
+      "audit_id: test_audit",
       extra_lines
     ),
     config_path,

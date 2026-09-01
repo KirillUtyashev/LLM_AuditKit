@@ -69,11 +69,11 @@ testthat::test_that("regression config exposes the exact public contracts", {
       "cluster_variables", "estimation_group_variables", "output_directory"
     )
   )
-  testthat::expect_length(REGRESSION_RESULT_CORE_COLUMNS, 32L)
+  testthat::expect_length(REGRESSION_RESULT_CORE_COLUMNS, 33L)
   testthat::expect_identical(
     REGRESSION_RESULT_CORE_COLUMNS,
     c(
-      "dataset_id", "model_id", "estimator", "estimator_version",
+      "dataset_id", "audit_id", "model_id", "estimator", "estimator_version",
       "inference_contract_id", "outcome_variable", "term", "estimate",
       "std_error", "statistic", "p_value", "n_input", "n_complete",
       "n_used", "n_missing_dropped", "n_estimator_dropped", "n_dropped",
@@ -177,6 +177,34 @@ testthat::test_that("config rejects unknown, missing, and malformed fields", {
 
 testthat::test_that("variable names, duplicates, and overlaps are rejected", {
   valid <- .regression_config_test_lines(include_groups = TRUE)
+
+  for (field in c(
+    "outcome_variable", "explanatory_variables", "control_variables",
+    "fixed_effects", "cluster_variables", "estimation_group_variables"
+  )) {
+    audit_role <- valid
+    if (field == "outcome_variable") {
+      audit_role <- sub(
+        "outcome_variable: pick_top",
+        "outcome_variable: audit_id",
+        audit_role
+      )
+    } else if (field == "control_variables") {
+      audit_role <- sub(
+        "control_variables: \\[\\]",
+        "control_variables:\n  - audit_id",
+        audit_role
+      )
+    } else {
+      header <- match(paste0(field, ":"), audit_role)
+      audit_role[[header + 1L]] <- "  - audit_id"
+    }
+    testthat::expect_error(
+      load_regression_config(.write_regression_config_test(audit_role)),
+      paste0("audit_id.*provenance.*", field),
+      info = field
+    )
+  }
 
   invalid_name <- .write_regression_config_test(
     sub("outcome_variable: pick_top", "outcome_variable: 'pick + top'", valid)

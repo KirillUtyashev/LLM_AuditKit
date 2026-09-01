@@ -13,6 +13,7 @@ PREPARATION_LONG_KEY_COLUMNS <- c(
 
 PREPARATION_OUTPUT_CORE_COLUMNS <- c(
   "source_file",
+  "audit_id",
   PREPARATION_LONG_KEY_COLUMNS,
   "candidate_index",
   "candidate_count",
@@ -476,6 +477,7 @@ PREPARATION_OUTPUT_CORE_COLUMNS <- c(
 }
 
 .preparation_finalize_output <- function(data, config, report) {
+  data$audit_id <- rep(config$audit_id, nrow(data))
   data$preparation_top_share <- rep(config$top_share, nrow(data))
   data$preparation_probability_threshold <- rep(
     config$probability_threshold,

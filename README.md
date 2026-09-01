@@ -60,6 +60,10 @@ Prepare raw experiment CSVs with:
 Rscript scripts/prepare_regression_data.R --config path/to/preparation.yaml
 ```
 
+Each preparation config supplies one stable `audit_id`. All configured raw
+files are treated as shards of that audit, and the identifier is retained in
+the regression-ready data and every later coefficient result.
+
 After inspecting and, if desired, slicing that regression-ready CSV, estimate
 the configured model with:
 
@@ -98,7 +102,10 @@ The loader activates the repository's locked `renv` environment. In the plot
 configuration, `outcome_variable` selects the dependent variable and `term`
 selects the independent-variable coefficient shown on the y-axis. Result CSV
 paths can be passed in place of `results`, and compatible result objects from
-separate calls can be supplied as a list for explicitly labeled panels.
+separate audit calls can be supplied as a list with `panel_variable =
+"audit_id"`. For paper-style city/year figures, use `series_variable = "city"`
+and `period_variable = "year"`; distinct audit panels may retain distinct
+`dataset_id` values.
 
 Render a paper-style PNG from saved numerical results with:
 

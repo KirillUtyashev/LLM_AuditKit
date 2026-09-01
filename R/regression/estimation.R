@@ -1,7 +1,7 @@
 REGRESSION_CONFIDENCE_LEVELS <- c(0.90, 0.95, 0.99)
 REGRESSION_ESTIMATOR <- "fixest::feols"
 REGRESSION_INFERENCE_CONTRACT_ID <- "fixest_feols_ssc_v1"
-REGRESSION_RESULTS_OBJECT_CONTRACT_ID <- "llm_auditkit_regression_results_v1"
+REGRESSION_RESULTS_OBJECT_CONTRACT_ID <- "llm_auditkit_regression_results_v2"
 
 .regression_results_abort <- function(format, ...) {
   stop(
@@ -108,6 +108,7 @@ REGRESSION_RESULTS_OBJECT_CONTRACT_ID <- "llm_auditkit_regression_results_v1"
 
   string_columns <- c(
     "dataset_id",
+    "audit_id",
     "model_id",
     "estimator",
     "estimator_version",
@@ -138,6 +139,7 @@ REGRESSION_RESULTS_OBJECT_CONTRACT_ID <- "llm_auditkit_regression_results_v1"
   }
   required_nonempty <- c(
     "dataset_id",
+    "audit_id",
     "model_id",
     "estimator",
     "estimator_version",
@@ -158,6 +160,7 @@ REGRESSION_RESULTS_OBJECT_CONTRACT_ID <- "llm_auditkit_regression_results_v1"
     results,
     c(
       "dataset_id",
+      "audit_id",
       "model_id",
       "estimator",
       "estimator_version",
@@ -740,6 +743,7 @@ REGRESSION_RESULTS_OBJECT_CONTRACT_ID <- "llm_auditkit_regression_results_v1"
     for (level_index in seq_along(REGRESSION_CONFIDENCE_LEVELS)) {
       fit_rows[[row_index]] <- data.frame(
         dataset_id = config$dataset_id,
+        audit_id = data$audit_id[[1L]],
         model_id = config$model_id,
         estimator = REGRESSION_ESTIMATOR,
         estimator_version = as.character(

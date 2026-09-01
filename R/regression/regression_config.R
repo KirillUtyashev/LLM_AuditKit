@@ -13,6 +13,7 @@ REGRESSION_CONFIG_KEYS <- c(
 
 REGRESSION_RESULT_CORE_COLUMNS <- c(
   "dataset_id",
+  "audit_id",
   "model_id",
   "estimator",
   "estimator_version",
@@ -352,6 +353,19 @@ load_regression_config <- function(config_path) {
       variable_fields[[field]],
       field,
       config_path
+    )
+  }
+
+  audit_roles <- vapply(
+    variable_fields,
+    function(values) "audit_id" %in% values,
+    logical(1)
+  )
+  if (any(audit_roles)) {
+    .regression_config_abort(
+      config_path,
+      "'audit_id' is provenance and cannot be configured in '%s'.",
+      names(audit_roles)[which(audit_roles)[[1L]]]
     )
   }
 

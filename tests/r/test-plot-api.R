@@ -3,7 +3,7 @@
     term = "black",
     period_variable = "period",
     outcome_variable = "pick_top",
-    panel_variable = "model_config_id"
+    panel_variable = "audit_id"
   )
   changes <- list(...)
   if (length(changes) > 0L) {
@@ -39,7 +39,7 @@
     "term: black",
     "outcome_variable: pick_top",
     "period_variable: period",
-    "panel_variable: model_config_id"
+    "panel_variable: audit_id"
   ), path)
   path
 }
@@ -61,9 +61,11 @@ testthat::test_that("in-memory tables and equivalent CSV inputs prepare identica
     render_config$resolved_results_paths,
     .plot_api_config()
   )
-  pieces <- split(results, results$model_config_id)
+  pieces <- split(results, results$audit_id)
+  pieces <- pieces[c("audit_d", "audit_b", "audit_a", "audit_c")]
+  names(pieces) <- c("unrelated_one", "unrelated_two", "unrelated_three", "unrelated_four")
   from_list <- prepare_regression_plot_data(
-    unname(pieces[c("model_d", "model_b", "model_a", "model_c")]),
+    pieces,
     .plot_api_config()
   )
 
@@ -73,6 +75,128 @@ testthat::test_that("in-memory tables and equivalent CSV inputs prepare identica
   testthat::expect_identical(from_object$period_order, from_files$period_order)
   testthat::expect_identical(from_object$panel_order, from_files$panel_order)
   testthat::expect_identical(results, original)
+})
+
+testthat::test_that("separate audits plot as panels with city-year estimates", {
+  source <- .render_validate_result_file(
+    .render_read_csv(
+      regression_fixture("render_results_synthetic.csv"),
+      "synthetic multi-audit fixture"
+    ),
+    "synthetic multi-audit fixture"
+  )
+  cities <- c("Birmingham", "Boston", "Chicago")
+  audit_results <- lapply(split(source, source$audit_id), function(audit) {
+    city_results <- do.call(rbind, lapply(cities, function(city) {
+      rows <- audit
+      rows$city <- city
+      rows
+    }))
+    city_results$year <- city_results$period
+    city_results$estimation_group_variables <- "city|year"
+    city_results$model_config_id <- NULL
+    city_results$period <- NULL
+    city_results <- city_results[c(
+      REGRESSION_RESULT_CORE_COLUMNS,
+      "city",
+      "year"
+    )]
+    row.names(city_results) <- NULL
+    city_results
+  })
+  original <- unserialize(serialize(audit_results, NULL))
+  outcomes <- c(
+    audit_a = "pick_top",
+    audit_b = "pick_threshold",
+    audit_c = "pick_threshold",
+    audit_d = "pick_threshold"
+  )
+  config <- regression_plot_config(
+    term = "black",
+    period_variable = "year",
+    series_variable = "city",
+    panel_variable = "audit_id",
+    outcome_by_panel = outcomes,
+    series_order = cities,
+    panel_order = names(outcomes)
+  )
+
+  prepared <- prepare_regression_plot_data(audit_results, config)
+  directory <- tempfile("multi-audit-paths-")
+  dir.create(directory)
+  paths <- file.path(directory, paste0(names(audit_results), ".csv"))
+  for (index in seq_along(paths)) {
+    utils::write.table(
+      audit_results[[index]],
+      paths[[index]],
+      sep = ",",
+      row.names = FALSE,
+      quote = TRUE,
+      qmethod = "double",
+      na = ""
+    )
+  }
+  from_paths <- prepare_regression_plot_data(paths, config)
+
+  testthat::expect_identical(prepared$panel_order, names(outcomes))
+  testthat::expect_identical(prepared$series_order, cities)
+  testthat::expect_identical(nrow(prepared$data), 72L)
+  panel_counts <- table(prepared$data$.plot_panel)
+  testthat::expect_identical(names(panel_counts), names(outcomes))
+  testthat::expect_identical(as.integer(panel_counts), rep(18L, 4L))
+  testthat::expect_identical(
+    unique(prepared$data$outcome_variable),
+    c("pick_top", "pick_threshold")
+  )
+  testthat::expect_identical(from_paths$data, prepared$data)
+  for (audit_id in names(outcomes)) {
+    rows <- prepared$data$audit_id == audit_id
+    testthat::expect_identical(
+      unique(prepared$data$outcome_variable[rows]),
+      unname(outcomes[[audit_id]])
+    )
+    testthat::expect_length(unique(prepared$data$dataset_id[rows]), 1L)
+  }
+  testthat::expect_s3_class(
+    plot_regression_results(audit_results, config),
+    "patchwork"
+  )
+  testthat::expect_identical(audit_results, original)
+
+  missing_term <- audit_results
+  missing_term[["audit_d"]]$term <- "unavailable_term"
+  testthat::expect_error(
+    prepare_regression_plot_data(missing_term, config),
+    "term and confidence-level selection.*audit_id='audit_d'"
+  )
+
+  same_audit_sources <- list(
+    slice_a = audit_results[["audit_a"]],
+    slice_b = audit_results[["audit_a"]]
+  )
+  same_audit_sources$slice_b$dataset_id <- "second_dataset"
+  same_audit_sources$slice_b$term <- "unavailable_term"
+  dataset_config <- regression_plot_config(
+    term = "black",
+    outcome_variable = "pick_top",
+    period_variable = "year",
+    series_variable = "city",
+    panel_variable = "dataset_id",
+    series_order = cities
+  )
+  testthat::expect_error(
+    prepare_regression_plot_data(same_audit_sources, dataset_config),
+    "term and confidence-level selection.*audit_id='audit_a', dataset_id='second_dataset'"
+  )
+
+  mixed_dataset <- audit_results
+  changed <- mixed_dataset[["audit_a"]]$year == "1970" &
+    mixed_dataset[["audit_a"]]$city == "Birmingham"
+  mixed_dataset[["audit_a"]]$dataset_id[changed] <- "other_slice"
+  testthat::expect_error(
+    prepare_regression_plot_data(mixed_dataset, config),
+    "incompatible 'dataset_id' within panel 'audit_a'"
+  )
 })
 
 testthat::test_that("one-panel in-memory plots do not require a panel column role", {
@@ -119,7 +243,7 @@ testthat::test_that("outcome and coefficient selections are explicit in memory",
       combined_outcomes,
       .plot_api_config(outcome_variable = "missing")
     ),
-    "no rows match outcome_variable 'missing'"
+    "outcome selection.*audit_id='audit_a'"
   )
 
   second_term <- top
@@ -180,7 +304,7 @@ testthat::test_that("malformed in-memory sources and missing plot roles fail cle
 
   testthat::expect_error(
     prepare_regression_plot_data(results, .plot_api_config(term = "missing")),
-    "no rows match term 'missing'"
+    "term and confidence-level selection.*audit_id='audit_a'"
   )
   for (role in c("period_variable", "series_variable", "panel_variable")) {
     changes <- stats::setNames(list("missing"), role)

@@ -24,7 +24,7 @@
   }
   values <- c(
     output_path = "figure.png", term = "black", period_variable = "period",
-    panel_variable = "model_config_id", outcome_variable = "pick_top"
+    panel_variable = "audit_id", outcome_variable = "pick_top"
   )
   if ("outcome_by_panel" %in% names(settings)) {
     values <- values[names(values) != "outcome_variable"]
@@ -47,6 +47,10 @@ testthat::test_that("saved result loading preserves its public schema and values
   numeric <- c("estimate", "std_error", "statistic", "p_value", "conf_low", "conf_high")
   testthat::expect_equal(actual[numeric], source[numeric], tolerance = 1e-14)
   testthat::expect_identical(actual$period, as.character(source$period))
+  testthat::expect_setequal(
+    unique(actual$dataset_id),
+    paste0("synthetic_render_", letters[1:4])
+  )
   testthat::expect_identical(actual$cluster_variables, rep("", 72L))
   testthat::expect_identical(actual$cluster_counts, rep("", 72L))
   testthat::expect_type(actual$n_used, "integer")
@@ -76,7 +80,7 @@ testthat::test_that("plot preparation uses the exact selected numerical results"
     for (field in c("estimate", "std_error", "p_value", "conf_low", "conf_high")) {
       testthat::expect_equal(prepared$data[[field]], expected[[field]], tolerance = 1e-14)
     }
-    testthat::expect_identical(prepared$panel_order, paste0("model_", letters[1:4]))
+    testthat::expect_identical(prepared$panel_order, paste0("audit_", letters[1:4]))
     testthat::expect_identical(prepared$period_order, as.character(seq(1970, 2020, 10)))
     testthat::expect_equal(prepared$data$.plot_x, rep(seq(1970, 2020, 10), 4))
     testthat::expect_identical(prepared$series_order, character())
@@ -95,27 +99,29 @@ testthat::test_that("plot preparation uses the exact selected numerical results"
 
 testthat::test_that("mixed panel outcomes must be selected explicitly and completely", {
   data <- .render_data_test_fixture(mixed_outcomes = TRUE)
-  scalar <- prepare_regression_plot_data(.render_data_test_config(data))
-  testthat::expect_identical(scalar$data$outcome_variable, rep("pick_top", 6L))
-  testthat::expect_identical(scalar$panel_order, "model_a")
+  testthat::expect_error(
+    prepare_regression_plot_data(.render_data_test_config(data)),
+    "outcome selection.*audit_id='audit_b'"
+  )
   testthat::expect_error(prepare_regression_plot_data(.render_data_test_config(
-    data, c(outcome_variable = "missing"))), "no rows match outcome_variable 'missing'")
-  mapping <- "{model_a: pick_top, model_b: pick_threshold, model_c: pick_threshold, model_d: pick_threshold}"
+    data, c(outcome_variable = "missing"))), "outcome selection.*audit_id='audit_a'")
+  mapping <- "{audit_a: pick_top, audit_b: pick_threshold, audit_c: pick_threshold, audit_d: pick_threshold}"
   prepared <- prepare_regression_plot_data(.render_data_test_config(
     data, c(outcome_by_panel = mapping)
   ))
   testthat::expect_identical(prepared$data$outcome_variable,
     rep(c("pick_top", rep("pick_threshold", 3)), each = 6))
   for (map in c(
-    "{model_a: pick_top}",
-    "{model_a: pick_top, model_b: pick_threshold, model_c: pick_threshold, model_d: pick_threshold, unknown: pick_top}"
+    "{audit_a: pick_top}",
+    "{audit_a: pick_top, audit_b: pick_threshold, audit_c: pick_threshold, audit_d: pick_threshold, unknown: pick_top}"
   )) {
     testthat::expect_error(prepare_regression_plot_data(.render_data_test_config(
       data, c(outcome_by_panel = map))), "cover every observed panel exactly")
   }
   testthat::expect_error(prepare_regression_plot_data(.render_data_test_config(
-    data, c(outcome_by_panel = sub("model_a: pick_top", "model_a: missing", mapping)))),
-    "selection has no saved result rows")
+    data, c(outcome_by_panel = sub("audit_a: pick_top", "audit_a: missing", mapping)))),
+    "outcome selection.*audit_id='audit_a'"
+  )
 
   # An extra, unused outcome is filtered without altering panel coverage.
   extra <- data
@@ -128,6 +134,18 @@ testthat::test_that("mixed panel outcomes must be selected explicitly and comple
   testthat::expect_equal(selected$data, prepared$data)
 })
 
+testthat::test_that("interval selection cannot silently drop an audit dataset", {
+  data <- .render_data_test_fixture()
+  data <- data[!(data$audit_id == "audit_d" & data$confidence_level == .95), ]
+  testthat::expect_error(
+    prepare_regression_plot_data(.render_data_test_config(data)),
+    paste0(
+      "term and confidence-level selection.*",
+      "audit_id='audit_d', dataset_id='synthetic_render_d'"
+    )
+  )
+})
+
 testthat::test_that("orders are deterministic complete permutations rather than filters", {
   data <- .render_data_test_fixture()
   data$period <- rep(rep(c("2", "10", "3", "20", "1", "30"), each = 3), 4)
@@ -136,13 +154,13 @@ testthat::test_that("orders are deterministic complete permutations rather than 
   testthat::expect_equal(natural$period_positions, c(1, 2, 3, 10, 20, 30))
   order <- "['30', '20', '10', '3', '2', '1']"
   custom <- prepare_regression_plot_data(.render_data_test_config(data, c(
-    period_order = order, panel_order = "[model_d, model_b, model_a, model_c]",
-    panel_labels = "{model_a: Same title, model_b: Same title}"
+    period_order = order, panel_order = "[audit_d, audit_b, audit_a, audit_c]",
+    panel_labels = "{audit_a: Same title, audit_b: Same title}"
   )))
   testthat::expect_identical(custom$period_order, c("30", "20", "10", "3", "2", "1"))
   testthat::expect_equal(custom$period_positions, seq(10, 60, 10))
-  testthat::expect_identical(custom$panel_order, c("model_d", "model_b", "model_a", "model_c"))
-  testthat::expect_identical(unname(custom$panel_labels[c("model_a", "model_b")]),
+  testthat::expect_identical(custom$panel_order, c("audit_d", "audit_b", "audit_a", "audit_c"))
+  testthat::expect_identical(unname(custom$panel_labels[c("audit_a", "audit_b")]),
     rep("Same title", 2))
   testthat::expect_identical(nrow(custom$data), 24L)
   for (field in c("period_order", "panel_order")) {
@@ -219,7 +237,7 @@ testthat::test_that("plot keys are tuple-safe and independent of model identifie
 testthat::test_that("specifications may differ across panels but not within one panel", {
   data <- .render_data_test_fixture()
   global_changes <- list(
-    dataset_id = "other_dataset", estimator = "other_estimator",
+    estimator = "other_estimator",
     estimator_version = "2.0", inference_contract_id = "other_contract",
     preparation_top_share = .2, preparation_probability_threshold = .9,
     preparation_ranking_group_variables = "city",
@@ -237,6 +255,7 @@ testthat::test_that("specifications may differ across panels but not within one 
   }
 
   panel_changes <- list(
+    dataset_id = "other_dataset",
     explanatory_variables = "black|high", control_variables = "other_control",
     fixed_effects = "other_fe"
   )
@@ -245,9 +264,22 @@ testthat::test_that("specifications may differ across panels but not within one 
     changed[model_b & changed$period == 1970, field] <- panel_changes[[field]]
     testthat::expect_error(
       prepare_regression_plot_data(.render_data_test_config(changed)),
-      paste0("incompatible '", field, "'.*within panel 'model_b'")
+      paste0("incompatible '", field, "'.*within panel 'audit_b'")
     )
   }
+
+  mixed_audit <- data
+  mixed_audit[
+    model_b & mixed_audit$period == 1970,
+    "audit_id"
+  ] <- "other_audit"
+  testthat::expect_error(
+    prepare_regression_plot_data(.render_data_test_config(
+      mixed_audit,
+      c(panel_variable = "model_config_id")
+    )),
+    "incompatible 'audit_id'.*within panel 'model_b'"
+  )
 
   separate_specification <- data
   separate_specification$model_id[model_b] <- "other_model"
@@ -288,7 +320,7 @@ testthat::test_that("specifications may differ across panels but not within one 
   ] <- "year=6"
   testthat::expect_error(
     prepare_regression_plot_data(.render_data_test_config(clustered)),
-    "incompatible 'cluster_variables'.*within panel 'model_b'"
+    "incompatible 'cluster_variables'.*within panel 'audit_b'"
   )
 })
 
@@ -347,11 +379,15 @@ testthat::test_that("result schema and missing selections fail before plotting",
   for (field in c("term", "period_variable", "panel_variable", "series_variable")) {
     testthat::expect_error(prepare_regression_plot_data(.render_data_test_config(
       data, stats::setNames("missing", field))),
-      if (field == "term") "no rows match term" else "missing configured column")
+      if (field == "term") {
+        "term and confidence-level selection.*audit_id='audit_a'"
+      } else {
+        "missing configured column"
+      })
   }
   sliced <- data[data$confidence_level == .9, ]
   testthat::expect_error(prepare_regression_plot_data(.render_data_test_config(sliced)),
-    "no rows match term.*confidence level")
+    "term and confidence-level selection.*audit_id='audit_a'")
   empty <- data
   empty$period[[1L]] <- ""
   testthat::expect_error(load_regression_results(.render_data_test_config(empty)),
@@ -370,7 +406,8 @@ testthat::test_that("CSV and numeric integrity are checked without fitting a mod
     n_input = "3.5", n_used = "0", n_missing_dropped = "0",
     n_estimator_dropped = "0", n_dropped = "0",
     preparation_top_share = "0", preparation_probability_threshold = "1.1",
-    estimator = "", dataset_id = " ", explanatory_variables = "black|",
+    estimator = "", dataset_id = " ", audit_id = " ",
+    explanatory_variables = "black|",
     control_variables = "black|black", cluster_counts = "position_fe=20"
   )
   for (field in names(bad_values)) {

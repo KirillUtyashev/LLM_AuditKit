@@ -6,19 +6,19 @@ output_path: ../../outputs/regression/synthetic_paper_style.png
 term: black
 confidence_level: 0.95
 period_variable: period
-panel_variable: model_config_id
+panel_variable: audit_id
 outcome_by_panel:
-  model_a: pick_top
-  model_b: pick_threshold
-  model_c: pick_threshold
-  model_d: pick_threshold
+  audit_a: pick_top
+  audit_b: pick_threshold
+  audit_c: pick_threshold
+  audit_d: pick_threshold
 period_order: [1970, 1980, 1990, 2000, 2010, 2020]
-panel_order: [model_a, model_b, model_c, model_d]
+panel_order: [audit_a, audit_b, audit_c, audit_d]
 panel_labels:
-  model_a: 'Model A (synthetic; top-share outcome)'
-  model_b: 'Model B (synthetic; probability-threshold outcome)'
-  model_c: 'Model C (synthetic; probability-threshold outcome)'
-  model_d: 'Model D (synthetic; probability-threshold outcome)'
+  audit_a: 'Panel A: Model A (synthetic; top-share outcome)'
+  audit_b: 'Panel B: Model B (synthetic; probability-threshold outcome)'
+  audit_c: 'Panel C: Model C (synthetic; probability-threshold outcome)'
+  audit_d: 'Panel D: Model D (synthetic; probability-threshold outcome)'
 x_label: Period
 y_label: Black coefficient
 # Remaining fields use the documented paper-style defaults, including

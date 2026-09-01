@@ -1,6 +1,7 @@
 PREPARATION_CONFIG_KEYS <- c(
   "input_paths",
   "output_path",
+  "audit_id",
   "top_share",
   "probability_threshold",
   "ranking_group_variables",
@@ -10,6 +11,7 @@ PREPARATION_CONFIG_KEYS <- c(
 
 PREPARATION_RESERVED_COLUMNS <- c(
   "source_file",
+  "audit_id",
   "scenario_id",
   "persona_id",
   "model_config_id",
@@ -326,7 +328,10 @@ load_preparation_config <- function(config_path) {
     )
   }
 
-  missing_required <- setdiff(c("input_paths", "output_path"), names(config))
+  missing_required <- setdiff(
+    c("input_paths", "output_path", "audit_id"),
+    names(config)
+  )
   if (length(missing_required) > 0L) {
     .preparation_abort(
       config_path,
@@ -343,6 +348,11 @@ load_preparation_config <- function(config_path) {
   output_path <- .preparation_scalar_string(
     config$output_path,
     "output_path",
+    config_path
+  )
+  audit_id <- .preparation_scalar_string(
+    config$audit_id,
+    "audit_id",
     config_path
   )
   top_share <- if ("top_share" %in% names(config)) {
@@ -518,6 +528,7 @@ load_preparation_config <- function(config_path) {
       resolved_input_paths = unname(resolved_input_paths),
       output_path = unname(output_label),
       resolved_output_path = unname(resolved_output_path),
+      audit_id = audit_id,
       top_share = top_share,
       probability_threshold = probability_threshold,
       ranking_group_variables = ranking_group_variables,

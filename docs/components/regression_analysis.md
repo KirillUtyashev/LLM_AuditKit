@@ -146,6 +146,7 @@ input_paths:
   - data/raw/experiment_2010.csv
   - data/raw/experiment_2020.csv
 output_path: outputs/regression/regression_ready.csv
+audit_id: historian_gemini_1_5_flash
 top_share: 0.08
 probability_threshold: 0.99
 ranking_group_variables:
@@ -163,6 +164,7 @@ candidate_covariates:
 | --- | --- | --- |
 | `input_paths` | yes | Nonempty, ordered list of distinct readable CSV paths. |
 | `output_path` | yes | One CSV path distinct from every input path. |
+| `audit_id` | yes | Nonempty stable identity for the LLM audit represented by all configured inputs. |
 | `top_share` | no | Fraction in `(0, 1]`; default `0.08`. |
 | `probability_threshold` | no | Probability in `(0, 1]`; default `0.99`. |
 | `ranking_group_variables` | no | Nonempty list of distinct pre-ranking fields: `source_file`, `scenario_id`, `persona_id`, `model_config_id`, `candidate_id`, `candidate_index`, `candidate_count`, `city`, `year`, or configured covariates; default `[city, year]`. |
@@ -186,7 +188,10 @@ CSV boundary.
 Configured inputs are combined deterministically. `source_file` stores the
 lexically normalized path string from `input_paths`, using `/` separators and
 remaining relative when the configured path is relative. Inputs must expose
-compatible candidate families. Rows whose `result_status` is not `completed`
+compatible candidate families. Every prepared row is stamped with the scalar
+`audit_id`; multiple input paths in one preparation config are therefore
+treated as shards of one audit, not as separate audits. Separate audits use
+separate preparation calls. Rows whose `result_status` is not `completed`
 are excluded with a reported count; zero remaining rows is an error.
 
 Every configured scenario field and candidate family header must exist in every
@@ -253,6 +258,7 @@ Its required core columns are:
 | Column | Type | Nullability and meaning |
 | --- | --- | --- |
 | `source_file` | string | Non-null normalized configured-path provenance. |
+| `audit_id` | string | Non-null preparation-supplied audit identity, constant throughout the prepared dataset. |
 | `scenario_id` | string | Non-null stable scenario identity. |
 | `persona_id` | string | Non-null stable persona identity. |
 | `model_config_id` | string | Non-null stable model-configuration identity. |
@@ -282,7 +288,11 @@ Researchers perform any sample selection before invoking it and save that slice
 as a separate dataset. The slice must retain every core and preparation
 provenance column. Each repeated preparation setting must have exactly one
 nonmissing value in the supplied slice; mixing differently prepared data is an
-error.
+error. `audit_id` must likewise be nonempty and constant. A single estimator
+invocation never pools separate audits; estimate each audit separately and
+combine their tidy results only at the rendering stage. Because every
+estimator invocation writes the fixed filename `regression_results.csv`, use a
+distinct `output_directory` for each persisted audit or specification.
 
 ### `RegressionConfig`
 
@@ -329,7 +339,9 @@ Variable-name fields contain literal CSV column names matching
 `[A-Za-z][A-Za-z0-9_]*` that are also syntactically valid R names, not formula
 fragments or reserved words. The outcome cannot also appear on the right-hand
 side, and explanatory and control lists cannot overlap. A fixed-effect
-variable may also be a clustering variable. Categorical predictors
+variable may also be a clustering variable. `audit_id` is provenance and
+cannot be configured as an outcome, right-hand-side variable, fixed effect,
+cluster, or estimation group. Categorical predictors
 must be pre-encoded as one or more numeric/logical indicator columns in the
 inspected input, and each indicator must be listed explicitly. Indicator
 interactions and other transformations must likewise be precomputed. Character
@@ -407,12 +419,12 @@ long schema: one row per model fit, estimable coefficient, and confidence
 level. With two explanatory variables, four observed estimation groups, and
 three confidence levels, the output therefore contains 24 rows for those
 explanatory coefficients (plus any estimated controls or intercept). Its exact
-ordered prefix contains the 32 stable columns below, followed by the configured
+ordered prefix contains the 33 stable columns below, followed by the configured
 estimation-group columns:
 
 | Column | Meaning |
 | --- | --- |
-| `dataset_id`, `model_id` | Researcher-defined data and specification identities. |
+| `dataset_id`, `audit_id`, `model_id` | Researcher-defined inspected-data identity, preparation-supplied audit identity, and regression-specification identity. |
 | `estimator`, `estimator_version`, `inference_contract_id` | `fixest::feols`, `0.14.2` under the current lock, and `fixest_feols_ssc_v1`. |
 | `outcome_variable`, `term` | Dependent variable and estimated coefficient name. |
 | `estimate`, `std_error`, `statistic`, `p_value` | Numerical coefficient statistics from the configured covariance estimator. |
@@ -427,6 +439,10 @@ estimation-group columns:
 Configured estimation-group columns are appended using their original column
 names and scalar group values. Every stable column named in the table above is
 reserved; an estimation-group name that collides with one is rejected.
+The in-memory result contract is `llm_auditkit_regression_results_v2`; version
+2 adds required audit provenance. Earlier prepared/result CSVs must be
+regenerated from an audit-labeled preparation config or deliberately migrated
+with the correct nonempty `audit_id` rather than receiving an inferred value.
 Configuration variable names cannot contain the `|` or `=` metadata separators
 under the variable-name rule. Result rows are ordered by group values,
 coefficient order, and confidence level. The output contains all information
@@ -445,15 +461,19 @@ returns the same object.
 Rendering never reads regression-ready data and never re-estimates a model.
 The interactive interface accepts one tidy result table, a nonempty list of
 tables, or one or more result CSV paths and returns a composable `patchwork`
-object. The independent file interface reads configured CSVs and atomically
-writes one PNG.
+object. List element names, list order, and file paths are diagnostic input
+labels only: saved `audit_id` and `dataset_id` columns determine source and
+panel identity. The independent file interface reads configured CSVs and
+atomically writes one PNG.
 
-Selected rows must agree globally on `dataset_id`, `term`,
-`estimation_group_variables`, `estimator`, `estimator_version`,
-`inference_contract_id`, and every preparation-provenance field. Within each
-explicit panel they must also agree on the explanatory-variable, control,
-fixed-effect, cluster, and covariance specifications. Those model
-specifications may differ across panels, which lets researchers combine
+Selected rows must agree globally on `term`, `estimation_group_variables`,
+`estimator`, `estimator_version`, `inference_contract_id`, and every repeated
+`preparation_*` setting field. Within each explicit panel they must agree on
+`audit_id`, `dataset_id`, and the explanatory-variable, control, fixed-effect,
+cluster, and covariance specifications. Audit and dataset identities may
+differ across panels, which allows separately prepared audit datasets to
+retain honest provenance in one figure. Those model specifications may differ
+across panels, which lets researchers combine
 separately run regressions without silently changing a specification within a
 panel. The researcher-defined `model_id` may differ, but it never waives the
 substantive checks or permits duplicate plotting keys. When no panel variable
@@ -485,33 +505,38 @@ results_paths:
 output_path: outputs/regression/paper_black_coefficient.png
 term: black
 confidence_level: 0.95
-period_variable: period
-series_variable: null
-panel_variable: model_config_id
+period_variable: year
+series_variable: city
+panel_variable: audit_id
 outcome_by_panel:
-  gemini-1.5-flash: pick_top
-  gpt-4o: pick_threshold
-  grok-2: pick_threshold
-  llama-3.1-405b: pick_threshold
+  historian_gemini_1_5_flash: pick_top
+  historian_gpt_4o: pick_threshold
+  historian_grok_2: pick_threshold
+  historian_llama_3_1_405b: pick_threshold
 period_order:
+  - 1950
+  - 1960
   - 1970
   - 1980
   - 1990
   - 2000
   - 2010
   - 2020
-series_order: []
+series_order:
+  - Birmingham
+  - Boston
+  - Chicago
 panel_order:
-  - gemini-1.5-flash
-  - gpt-4o
-  - grok-2
-  - llama-3.1-405b
+  - historian_gemini_1_5_flash
+  - historian_gpt_4o
+  - historian_grok_2
+  - historian_llama_3_1_405b
 panel_labels:
-  gemini-1.5-flash: "Panel A: Gemini 1.5 Flash"
-  gpt-4o: "Panel B: GPT-4o"
-  grok-2: "Panel C: Grok-2"
-  llama-3.1-405b: "Panel D: Llama 3.1 405B"
-x_label: Period
+  historian_gemini_1_5_flash: "Panel A: Gemini 1.5 Flash"
+  historian_gpt_4o: "Panel B: GPT-4o"
+  historian_grok_2: "Panel C: Grok-2"
+  historian_llama_3_1_405b: "Panel D: Llama 3.1 405B"
+x_label: Year
 y_label: Black coefficient estimate
 y_limits:
   - -0.3
@@ -560,6 +585,12 @@ required. A scalar outcome applies to every panel. A nonempty map filters each
 panel to its mapped outcome and permits no additional outcome for that panel.
 With `panel_variable: null`, panel order and labels must be empty and the single
 panel title is the selected outcome.
+
+Term, confidence-level, and outcome selection must retain at least one row from
+every supplied `(audit_id, dataset_id)` source. A selection that would silently
+drop an entire audit or dataset is an error naming both identities; researchers
+intentionally plotting a subset must pass an explicitly inspected result slice
+instead.
 
 A nonempty order list must contain every distinct selected value exactly once;
 unknown, duplicate, or omitted values are errors. Orders never filter data. To
@@ -668,13 +699,15 @@ different term from the same multi-variable regression needs only a new plot
 configuration.
 
 `plot_regression_results()` also accepts a nonempty list of result tables or a
-character vector of result CSV paths. To put separately run specifications in
-different panels, give each call a distinct `model_id`, use
-`panel_variable = "model_id"`, and supply clear panel labels. Dataset,
-preparation, estimator, inference, and estimation-group metadata must still
-match globally; formula and covariance specifications may differ only across
-explicit panels. Use `outcome_by_panel` instead of `outcome_variable` when the
-panels have different dependent variables.
+character vector of result CSV paths. For separate LLM audits, keep each
+preparation-supplied `audit_id`, use `panel_variable = "audit_id"`, and map
+`series_variable = "city"` and `period_variable = "year"` when the estimator
+used `estimation_group_variables: [city, year]`. Each audit panel may retain a
+different `dataset_id`; both identities must remain constant within that
+panel. Preparation, estimator, inference, and estimation-group metadata still
+match globally, while formula and covariance specifications may differ only
+across explicit panels. Use `outcome_by_panel` instead of `outcome_variable`
+when the panels have different dependent variables.
 
 Run the [public synthetic rendering example](../../examples/regression/README.md)
 without preparation or estimation:
