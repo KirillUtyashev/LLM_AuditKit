@@ -118,6 +118,13 @@ For every incomplete combination of scenario, persona, and configured model, the
   applicant and an optional comment;
 - the job key in generic metadata.
 
+Prompt construction is deterministic. It presents the job posting, then configured
+context values in `context_columns` declaration order, then `Applicant 1` through
+`Applicant N` in `resume_columns` order, followed by the fixed applicant-selection
+instruction. The persona description is passed unchanged as the ordinary system
+prompt; experiment execution does not prepend or replace it with package-specific
+system text.
+
 The shared inference adapter maps the generic dictionary response format to EDSL's
 standard `QuestionDict`. EDSL renders and validates the structured response. The runner
 then performs domain validation, converts the ordered applicant answers to `0` or `1`,
