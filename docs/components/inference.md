@@ -236,6 +236,7 @@ Each `InferenceResult` contains:
 - structured content as a JSON-compatible dictionary when requested;
 - an optional structured-response comment;
 - normalized emitted-token log probabilities when returned by the provider;
+- the effective rendered prompt when available from execution;
 - caller metadata copied from the request;
 - terminal error information as `InferenceError | None`.
 
@@ -244,8 +245,10 @@ structured content. For dictionary requests, a successful result retains the gen
 string for auditability and also contains the validated generic dictionary and optional
 comment returned through EDSL. Token log probabilities are supplemental normalized
 data and may be absent when they were not requested or the provider does not supply
-them. A failed result has no successful content and an `InferenceError` containing a
-stable error type and human-readable message.
+them. The effective rendered prompt uses the same generic `RenderedPrompt` type as
+preview and lets calling stages persist the prompts actually rendered by EDSL without
+retaining an EDSL result object. A failed result has no successful content and an
+`InferenceError` containing a stable error type and human-readable message.
 
 EDSL performs its configured retry behavior before the adapter reports a terminal request failure. Retryability and attempt scheduling are therefore not represented or reimplemented by LLM AuditKit.
 

@@ -7,11 +7,13 @@ import math
 import pytest
 
 from llm_auditkit.inference import (
+    DictResponseFormat,
     InferenceConfig,
     InferenceConfigurationError,
     InferenceRequest,
     InferenceRequestValidationError,
     ModelConfig,
+    ResponseField,
 )
 from llm_auditkit.inference.validation import (
     validate_inference_config,
@@ -149,3 +151,82 @@ def test_empty_explicit_system_prompt_is_valid() -> None:
 def test_request_metadata_must_be_a_string_keyed_dictionary(metadata: object) -> None:
     with pytest.raises(InferenceRequestValidationError, match="metadata"):
         validate_inference_requests([_request(metadata=metadata)], _config())
+
+
+def test_dictionary_response_format_is_valid() -> None:
+    validate_inference_requests(
+        [
+            _request(
+                response_format=DictResponseFormat(
+                    fields=[
+                        ResponseField(
+                            name="decision",
+                            value_type="string",
+                            description="Yes or No",
+                        )
+                    ],
+                    include_comment=False,
+                )
+            )
+        ],
+        _config(),
+    )
+
+
+@pytest.mark.parametrize(
+    ("response_format", "message"),
+    [
+        (object(), "DictResponseFormat"),
+        (DictResponseFormat(fields=[]), "non-empty"),
+        (DictResponseFormat(fields=[object()]), "ResponseField"),
+        (
+            DictResponseFormat(
+                fields=[ResponseField(" ", "string", "Yes or No")]
+            ),
+            "name",
+        ),
+        (
+            DictResponseFormat(
+                fields=[
+                    ResponseField("decision", "string", "Yes or No"),
+                    ResponseField("decision", "string", "Yes or No"),
+                ]
+            ),
+            "duplicate",
+        ),
+        (
+            DictResponseFormat(
+                fields=[ResponseField("decision", "date", "Yes or No")]
+            ),
+            "unsupported",
+        ),
+        (
+            DictResponseFormat(
+                fields=[ResponseField("decision", ["string"], "Yes or No")]
+            ),
+            "unsupported",
+        ),
+        (
+            DictResponseFormat(
+                fields=[ResponseField("decision", "string", " ")]
+            ),
+            "description",
+        ),
+        (
+            DictResponseFormat(
+                fields=[ResponseField("decision", "string", "Yes or No")],
+                include_comment=1,
+            ),
+            "include_comment",
+        ),
+    ],
+)
+def test_invalid_response_formats_are_rejected(
+    response_format: object,
+    message: str,
+) -> None:
+    with pytest.raises(InferenceRequestValidationError, match=message):
+        validate_inference_requests(
+            [_request(response_format=response_format)],
+            _config(),
+        )

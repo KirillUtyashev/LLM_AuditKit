@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import math
 from collections.abc import AsyncIterator, Iterator, Mapping, Sequence
 from time import perf_counter
 
@@ -17,6 +18,7 @@ from .models import (
     InferenceResult,
     ModelConfig,
     RenderedPrompt,
+    TokenLogprob,
 )
 from .validation import validate_inference_inputs
 
@@ -242,7 +244,7 @@ def _verify_results(
                 f"result for request {result.request_id!r} has model configuration "
                 f"ID {result.model_config_id!r}; expected {request.model_config_id!r}"
             )
-        _verify_terminal_outcome(result)
+        _verify_terminal_outcome(result, request)
 
         results_by_id[result.request_id] = InferenceResult(
             request_id=result.request_id,
@@ -250,12 +252,23 @@ def _verify_results(
             content=result.content,
             metadata=dict(request.metadata),
             error=result.error,
+            structured_content=(
+                None
+                if result.structured_content is None
+                else dict(result.structured_content)
+            ),
+            comment=result.comment,
+            token_logprobs=list(result.token_logprobs),
+            rendered_prompt=_copy_rendered_prompt(result.rendered_prompt),
         )
 
     return [results_by_id[request.request_id] for request in requests]
 
 
-def _verify_terminal_outcome(result: InferenceResult) -> None:
+def _verify_terminal_outcome(
+    result: InferenceResult,
+    request: InferenceRequest,
+) -> None:
     if result.content is not None and not isinstance(result.content, str):
         raise InferenceBatchError(
             f"result for request {result.request_id!r} content must be a string or None"
@@ -265,6 +278,15 @@ def _verify_terminal_outcome(result: InferenceResult) -> None:
             f"result for request {result.request_id!r} error must be an InferenceError "
             "or None"
         )
+    if result.structured_content is not None:
+        _verify_structured_content(result)
+    if result.comment is not None and not isinstance(result.comment, str):
+        raise InferenceBatchError(
+            f"result for request {result.request_id!r} comment must be a string or None"
+        )
+    _verify_token_logprobs(result)
+    if result.rendered_prompt is not None:
+        _verify_result_rendered_prompt(result)
     if result.content is None and result.error is None:
         raise InferenceBatchError(
             f"result for request {result.request_id!r} has neither content nor error"
@@ -272,6 +294,15 @@ def _verify_terminal_outcome(result: InferenceResult) -> None:
     if result.content is not None and result.error is not None:
         raise InferenceBatchError(
             f"result for request {result.request_id!r} has both content and error"
+        )
+    if result.error is not None and (
+        result.structured_content is not None
+        or result.comment is not None
+        or result.token_logprobs
+    ):
+        raise InferenceBatchError(
+            f"failed result for request {result.request_id!r} contains successful "
+            "response data"
         )
     if result.error is not None:
         if not isinstance(result.error.type, str) or not result.error.type.strip():
@@ -284,6 +315,142 @@ def _verify_terminal_outcome(result: InferenceResult) -> None:
                 f"result for request {result.request_id!r} error message must be "
                 "a non-empty string"
             )
+        return
+
+    if request.response_format is None:
+        if result.structured_content is not None or result.comment is not None:
+            raise InferenceBatchError(
+                f"free-text result for request {result.request_id!r} contains "
+                "structured response data"
+            )
+        return
+
+    if result.structured_content is None:
+        raise InferenceBatchError(
+            f"structured result for request {result.request_id!r} has no "
+            "structured content"
+        )
+    expected_fields = [field.name for field in request.response_format.fields]
+    if list(result.structured_content) != expected_fields:
+        raise InferenceBatchError(
+            f"structured result for request {result.request_id!r} fields do not "
+            "match its response format"
+        )
+    if not request.response_format.include_comment and result.comment is not None:
+        raise InferenceBatchError(
+            f"structured result for request {result.request_id!r} contains an "
+            "unexpected comment"
+        )
+
+
+def _verify_structured_content(result: InferenceResult) -> None:
+    if not isinstance(result.structured_content, dict):
+        raise InferenceBatchError(
+            f"result for request {result.request_id!r} structured_content must be "
+            "a dictionary or None"
+        )
+    for key, value in result.structured_content.items():
+        if not isinstance(key, str):
+            raise InferenceBatchError(
+                f"result for request {result.request_id!r} structured_content keys "
+                "must be strings"
+            )
+        if not _is_json_value(value, ancestors=set()):
+            raise InferenceBatchError(
+                f"result for request {result.request_id!r} structured_content must "
+                "contain only JSON-compatible values"
+            )
+
+
+def _verify_token_logprobs(result: InferenceResult) -> None:
+    if not isinstance(result.token_logprobs, list):
+        raise InferenceBatchError(
+            f"result for request {result.request_id!r} token_logprobs must be a list"
+        )
+    for index, token_logprob in enumerate(result.token_logprobs):
+        if not isinstance(token_logprob, TokenLogprob):
+            raise InferenceBatchError(
+                f"result for request {result.request_id!r} token logprob at position "
+                f"{index} must be a TokenLogprob"
+            )
+        if not isinstance(token_logprob.token, str):
+            raise InferenceBatchError(
+                f"result for request {result.request_id!r} token logprob at position "
+                f"{index} must contain a string token"
+            )
+        if (
+            isinstance(token_logprob.logprob, bool)
+            or not isinstance(token_logprob.logprob, (int, float))
+            or not math.isfinite(token_logprob.logprob)
+        ):
+            raise InferenceBatchError(
+                f"result for request {result.request_id!r} token logprob at position "
+                f"{index} must contain a finite number"
+            )
+
+
+def _verify_result_rendered_prompt(result: InferenceResult) -> None:
+    rendered_prompt = result.rendered_prompt
+    if not isinstance(rendered_prompt, RenderedPrompt):
+        raise InferenceBatchError(
+            f"result for request {result.request_id!r} rendered_prompt must be a "
+            "RenderedPrompt or None"
+        )
+    if rendered_prompt.request_id != result.request_id:
+        raise InferenceBatchError(
+            f"result for request {result.request_id!r} has a rendered prompt for "
+            f"request {rendered_prompt.request_id!r}"
+        )
+    if not isinstance(rendered_prompt.user_prompt, str) or not (
+        rendered_prompt.user_prompt.strip()
+    ):
+        raise InferenceBatchError(
+            f"result for request {result.request_id!r} rendered prompt must contain "
+            "a non-empty user prompt"
+        )
+    if rendered_prompt.system_prompt is not None and not isinstance(
+        rendered_prompt.system_prompt,
+        str,
+    ):
+        raise InferenceBatchError(
+            f"result for request {result.request_id!r} rendered system prompt must "
+            "be a string or None"
+        )
+
+
+def _copy_rendered_prompt(
+    rendered_prompt: RenderedPrompt | None,
+) -> RenderedPrompt | None:
+    if rendered_prompt is None:
+        return None
+    return RenderedPrompt(
+        request_id=rendered_prompt.request_id,
+        user_prompt=rendered_prompt.user_prompt,
+        system_prompt=rendered_prompt.system_prompt,
+    )
+
+
+def _is_json_value(value: object, *, ancestors: set[int]) -> bool:
+    if value is None or isinstance(value, (str, bool, int)):
+        return True
+    if isinstance(value, float):
+        return math.isfinite(value)
+    if isinstance(value, (list, dict)):
+        container_id = id(value)
+        if container_id in ancestors:
+            return False
+        ancestors.add(container_id)
+        try:
+            if isinstance(value, list):
+                return all(_is_json_value(item, ancestors=ancestors) for item in value)
+            return all(
+                isinstance(key, str)
+                and _is_json_value(item, ancestors=ancestors)
+                for key, item in value.items()
+            )
+        finally:
+            ancestors.remove(container_id)
+    return False
 
 
 def _is_result_sequence(value: object) -> bool:

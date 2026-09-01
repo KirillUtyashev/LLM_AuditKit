@@ -53,6 +53,7 @@ classDiagram
         +structured_content: Optional~Dict~
         +comment: Optional~str~
         +token_logprobs: List~TokenLogprob~
+        +rendered_prompt: Optional~RenderedPrompt~
         +metadata: Dict
         +error: Optional~InferenceError~
     }
@@ -96,6 +97,7 @@ classDiagram
     InferenceBatchPreview --> RenderedPrompt
     InferenceOrchestrator --> InferenceBatchResult : yields sequentially
     InferenceBatchResult --> InferenceResult
+    InferenceResult --> RenderedPrompt
     InferenceResult --> TokenLogprob
     InferenceResult --> InferenceError
     InferenceOrchestrator --> InferenceAdapter : delegates batches
