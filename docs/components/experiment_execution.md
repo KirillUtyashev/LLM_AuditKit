@@ -93,10 +93,10 @@ The shared `InferenceConfig` specifies:
 Each `ModelConfig` has a stable configuration ID, EDSL provider or service name, model name, and JSON-compatible provider-specific inference parameters. Credentials remain outside model configuration.
 
 Experiment execution requires token log probabilities. Every configured model must be
-configured to request them through its supported model parameters. A provider or model
-that does not return enough token log-probability data for a completed applicant
-decision produces a request-level experiment parsing error rather than silently writing
-an incomplete successful record.
+configured with `parameters["logprobs"] = True`; the EDSL adapter passes that parameter
+to the selected provider. A provider or model that does not return enough token
+log-probability data for a completed applicant decision produces a request-level
+experiment parsing error rather than silently writing an incomplete successful record.
 
 Experiment request cardinality is:
 

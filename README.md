@@ -4,8 +4,9 @@ LLM AuditKit is a Python package for auditing large language model behavior in h
 
 The shared inference package is implemented with validated deterministic batching,
 synchronous and asynchronous execution, prompt preview, normalized outcomes, and an
-Expected Parrot EDSL adapter. The five domain pipeline stages remain architecture-first
-and are documented for incremental implementation.
+Expected Parrot EDSL adapter. Experiment execution currently includes its configuration,
+DataFrame schema validation, and stable job-identity foundation; its runner and the
+other domain pipeline stages remain documented for incremental implementation.
 
 ## Quickstart
 
