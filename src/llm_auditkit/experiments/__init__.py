@@ -7,6 +7,7 @@ from .exceptions import (
     ExperimentIdentityError,
     ExperimentResponseParseError,
     ExperimentResultAssociationError,
+    ExperimentResultStoreError,
     ExperimentValidationError,
 )
 from .models import (
@@ -23,6 +24,7 @@ from .validation import (
     validate_experiment_dataset,
     validate_experiment_inputs,
 )
+from .store import ExperimentResultStore
 
 __all__ = [
     "ExperimentConfig",
@@ -36,6 +38,8 @@ __all__ = [
     "ExperimentOutputRecord",
     "ExperimentResponseParseError",
     "ExperimentResultAssociationError",
+    "ExperimentResultStore",
+    "ExperimentResultStoreError",
     "ExperimentValidationError",
     "Persona",
     "build_experiment_request_id",

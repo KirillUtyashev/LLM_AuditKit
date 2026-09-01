@@ -115,7 +115,7 @@ def _parse_successful_result(
     result: InferenceResult,
     resume_count: int,
 ) -> ExperimentOutcome:
-    if result.content is None:
+    if result.content is None or not result.content.strip():
         raise ExperimentResponseParseError("successful inference result has no content")
     if result.rendered_prompt is None:
         raise ExperimentResponseParseError(
@@ -220,13 +220,17 @@ def _validate_parse_inputs(
             "inference result cardinality does not match the planned experiment batch"
         )
     if not isinstance(personas, Mapping):
-        raise ExperimentResultAssociationError("personas must be a mapping by persona ID")
+        raise ExperimentResultAssociationError(
+            "personas must be a mapping by persona ID"
+        )
     if (
         isinstance(resume_count, bool)
         or not isinstance(resume_count, int)
         or resume_count < 1
     ):
-        raise ExperimentResultAssociationError("resume_count must be a positive integer")
+        raise ExperimentResultAssociationError(
+            "resume_count must be a positive integer"
+        )
 
     for key in expected_keys:
         persona = personas.get(key.persona_id)
@@ -253,7 +257,9 @@ def _validate_single_parse_inputs(
         or not isinstance(resume_count, int)
         or resume_count < 1
     ):
-        raise ExperimentResultAssociationError("resume_count must be a positive integer")
+        raise ExperimentResultAssociationError(
+            "resume_count must be a positive integer"
+        )
 
 
 def _is_sequence(value: object) -> bool:

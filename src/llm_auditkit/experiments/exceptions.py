@@ -29,3 +29,7 @@ class ExperimentResultAssociationError(ExperimentException):
 
 class ExperimentResponseParseError(ExperimentException):
     """Raised internally when one model response cannot become an experiment outcome."""
+
+
+class ExperimentResultStoreError(ExperimentException):
+    """Raised when experiment output cannot be validated or persisted safely."""

@@ -124,6 +124,7 @@ def test_terminal_inference_error_becomes_an_incomplete_record() -> None:
     ("changes", "message"),
     [
         ({"structured_content": None}, "no structured"),
+        ({"content": "  "}, "no content"),
         (
             {"structured_content": {"Applicant 1": "Yes", "Wrong": "No"}},
             "do not match",

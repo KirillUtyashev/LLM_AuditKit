@@ -76,8 +76,11 @@ classDiagram
     class ExperimentResultStore {
         -output_path: Path
         +initialize(dataset: DataFrame, config: ExperimentConfig) DataFrame
-        +save_batch(output_dataset: DataFrame, records: List~ExperimentOutputRecord~) void
-        +is_complete(output_dataset: DataFrame, key: ExperimentJobKey) bool
+        +apply_batch(output_dataset: DataFrame, dataset: DataFrame, config: ExperimentConfig, records: List~ExperimentOutputRecord~) DataFrame
+        +save(output_dataset: DataFrame) void
+        +save_batch(output_dataset: DataFrame, dataset: DataFrame, config: ExperimentConfig, records: List~ExperimentOutputRecord~) DataFrame
+        +completed_keys(output_dataset: DataFrame, dataset: DataFrame, config: ExperimentConfig) Set~ExperimentJobKey~
+        +is_complete(output_dataset: DataFrame, key: ExperimentJobKey, config: ExperimentConfig) bool
     }
     class DataFrame {
         <<pandas>>
