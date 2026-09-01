@@ -8,6 +8,7 @@ from dataclasses import dataclass, field
 import pytest
 
 from llm_auditkit.inference import (
+    DictResponseFormat,
     EDSLAdapter,
     InferenceAdapter,
     InferenceBatchError,
@@ -16,6 +17,8 @@ from llm_auditkit.inference import (
     InferenceOrchestrator,
     InferenceRequest,
     ModelConfig,
+    ResponseField,
+    TokenLogprob,
 )
 from llm_auditkit.inference import edsl_adapter as adapter_module
 
@@ -23,6 +26,9 @@ from llm_auditkit.inference import edsl_adapter as adapter_module
 @dataclass
 class FakeEDSLRuntime:
     responses: dict[str, object] = field(default_factory=dict)
+    generated_content: dict[str, object] = field(default_factory=dict)
+    comments: dict[str, object] = field(default_factory=dict)
+    raw_model_responses: dict[str, object] = field(default_factory=dict)
     exceptions: dict[str, Exception] = field(default_factory=dict)
     omitted_request_ids: set[str] = field(default_factory=set)
     prompt_error: Exception | None = None
@@ -101,9 +107,15 @@ def fake_edsl(monkeypatch: pytest.MonkeyPatch) -> FakeEDSLRuntime:
             self.exceptions = [{"response": entries}] if entries else []
 
     class FakeResult:
-        def __init__(self, scenario: FakeScenario, answer: object) -> None:
+        def __init__(
+            self,
+            scenario: FakeScenario,
+            answer: object,
+            data: dict[str, object],
+        ) -> None:
             self.scenario = scenario
             self.answer = answer
+            self.data = data
 
     class FakeResults(list[FakeResult]):
         def __init__(
@@ -173,19 +185,49 @@ def fake_edsl(monkeypatch: pytest.MonkeyPatch) -> FakeEDSLRuntime:
             return self._results()
 
         def _results(self) -> FakeResults:
-            result_items = [
-                FakeResult(
-                    scenario,
-                    {
-                        "response": runtime.responses.get(
-                            scenario["request_id"],
-                            f"answer:{scenario['request_id']}",
+            result_items = []
+            for scenario in reversed(self.scenarios):
+                request_id = scenario["request_id"]
+                if request_id in runtime.omitted_request_ids:
+                    continue
+                if request_id in runtime.responses:
+                    response = runtime.responses[request_id]
+                elif isinstance(self.question, FakeQuestionDict):
+                    response = {key: "Yes" for key in self.question.answer_keys}
+                else:
+                    response = f"answer:{request_id}"
+
+                assert self.agent is not None
+                system_prompt = (
+                    ""
+                    if self.agent.traits is None
+                    else f"EDSL system:{self.agent.traits['persona']}"
+                )
+                data = {
+                    "generated_tokens": {
+                        "response_generated_tokens": runtime.generated_content.get(
+                            request_id,
+                            str(response),
                         )
                     },
+                    "comments_dict": {
+                        "response_comment": runtime.comments.get(request_id)
+                    },
+                    "raw_model_response": {
+                        "response_raw_model_response": runtime.raw_model_responses.get(
+                            request_id
+                        )
+                    },
+                    "prompt": {
+                        "response_user_prompt": FakePrompt(
+                            f"EDSL user:{scenario['prompt']}"
+                        ),
+                        "response_system_prompt": FakePrompt(system_prompt),
+                    },
+                }
+                result_items.append(
+                    FakeResult(scenario, {"response": response}, data)
                 )
-                for scenario in reversed(self.scenarios)
-                if scenario["request_id"] not in runtime.omitted_request_ids
-            ]
             return FakeResults(result_items, list(self.scenarios))
 
     class FakeQuestionFreeText:
@@ -197,9 +239,30 @@ def fake_edsl(monkeypatch: pytest.MonkeyPatch) -> FakeEDSLRuntime:
         def by(self, scenarios: FakeScenarioList) -> FakeJob:
             return FakeJob(self, scenarios)
 
+    class FakeQuestionDict(FakeQuestionFreeText):
+        def __init__(
+            self,
+            *,
+            question_name: str,
+            question_text: str,
+            answer_keys: list[str],
+            value_types: list[str],
+            value_descriptions: list[str],
+            include_comment: bool,
+        ) -> None:
+            super().__init__(
+                question_name=question_name,
+                question_text=question_text,
+            )
+            self.answer_keys = answer_keys
+            self.value_types = value_types
+            self.value_descriptions = value_descriptions
+            self.include_comment = include_comment
+
     monkeypatch.setattr(adapter_module, "Agent", FakeAgent)
     monkeypatch.setattr(adapter_module, "Model", FakeModel)
     monkeypatch.setattr(adapter_module, "QuestionFreeText", FakeQuestionFreeText)
+    monkeypatch.setattr(adapter_module, "QuestionDict", FakeQuestionDict)
     monkeypatch.setattr(adapter_module, "Scenario", FakeScenario)
     monkeypatch.setattr(adapter_module, "ScenarioList", FakeScenarioList)
     return runtime
@@ -347,6 +410,8 @@ def test_job_construction_uses_standard_edsl_agent_model_and_scenarios(
     ]
     assert results[0].metadata == requests[0].metadata
     assert results[0].metadata is not requests[0].metadata
+    assert results[0].rendered_prompt is not None
+    assert results[0].rendered_prompt.user_prompt == "EDSL user:First prompt"
 
 
 def test_async_execution_uses_only_sequential_run_async_calls(
@@ -526,6 +591,128 @@ def test_non_string_edsl_response_is_a_systemic_failure(
     fake_edsl.responses[request.request_id] = {"unexpected": "object"}
 
     with pytest.raises(InferenceBatchError, match="non-string"):
+        EDSLAdapter().execute_batch([request], _models())
+
+
+def test_dictionary_response_and_openai_logprobs_are_normalized(
+    fake_edsl: FakeEDSLRuntime,
+) -> None:
+    request = InferenceRequest(
+        request_id="structured-1",
+        prompt="Choose applicants.",
+        model_config_id="model-1",
+        system_prompt="hiring manager",
+        response_format=DictResponseFormat(
+            fields=[
+                ResponseField("Applicant 1", "string", "Yes or No"),
+                ResponseField("Applicant 2", "string", "Yes or No"),
+            ],
+            include_comment=True,
+        ),
+    )
+    fake_edsl.responses[request.request_id] = {
+        "Applicant 1": "Yes",
+        "Applicant 2": "No",
+    }
+    fake_edsl.generated_content[request.request_id] = (
+        '{"Applicant 1": "Yes", "Applicant 2": "No"}'
+    )
+    fake_edsl.comments[request.request_id] = "Applicant 1 is stronger."
+    fake_edsl.raw_model_responses[request.request_id] = {
+        "choices": [
+            {
+                "logprobs": {
+                    "content": [
+                        {"token": "Yes", "logprob": -0.1},
+                        {"token": "No", "logprob": -0.2},
+                    ]
+                }
+            }
+        ]
+    }
+
+    result = EDSLAdapter().execute_batch([request], _models())[0]
+
+    question = fake_edsl.questions[0]
+    assert question.answer_keys == ["Applicant 1", "Applicant 2"]
+    assert question.value_types == ["str", "str"]
+    assert question.value_descriptions == ["Yes or No", "Yes or No"]
+    assert question.include_comment is True
+    assert result.content == '{"Applicant 1": "Yes", "Applicant 2": "No"}'
+    assert result.structured_content == {
+        "Applicant 1": "Yes",
+        "Applicant 2": "No",
+    }
+    assert result.comment == "Applicant 1 is stronger."
+    assert result.token_logprobs == [
+        TokenLogprob("Yes", -0.1),
+        TokenLogprob("No", -0.2),
+    ]
+    assert result.rendered_prompt is not None
+    assert result.rendered_prompt.system_prompt == "EDSL system:hiring manager"
+
+
+def test_dictionary_response_value_types_are_mapped_to_edsl(
+    fake_edsl: FakeEDSLRuntime,
+) -> None:
+    request = InferenceRequest(
+        request_id="structured-types",
+        prompt="Return typed values.",
+        model_config_id="model-1",
+        response_format=DictResponseFormat(
+            fields=[
+                ResponseField("text", "string", "Text"),
+                ResponseField("count", "integer", "Count"),
+                ResponseField("score", "number", "Score"),
+                ResponseField("selected", "boolean", "Selected"),
+            ]
+        ),
+    )
+
+    EDSLAdapter().render_batch([request], _models())
+
+    assert fake_edsl.questions[0].value_types == ["str", "int", "float", "bool"]
+
+
+def test_parallel_token_logprobs_are_normalized(
+    fake_edsl: FakeEDSLRuntime,
+) -> None:
+    request = _requests()[0]
+    fake_edsl.raw_model_responses[request.request_id] = {
+        "choices": [
+            {
+                "logprobs": {
+                    "tokens": [" answer", " Yes"],
+                    "token_logprobs": [-0.4, -0.05],
+                }
+            }
+        ]
+    }
+
+    result = EDSLAdapter().execute_batch([request], _models())[0]
+
+    assert result.token_logprobs == [
+        TokenLogprob(" answer", -0.4),
+        TokenLogprob(" Yes", -0.05),
+    ]
+
+
+def test_malformed_parallel_token_logprobs_are_a_systemic_failure(
+    fake_edsl: FakeEDSLRuntime,
+) -> None:
+    request = _requests()[0]
+    fake_edsl.raw_model_responses[request.request_id] = {
+        "choices": [
+            {
+                "logprobs": {
+                    "tokens": ["Yes", "No"],
+                    "token_logprobs": [-0.1],
+                }
+            }
+        ]
+    }
+
+    with pytest.raises(InferenceBatchError, match="cardinality"):
         EDSLAdapter().execute_batch([request], _models())
 
 

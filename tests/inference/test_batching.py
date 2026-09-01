@@ -5,14 +5,16 @@ from __future__ import annotations
 import pytest
 
 from llm_auditkit.inference import (
+    DictResponseFormat,
     InferenceConfigurationError,
     InferenceRequest,
     InferenceRequestValidationError,
     ModelConfig,
+    ResponseField,
 )
 from llm_auditkit.inference.batching import (
     build_request_batches,
-    group_requests_by_model_and_system_prompt,
+    group_requests_by_compatibility,
 )
 
 
@@ -21,12 +23,14 @@ def _request(
     *,
     model_config_id: str = "model-1",
     system_prompt: str | None = None,
+    response_format: DictResponseFormat | None = None,
 ) -> InferenceRequest:
     return InferenceRequest(
         request_id=request_id,
         prompt=f"Prompt for {request_id}",
         model_config_id=model_config_id,
         system_prompt=system_prompt,
+        response_format=response_format,
     )
 
 
@@ -75,7 +79,7 @@ def test_job_groups_preserve_first_seen_group_and_request_order() -> None:
         _request("request-5", system_prompt=""),
     ]
 
-    groups = group_requests_by_model_and_system_prompt(requests, _models())
+    groups = group_requests_by_compatibility(requests, _models())
 
     assert [
         (group.model_config.config_id, group.system_prompt) for group in groups
@@ -93,12 +97,43 @@ def test_job_groups_preserve_first_seen_group_and_request_order() -> None:
 
 
 def test_empty_request_collection_produces_no_job_groups() -> None:
-    assert group_requests_by_model_and_system_prompt([], _models()) == ()
+    assert group_requests_by_compatibility([], _models()) == ()
 
 
 def test_job_grouping_rejects_an_unknown_model_reference() -> None:
     with pytest.raises(InferenceRequestValidationError, match="unknown model"):
-        group_requests_by_model_and_system_prompt(
+        group_requests_by_compatibility(
             [_request("request-1", model_config_id="missing")],
             _models(),
         )
+
+
+def test_job_groups_include_structural_response_format_compatibility() -> None:
+    first_format = DictResponseFormat(
+        fields=[ResponseField("decision", "string", "Yes or No")],
+        include_comment=True,
+    )
+    equivalent_format = DictResponseFormat(
+        fields=[ResponseField("decision", "string", "Yes or No")],
+        include_comment=True,
+    )
+    different_format = DictResponseFormat(
+        fields=[ResponseField("decision", "string", "Yes or No")],
+        include_comment=False,
+    )
+    requests = [
+        _request("request-1", response_format=first_format),
+        _request("request-2", response_format=equivalent_format),
+        _request("request-3", response_format=different_format),
+        _request("request-4"),
+    ]
+
+    groups = group_requests_by_compatibility(requests, _models())
+
+    assert [[request.request_id for request in group.requests] for group in groups] == [
+        ["request-1", "request-2"],
+        ["request-3"],
+        ["request-4"],
+    ]
+    assert groups[0].response_format is first_format
+    assert groups[2].response_format is None

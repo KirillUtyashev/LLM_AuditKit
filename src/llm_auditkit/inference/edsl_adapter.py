@@ -3,12 +3,13 @@
 from __future__ import annotations
 
 import logging
+import math
 from collections.abc import Mapping, Sequence
 
-from edsl import Agent, Model, QuestionFreeText, Scenario, ScenarioList
+from edsl import Agent, Model, QuestionDict, QuestionFreeText, Scenario, ScenarioList
 from edsl.inference_services.registry import GLOBAL_REGISTRY
 
-from .batching import AdapterJobGroup, group_requests_by_model_and_system_prompt
+from .batching import AdapterJobGroup, group_requests_by_compatibility
 from .exceptions import InferenceBatchError
 from .models import (
     InferenceError,
@@ -16,6 +17,7 @@ from .models import (
     InferenceResult,
     ModelConfig,
     RenderedPrompt,
+    TokenLogprob,
 )
 
 
@@ -23,6 +25,12 @@ _QUESTION_NAME = "response"
 _REQUEST_ID_FIELD = "request_id"
 _PROMPT_FIELD = "prompt"
 _LOGGER = logging.getLogger(__name__)
+_VALUE_TYPE_MAP = {
+    "string": "str",
+    "integer": "int",
+    "number": "float",
+    "boolean": "bool",
+}
 
 
 class EDSLAdapter:
@@ -36,7 +44,7 @@ class EDSLAdapter:
         """Render all compatible EDSL job groups without model inference."""
 
         rendered_prompts: list[RenderedPrompt] = []
-        for group in group_requests_by_model_and_system_prompt(requests, models):
+        for group in group_requests_by_compatibility(requests, models):
             try:
                 job = _build_job(group)
                 prompt_dataset = job.prompts()
@@ -56,7 +64,7 @@ class EDSLAdapter:
         """Execute compatible EDSL job groups sequentially with ``run``."""
 
         normalized_results: list[InferenceResult] = []
-        for group in group_requests_by_model_and_system_prompt(requests, models):
+        for group in group_requests_by_compatibility(requests, models):
             try:
                 job = _build_job(group)
                 edsl_results = job.run(print_exceptions=False)
@@ -77,7 +85,7 @@ class EDSLAdapter:
 
         normalized_results: list[InferenceResult] = []
         try:
-            for group in group_requests_by_model_and_system_prompt(requests, models):
+            for group in group_requests_by_compatibility(requests, models):
                 try:
                     job = _build_job(group)
                     edsl_results = await job.run_async(print_exceptions=False)
@@ -123,10 +131,7 @@ async def _close_edsl_async_clients(
 
 
 def _build_job(group: AdapterJobGroup) -> object:
-    question = QuestionFreeText(
-        question_name=_QUESTION_NAME,
-        question_text="{{ prompt }}",
-    )
+    question = _build_question(group)
     scenarios = ScenarioList(
         [
             Scenario(
@@ -149,6 +154,28 @@ def _build_job(group: AdapterJobGroup) -> object:
         **group.model_config.parameters,
     )
     return question.by(scenarios).by(agent).by(model)
+
+
+def _build_question(group: AdapterJobGroup) -> object:
+    if group.response_format is None:
+        return QuestionFreeText(
+            question_name=_QUESTION_NAME,
+            question_text="{{ prompt }}",
+        )
+
+    return QuestionDict(
+        question_name=_QUESTION_NAME,
+        question_text="{{ prompt }}",
+        answer_keys=[field.name for field in group.response_format.fields],
+        value_types=[
+            _VALUE_TYPE_MAP[field.value_type]
+            for field in group.response_format.fields
+        ],
+        value_descriptions=[
+            field.description for field in group.response_format.fields
+        ],
+        include_comment=group.response_format.include_comment,
+    )
 
 
 def _normalize_rendered_prompts(
@@ -229,8 +256,9 @@ def _normalize_results(
             )
 
         request = requests_by_id[request_id]
-        response = _result_response(result, request_id)
-        if response is None:
+        rendered_prompt = _result_rendered_prompt(result, request_id)
+        content, structured_content = _result_response(result, request)
+        if content is None:
             error = task_errors.get(
                 request_id,
                 InferenceError(
@@ -238,15 +266,27 @@ def _normalize_results(
                     message="EDSL returned no response content",
                 ),
             )
+            comment = None
+            token_logprobs: list[TokenLogprob] = []
         else:
             error = None
+            comment = (
+                _result_comment(result, request_id)
+                if request.response_format is not None
+                else None
+            )
+            token_logprobs = _result_token_logprobs(result, request_id)
 
         results_by_id[request_id] = InferenceResult(
             request_id=request_id,
             model_config_id=request.model_config_id,
-            content=response,
+            content=content,
             metadata=dict(request.metadata),
             error=error,
+            structured_content=structured_content,
+            comment=comment,
+            token_logprobs=token_logprobs,
+            rendered_prompt=rendered_prompt,
         )
 
     return [results_by_id[request.request_id] for request in group.requests]
@@ -265,21 +305,258 @@ def _result_request_id(result: object) -> str:
     return request_id
 
 
-def _result_response(result: object, request_id: str) -> str | None:
+def _result_response(
+    result: object,
+    request: InferenceRequest,
+) -> tuple[str | None, dict[str, object] | None]:
     answer = getattr(result, "answer", None)
     if answer is None:
-        return None
+        return None, None
     if not isinstance(answer, Mapping):
         raise InferenceBatchError(
-            f"EDSL result for request {request_id!r} has an invalid answer mapping"
+            f"EDSL result for request {request.request_id!r} has an invalid answer "
+            "mapping"
         )
 
     response = answer.get(_QUESTION_NAME)
-    if response is not None and not isinstance(response, str):
+    if response is None:
+        return None, None
+    if request.response_format is None:
+        if not isinstance(response, str):
+            raise InferenceBatchError(
+                f"EDSL result for request {request.request_id!r} has non-string "
+                "response content"
+            )
+        return response, None
+    if not isinstance(response, Mapping):
         raise InferenceBatchError(
-            f"EDSL result for request {request_id!r} has non-string response content"
+            f"EDSL result for request {request.request_id!r} has a non-dictionary "
+            "structured response"
         )
-    return response
+
+    generated_content = _result_generated_content(result, request.request_id)
+    if generated_content is None:
+        raise InferenceBatchError(
+            f"EDSL structured result for request {request.request_id!r} is missing "
+            "generated response content"
+        )
+    return generated_content, dict(response)
+
+
+def _result_generated_content(result: object, request_id: str) -> str | None:
+    generated_tokens = _result_data_section(result, "generated_tokens", request_id)
+    if generated_tokens is None:
+        return None
+    content = generated_tokens.get(f"{_QUESTION_NAME}_generated_tokens")
+    if content is None:
+        return None
+    if not isinstance(content, str):
+        raise InferenceBatchError(
+            f"EDSL result for request {request_id!r} has non-string generated "
+            "response content"
+        )
+    return content
+
+
+def _result_comment(result: object, request_id: str) -> str | None:
+    comments = _result_data_section(result, "comments_dict", request_id)
+    if comments is None:
+        return None
+    comment = comments.get(f"{_QUESTION_NAME}_comment")
+    if comment is None:
+        return None
+    if not isinstance(comment, str):
+        raise InferenceBatchError(
+            f"EDSL result for request {request_id!r} has a non-string comment"
+        )
+    return comment
+
+
+def _result_rendered_prompt(
+    result: object,
+    request_id: str,
+) -> RenderedPrompt | None:
+    prompts = _result_data_section(result, "prompt", request_id)
+    if prompts is None:
+        return None
+    user_key = f"{_QUESTION_NAME}_user_prompt"
+    system_key = f"{_QUESTION_NAME}_system_prompt"
+    if user_key not in prompts and system_key not in prompts:
+        return None
+    if user_key not in prompts:
+        raise InferenceBatchError(
+            f"EDSL result for request {request_id!r} is missing its rendered user prompt"
+        )
+
+    system_value = prompts.get(system_key)
+    return RenderedPrompt(
+        request_id=request_id,
+        user_prompt=_extract_prompt_text(prompts[user_key], "user"),
+        system_prompt=(
+            None
+            if system_value is None
+            else _extract_prompt_text(system_value, "system")
+        ),
+    )
+
+
+def _result_token_logprobs(
+    result: object,
+    request_id: str,
+) -> list[TokenLogprob]:
+    raw_responses = _result_data_section(result, "raw_model_response", request_id)
+    if raw_responses is None:
+        return []
+    raw_response = raw_responses.get(f"{_QUESTION_NAME}_raw_model_response")
+    if raw_response is None:
+        return []
+    return _normalize_token_logprobs(raw_response, request_id)
+
+
+def _normalize_token_logprobs(
+    raw_response: object,
+    request_id: str,
+) -> list[TokenLogprob]:
+    response_mapping = _as_mapping(raw_response)
+    if response_mapping is None:
+        raise InferenceBatchError(
+            f"EDSL result for request {request_id!r} has an invalid raw model response"
+        )
+
+    choices = response_mapping.get("choices")
+    if choices is None:
+        return []
+    if not _is_sequence(choices) or not choices:
+        raise InferenceBatchError(
+            f"EDSL result for request {request_id!r} has invalid model choices"
+        )
+    first_choice = _as_mapping(choices[0])
+    if first_choice is None:
+        raise InferenceBatchError(
+            f"EDSL result for request {request_id!r} has an invalid model choice"
+        )
+    logprobs = first_choice.get("logprobs")
+    if logprobs is None:
+        return []
+    logprobs_mapping = _as_mapping(logprobs)
+    if logprobs_mapping is None:
+        raise InferenceBatchError(
+            f"EDSL result for request {request_id!r} has invalid token logprobs"
+        )
+
+    content = logprobs_mapping.get("content")
+    if content is not None:
+        return _normalize_content_token_logprobs(content, request_id)
+    return _normalize_parallel_token_logprobs(logprobs_mapping, request_id)
+
+
+def _normalize_content_token_logprobs(
+    content: object,
+    request_id: str,
+) -> list[TokenLogprob]:
+    if not _is_sequence(content):
+        raise InferenceBatchError(
+            f"EDSL result for request {request_id!r} has invalid token logprob content"
+        )
+
+    normalized: list[TokenLogprob] = []
+    for index, entry in enumerate(content):
+        entry_mapping = _as_mapping(entry)
+        if entry_mapping is None:
+            raise InferenceBatchError(
+                f"EDSL result for request {request_id!r} token logprob at position "
+                f"{index} is invalid"
+            )
+        token = entry_mapping.get("token")
+        logprob = entry_mapping.get("logprob")
+        if logprob is None:
+            continue
+        normalized.append(
+            _build_token_logprob(token, logprob, request_id=request_id, index=index)
+        )
+    return normalized
+
+
+def _normalize_parallel_token_logprobs(
+    logprobs: Mapping[object, object],
+    request_id: str,
+) -> list[TokenLogprob]:
+    tokens = logprobs.get("tokens")
+    values = logprobs.get("token_logprobs")
+    if tokens is None and values is None:
+        return []
+    if not _is_sequence(tokens) or not _is_sequence(values):
+        raise InferenceBatchError(
+            f"EDSL result for request {request_id!r} has invalid parallel token "
+            "logprobs"
+        )
+    if len(tokens) != len(values):
+        raise InferenceBatchError(
+            f"EDSL result for request {request_id!r} token and logprob cardinality "
+            "does not match"
+        )
+
+    return [
+        _build_token_logprob(token, value, request_id=request_id, index=index)
+        for index, (token, value) in enumerate(zip(tokens, values))
+        if value is not None
+    ]
+
+
+def _build_token_logprob(
+    token: object,
+    logprob: object,
+    *,
+    request_id: str,
+    index: int,
+) -> TokenLogprob:
+    if not isinstance(token, str):
+        raise InferenceBatchError(
+            f"EDSL result for request {request_id!r} token logprob at position "
+            f"{index} has a non-string token"
+        )
+    if (
+        isinstance(logprob, bool)
+        or not isinstance(logprob, (int, float))
+        or not math.isfinite(logprob)
+    ):
+        raise InferenceBatchError(
+            f"EDSL result for request {request_id!r} token logprob at position "
+            f"{index} is not a finite number"
+        )
+    return TokenLogprob(token=token, logprob=float(logprob))
+
+
+def _as_mapping(value: object) -> Mapping[object, object] | None:
+    if isinstance(value, Mapping):
+        return value
+    model_dump = getattr(value, "model_dump", None)
+    if not callable(model_dump):
+        return None
+    dumped = model_dump()
+    return dumped if isinstance(dumped, Mapping) else None
+
+
+def _result_data_section(
+    result: object,
+    section_name: str,
+    request_id: str,
+) -> Mapping[object, object] | None:
+    data = getattr(result, "data", None)
+    if data is None:
+        return None
+    if not isinstance(data, Mapping):
+        raise InferenceBatchError(
+            f"EDSL result for request {request_id!r} has invalid result data"
+        )
+    section = data.get(section_name)
+    if section is None:
+        return None
+    if not isinstance(section, Mapping):
+        raise InferenceBatchError(
+            f"EDSL result for request {request_id!r} has invalid {section_name} data"
+        )
+    return section
 
 
 def _extract_task_errors(edsl_results: object) -> dict[str, InferenceError]:
