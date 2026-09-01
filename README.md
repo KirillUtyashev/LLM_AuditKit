@@ -6,8 +6,9 @@ The shared inference package is implemented with validated deterministic batchin
 synchronous and asynchronous execution, prompt preview, normalized outcomes, and an
 Expected Parrot EDSL adapter. Experiment execution currently includes its configuration,
 DataFrame schema validation, deterministic job/request planning and preview, normalized
-outcome parsing, and atomic CSV checkpoint/resume storage; its runner and the other
-domain pipeline stages remain documented for incremental implementation.
+outcome parsing, synchronous and asynchronous execution, and atomic CSV
+checkpoint/resume storage. The other domain pipeline stages remain documented for
+incremental implementation.
 
 ## Quickstart
 

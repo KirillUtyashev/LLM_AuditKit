@@ -69,9 +69,8 @@ classDiagram
         +preview(dataset: DataFrame, config: ExperimentConfig, batch_number: int) InferenceBatchPreview
         +run(dataset: DataFrame, config: ExperimentConfig) DataFrame
         +run_async(dataset: DataFrame, config: ExperimentConfig) DataFrame
-        -build_requests(dataset: DataFrame, config: ExperimentConfig) List~InferenceRequest~
-        -build_prompt(row: Series, config: ExperimentConfig) str
-        -parse_result(result: InferenceResult, config: ExperimentConfig) ExperimentOutcome
+        -prepare_run(dataset: DataFrame, config: ExperimentConfig) Tuple
+        -process_batch(output_dataset: DataFrame, dataset: DataFrame, config: ExperimentConfig, batch: InferenceBatchResult) DataFrame
     }
     class ExperimentResultStore {
         -output_path: Path

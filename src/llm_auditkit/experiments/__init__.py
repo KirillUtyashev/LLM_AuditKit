@@ -25,6 +25,7 @@ from .validation import (
     validate_experiment_inputs,
 )
 from .store import ExperimentResultStore
+from .runner import ExperimentRunner
 
 __all__ = [
     "ExperimentConfig",
@@ -40,6 +41,7 @@ __all__ = [
     "ExperimentResultAssociationError",
     "ExperimentResultStore",
     "ExperimentResultStoreError",
+    "ExperimentRunner",
     "ExperimentValidationError",
     "Persona",
     "build_experiment_request_id",
