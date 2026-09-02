@@ -1,9 +1,9 @@
 # Running Hiring Experiments
 
-This guide shows how to turn a populated hiring-scenario DataFrame into durable model
-decisions with LLM AuditKit's experiment execution API. The runner constructs prompts,
-uses shared inference, parses applicant decisions and token log probabilities, and
-checkpoints a canonical CSV that can be resumed safely.
+This guide shows how to turn a populated hiring-scenario CSV and an experiment YAML
+file into durable model decisions. The command loads the CSV into a DataFrame once,
+constructs prompts, uses shared inference, parses applicant decisions and token log
+probabilities, and checkpoints a canonical output CSV that can be resumed safely.
 
 For the internal contract and design rationale, see the
 [experiment execution component documentation](../components/experiment_execution.md).
@@ -25,136 +25,140 @@ Add only the provider credential to `.env`:
 OPENAI_API_KEY=your-key-here
 ```
 
-Credentials are read by the provider integration. They do not belong in
-`ExperimentConfig`, `ModelConfig.parameters`, input DataFrames, or committed output.
+Credentials are read by the provider integration. They do not belong in YAML model
+parameters, input datasets, or committed output.
 
-## Prepare a DataFrame
-
-Experiment execution accepts a `pandas.DataFrame`, not a path. Dataset loading is the
-pipeline's path-to-DataFrame boundary.
-
-```python
-import pandas as pd
-
-dataset = pd.DataFrame(
-    {
-        "scenario_id": ["scenario-001"],
-        "job_posting": ["Hire a careful research assistant."],
-        "resume_1": ["Candidate A has research and data-management experience."],
-        "resume_2": ["Candidate B has retail and customer-service experience."],
-        "city": ["Toronto"],
-    }
-)
-```
+## Prepare the Dataset CSV
 
 Every row is one scenario. It must contain a stable, unique scenario ID, one job
 posting, and an ordered non-empty set of populated resumes. Other columns remain
 caller-owned metadata and are repeated on each corresponding output record.
 
-## Configure the Experiment
-
-```python
-from llm_auditkit.experiments import (
-    ExperimentConfig,
-    ExperimentDatasetSchema,
-    Persona,
-)
-from llm_auditkit.inference import InferenceConfig, ModelConfig
-
-config = ExperimentConfig(
-    experiment_id="research-assistant-audit-v1",
-    dataset_schema=ExperimentDatasetSchema(
-        scenario_id_column="scenario_id",
-        job_posting_column="job_posting",
-        resume_columns=["resume_1", "resume_2"],
-        context_columns={"city": "city"},
-    ),
-    personas=[
-        Persona(
-            id="hiring-manager-v1",
-            name="Hiring manager",
-            description="You are the hiring manager responsible for this role.",
-        )
-    ],
-    inference=InferenceConfig(
-        models=[
-            ModelConfig(
-                config_id="openai-gpt-4.1-nano-v1",
-                provider="openai",
-                model="gpt-4.1-nano",
-                parameters={"temperature": 0, "logprobs": True},
-            )
-        ],
-        batch_size=25,
-    ),
-    save_after_each_batch=True,
-)
+```csv
+scenario_id,job_posting,resume_1,resume_2,city
+scenario-001,Hire a careful research assistant.,Candidate A has research experience.,Candidate B has retail experience.,Toronto
 ```
 
-`ExperimentDatasetSchema` maps semantic fields to the caller's actual column names.
-`resume_columns` order defines Applicant 1 through Applicant N and the order of output
-picks and log probabilities. `context_columns` preserves declaration order in the
-prompt.
+The command-line entrypoint currently accepts CSV input. It preserves the configured
+scenario ID column as strings, including values such as `001`.
+
+## Create the Experiment YAML
+
+```yaml
+experiment_id: research-assistant-audit-v1
+
+dataset:
+  path: data/populated_scenarios.csv
+  scenario_id_column: scenario_id
+  job_posting_column: job_posting
+  resume_columns:
+    - resume_1
+    - resume_2
+  context_columns:
+    city: city
+
+output:
+  path: results/research-assistant-audit-v1.csv
+
+execution:
+  mode: async
+  batch_size: 25
+  save_after_each_batch: true
+
+personas:
+  - id: hiring-manager-v1
+    name: Hiring manager
+    description: You are the hiring manager responsible for this role.
+
+inference:
+  models:
+    - config_id: openai-gpt-4.1-nano-v1
+      provider: openai
+      model: gpt-4.1-nano
+      parameters:
+        temperature: 0
+        logprobs: true
+```
+
+Dataset and output paths resolve relative to the YAML file, not the current working
+directory. Unknown fields, missing fields, duplicate YAML keys, and invalid values fail
+before inference. The input and output paths cannot resolve to the same file.
+
+The dataset fields map semantic inputs to actual CSV columns. `resume_columns` order
+defines Applicant 1 through Applicant N and the order of output picks and log
+probabilities. `context_columns` preserves declaration order in the prompt.
 
 Each persona description is passed unchanged as the ordinary system prompt. The
 package does not prepend or replace it with a custom system prompt; EDSL performs its
 normal agent and prompt rendering.
 
-Experiment execution requires `parameters["logprobs"] = True` for every model. EDSL
-owns provider scheduling, caching, rate limiting, and retries within each submitted
-batch.
+Experiment execution requires `parameters.logprobs: true` for every model. EDSL owns
+provider scheduling, caching, rate limiting, and retries within each submitted job.
 
 Use a new stable ID whenever its logical definition changes:
 
 - change `experiment_id` when the dataset schema or prompt-defining experiment changes;
-- change `Persona.id` when its description changes;
-- change `ModelConfig.config_id` when its provider, model, or behavior-affecting
-  parameters change.
+- change a persona `id` when its description changes;
+- change a model `config_id` when its provider, model, or behavior-affecting parameters
+  change.
 
 These IDs determine whether an existing job is safely complete. DataFrame row numbers
 and EDSL positions are never used as durable identity.
 
-## Create a Runner and Preview
+## Preview Before Spending Tokens
 
-```python
-from llm_auditkit.experiments import ExperimentResultStore, ExperimentRunner
-from llm_auditkit.inference import EDSLAdapter, InferenceOrchestrator
-
-runner = ExperimentRunner(
-    InferenceOrchestrator(EDSLAdapter()),
-    ExperimentResultStore("experiment_results.csv"),
-)
-
-preview = runner.preview(dataset, config, batch_number=1)
-for rendered in preview.prompts:
-    print(rendered.request_id)
-    print(rendered.system_prompt)
-    print(rendered.user_prompt)
+```bash
+llm-auditkit-experiment \
+  --config path/to/experiment.yaml \
+  --preview-only
 ```
 
 Preview renders one pending logical batch through EDSL without model inference. Use it
 before a large run to check the complete user prompt, effective system prompt, request
 cardinality, and batch size. Existing completed jobs are excluded from preview just as
-they are from execution.
+they are from execution. Select another pending batch with `--preview-batch N`.
 
-## Run Synchronously
+## Run the Experiment
 
-```python
-output = runner.run(dataset, config)
+```bash
+llm-auditkit-experiment \
+  --config path/to/experiment.yaml \
+  --preview
 ```
 
-The synchronous method consumes shared inference's native blocking iterator. It does
-not create a separate worker pool or drive an event loop.
+`--preview` renders the selected batch and then executes. Omit it when no preview is
+needed. The command reads `execution.mode`:
 
-## Run Asynchronously
+- `sync` uses EDSL's blocking `job.run()` execution;
+- `async` uses EDSL's native awaited `job.run_async()` execution.
 
-```python
-output = await runner.run_async(dataset, config)
+Both modes construct the same logical requests, use the same batches and EDSL job
+grouping, validate the same outcomes, and create the same output. Async mode keeps the
+command's event loop available while EDSL waits; it does not create a second worker
+pool.
+
+The equivalent module entrypoint is:
+
+```bash
+python -m llm_auditkit.experiments --config path/to/experiment.yaml --preview
 ```
 
-The async method consumes shared inference's native async iterator. It uses the same
-validation, pending requests, logical batches, parsing, checkpoints, failures, and
-output shape as `run`.
+## Use the Configuration Programmatically
+
+The YAML loader returns paths, mode, and the existing typed domain configuration:
+
+```python
+from llm_auditkit.experiments import load_experiment_run_config
+
+run_config = load_experiment_run_config("path/to/experiment.yaml")
+print(run_config.dataset_path)
+print(run_config.output_path)
+print(run_config.mode)
+print(run_config.experiment_config)
+```
+
+`ExperimentRunner` remains the lower-level DataFrame API for applications that already
+own dataset loading and an event loop.
 
 ## Understand Batches and Checkpoints
 
@@ -164,23 +168,28 @@ Experiment request count is:
 pending scenarios × personas × model configurations
 ```
 
-`InferenceConfig.batch_size` counts these logical requests, not DataFrame rows. Batches
-are submitted sequentially. A completed batch is validated and applied before the
-runner requests the next one.
+`execution.batch_size` counts these logical requests, not DataFrame rows or EDSL jobs.
+Batches are submitted sequentially. A completed batch is validated and applied before
+the runner requests the next one.
 
-With `save_after_each_batch=True`, the runner performs one atomic CSV replacement after
-each handled batch. A crash or systemic failure therefore leaves the last complete
-checkpoint intact. With `False`, handled batches remain only in memory and one CSV is
-written after successful execution.
+Within one logical batch, the adapter groups requests by model configuration, persona
+system prompt, and response format. Ten compatible requests therefore become one EDSL
+job containing ten scenarios; incompatible requests may become multiple EDSL jobs.
+This grouping is identical in sync and async modes.
 
-Rerunning with the same DataFrame, configuration IDs, and output path loads the CSV,
-skips complete job keys, and retries failed or incomplete job keys. A fully complete
-checkpoint causes a no-op run with no provider calls.
+With `execution.save_after_each_batch: true`, the runner performs one atomic CSV
+replacement after each handled batch. A crash or systemic failure therefore leaves the
+last complete checkpoint intact. With `false`, handled batches remain only in memory
+and one CSV is written after successful execution.
+
+Rerunning with the same YAML loads the output CSV, skips complete job keys, and retries
+failed or incomplete job keys. A fully complete checkpoint causes a no-op run with no
+provider calls.
 
 ## Understand the Output
 
-The returned DataFrame and stored CSV contain one row per attempted combination of
-scenario, persona, and model configuration. They preserve source columns and add:
+The stored CSV contains one row per attempted combination of scenario, persona, and
+model configuration. It preserves source columns and adds:
 
 - stable experiment, scenario, persona, model-configuration, and request IDs;
 - persona name and description;
@@ -196,17 +205,20 @@ present and no error is recorded. Terminal request failures remain in the CSV fo
 inspection and are eligible for retry on the next run. A systemic association or
 normalization failure raises immediately before another batch can spend tokens.
 
-## Run the OpenAI Examples
+## Run the Included OpenAI Example
 
-The repository includes paid one-scenario examples with explicit output paths:
+The repository includes a synthetic CSV and YAML configuration:
 
 ```bash
-python examples/experiment_execution_sync.py /tmp/auditkit-sync.csv
-python examples/experiment_execution_async.py /tmp/auditkit-async.csv
+llm-auditkit-experiment \
+  --config examples/experiment_execution.yaml \
+  --preview
 ```
 
-Each example previews a new run, executes it, prints the important output columns, and
-resumes the same CSV when rerun.
+The example uses async mode and makes a paid OpenAI request. Change `execution.mode` to
+`sync` to exercise the blocking path. Its generated CSV is written under the ignored
+`examples/output/` directory. Rerun without `--preview` to resume the checkpoint; a
+fully complete checkpoint causes no provider calls.
 
 ## Run the Optional Live Tests
 

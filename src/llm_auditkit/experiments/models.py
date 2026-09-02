@@ -5,10 +5,15 @@ from __future__ import annotations
 import hashlib
 import json
 from dataclasses import dataclass, field
+from pathlib import Path
+from typing import Literal, TypeAlias
 
 from llm_auditkit.inference import InferenceConfig
 
 from .exceptions import ExperimentIdentityError
+
+
+ExperimentExecutionMode: TypeAlias = Literal["sync", "async"]
 
 
 @dataclass(slots=True)
@@ -39,6 +44,16 @@ class ExperimentConfig:
     personas: list[Persona]
     inference: InferenceConfig
     save_after_each_batch: bool = True
+
+
+@dataclass(slots=True)
+class ExperimentRunConfig:
+    """YAML-backed operational configuration for one executable experiment run."""
+
+    dataset_path: Path
+    output_path: Path
+    mode: ExperimentExecutionMode
+    experiment_config: ExperimentConfig
 
 
 @dataclass(frozen=True, slots=True)

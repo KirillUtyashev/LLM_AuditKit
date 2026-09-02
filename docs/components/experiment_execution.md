@@ -12,21 +12,33 @@ Each dataset row represents one complete scenario containing:
 - an ordered set of `N` populated resumes;
 - all metadata needed to construct the experiment prompt.
 
-All Python pipeline stages exchange `pandas.DataFrame` objects. Dataset loading is the
-single path-to-DataFrame boundary; experiment execution does not load its input from a
-path stored in experiment configuration. The result store separately owns the CSV path
-used for checkpoints and final output.
+All Python pipeline stages exchange `pandas.DataFrame` objects. `ExperimentRunner`
+therefore accepts a DataFrame rather than a path. The user-facing command is a
+composition boundary: it reads dataset and output paths from YAML, loads the CSV once,
+then constructs the runner and result store.
 
 ## Configuration
 
-Experiments are configured through `ExperimentConfig`.
+User-facing runs are declared in YAML and loaded strictly into `ExperimentRunConfig`.
+It contains:
 
-The configuration includes:
+- a dataset CSV path;
+- an output CSV path;
+- execution mode, exactly `sync` or `async`;
+- the validated domain `ExperimentConfig`.
+
+Relative paths are resolved from the YAML file's directory. Unknown or duplicate YAML
+keys, path collisions, and invalid values fail before inference. The input and output
+paths never enter `ExperimentRunner`; the command resolves them at the composition
+boundary.
+
+`ExperimentConfig` contains:
 
 - a stable `experiment_id`;
 - an `ExperimentDatasetSchema` describing the experiment input columns;
 - personas;
-- shared `InferenceConfig`, including model definitions and inference batch size;
+- shared `InferenceConfig`, including model definitions and the YAML execution batch
+  size;
 - whether to save after each completed logical batch (`save_after_each_batch`).
 
 ### Dataset Schema
@@ -104,7 +116,10 @@ Experiment request cardinality is:
 pending scenarios × personas × configured models
 ```
 
-For example, 1,000 pending scenarios, five personas, and three model configurations produce 15,000 logical requests. `inference.batch_size` limits requests per logical inference batch rather than DataFrame rows.
+For example, 1,000 pending scenarios, five personas, and three model configurations
+produce 15,000 logical requests. YAML `execution.batch_size` becomes
+`InferenceConfig.batch_size` and limits requests per logical inference batch rather
+than DataFrame rows or EDSL jobs.
 
 ## Request Construction and Preview
 
@@ -159,9 +174,18 @@ updating the output.
 
 Both entry points are first-class. The synchronous path delegates to EDSL's native blocking execution, and the asynchronous path delegates to EDSL's native async execution. They use the same request construction, batch boundaries, result association, failures, checkpoint behavior, and returned DataFrame shape.
 
-Batches are sequential at the LLM AuditKit layer. Within a batch, the adapter groups requests by model configuration, system prompt, and response format and submits those EDSL jobs sequentially. EDSL owns parallel scenario-interview execution, provider rate limiting, caching, and retry behavior inside each job. The runner does not create its own request-worker pool or retry individual EDSL interviews.
+Batches are sequential at the LLM AuditKit layer. Within a batch, the adapter groups
+requests by model configuration, system prompt, and response format and submits those
+EDSL jobs sequentially. Ten mutually compatible logical requests become one EDSL job
+with ten scenarios; incompatible requests may create multiple EDSL jobs. EDSL owns
+parallel scenario-interview execution, provider rate limiting, caching, and retry
+behavior inside each job. The runner does not create its own request-worker pool or
+retry individual EDSL interviews.
 
-The runner can report completed batches and logical requests and use observed batch durations to estimate remaining time. Such estimates are informational because providers, models, prompt sizes, and rate limits can vary.
+The YAML `execution.mode` selects the public runner method: `sync` calls
+`ExperimentRunner.run` and EDSL's blocking execution, while `async` calls
+`ExperimentRunner.run_async` and EDSL's native async execution. It does not change
+batching, grouping, validation, checkpointing, or output.
 
 The shared inference layer is responsible for:
 

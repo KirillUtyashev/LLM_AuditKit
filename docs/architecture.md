@@ -23,7 +23,11 @@ Experiment Execution
 Regression Analysis
 ```
 
-The package uses `pandas.DataFrame` as the common tabular representation passed between Python pipeline stages. Dataset loading is the single path-to-DataFrame boundary; downstream Python stages accept DataFrames rather than input paths in their stage configuration.
+The package uses `pandas.DataFrame` as the common tabular representation passed between
+Python pipeline stages. Dataset loading is the single path-to-DataFrame boundary;
+downstream stage APIs accept DataFrames. A user-facing pipeline run configuration may
+contain source and destination paths so a composition entrypoint can load once and then
+invoke those DataFrame APIs.
 
 ## Shared Inference Layer
 
@@ -47,4 +51,7 @@ A repository-wide logging contract is still to be designed before the pipeline i
 
 The design must decide how progress, batch timing, checkpoint activity, terminal request failures, and systemic failures are exposed; how library logging relates to any command-line progress display; and which events belong to LLM AuditKit versus EDSL. Prompts, system prompts, model responses, credentials, private dataset values, and provider parameters must not be logged by default. Until that contract is defined, documented progress fields are data available to callers and do not imply a particular logger, callback, or terminal interface.
 
-Experiment results cross the Python-to-R boundary as CSV files. Regression configuration is provided as YAML, and the R analysis produces both raw regression results and plots.
+User-facing experiment runs are configured in YAML and produce CSV checkpoints.
+Experiment results cross the Python-to-R boundary as CSV files. Regression
+configuration is also provided as YAML, and the R analysis produces both raw
+regression results and plots.

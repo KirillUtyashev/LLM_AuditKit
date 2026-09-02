@@ -2,8 +2,8 @@
 
 This guide shows how to send prompts through LLM AuditKit's shared inference package.
 Use it when constructing generic inference requests directly. The implemented
-experiment execution stage provides a higher-level DataFrame workflow on top of this
-API.
+experiment execution stage provides a higher-level YAML-configured DataFrame workflow
+on top of this API.
 
 For internal contracts and design rationale, see the
 [shared inference component documentation](../components/inference.md).

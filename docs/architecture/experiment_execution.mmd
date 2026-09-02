@@ -3,6 +3,13 @@ config:
   theme: mc
 ---
 classDiagram
+    class ExperimentRunConfig {
+        <<YAML-backed>>
+        +dataset_path: Path
+        +output_path: Path
+        +mode: sync | async
+        +experiment_config: ExperimentConfig
+    }
     class ExperimentConfig {
         +experiment_id: str
         +dataset_schema: ExperimentDatasetSchema
@@ -84,6 +91,14 @@ classDiagram
     class DataFrame {
         <<pandas>>
     }
+    class ExperimentCommand {
+        +main(config_path: Path) int
+    }
+    ExperimentRunConfig --> ExperimentConfig
+    ExperimentCommand --> ExperimentRunConfig : loads YAML
+    ExperimentCommand --> DataFrame : loads CSV once
+    ExperimentCommand --> ExperimentRunner : selects sync or async
+    ExperimentCommand --> ExperimentResultStore : supplies output path
     ExperimentConfig --> Persona
     ExperimentConfig --> ExperimentDatasetSchema
     ExperimentConfig --> InferenceConfig

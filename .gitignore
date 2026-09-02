@@ -40,3 +40,6 @@ htmlcov/
 
 # Local checkouts of private reference repositories
 .references/
+
+# Generated example outputs
+/examples/output/

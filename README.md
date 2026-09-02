@@ -7,7 +7,8 @@ synchronous and asynchronous execution, prompt preview, normalized outcomes, and
 Expected Parrot EDSL adapter. Experiment execution currently includes its configuration,
 DataFrame schema validation, deterministic job/request planning and preview, normalized
 outcome parsing, synchronous and asynchronous execution, and atomic CSV
-checkpoint/resume storage. The other domain pipeline stages remain documented for
+checkpoint/resume storage. User-facing experiment runs are defined in strict YAML and
+launched through one command. The other domain pipeline stages remain documented for
 incremental implementation.
 
 ## Quickstart
@@ -47,13 +48,12 @@ Read [Using Shared Inference](docs/guides/shared_inference.md) for configuration
 request identity, prompt preview, batching, sync and async execution, results,
 failures, and checkpoint integration.
 
-For the higher-level DataFrame workflow, read
+For the higher-level YAML workflow, read
 [Running Hiring Experiments](docs/guides/experiment_execution.md). The guide covers
-schema mapping, personas, stable IDs, log probabilities, prompt preview, synchronous
-and asynchronous execution, atomic CSV checkpoints, and resume behavior. Paid OpenAI
-examples are available at
-[`experiment_execution_sync.py`](examples/experiment_execution_sync.py) and
-[`experiment_execution_async.py`](examples/experiment_execution_async.py).
+dataset and output paths, schema mapping, personas, stable IDs, log probabilities,
+prompt preview, synchronous and asynchronous execution, atomic CSV checkpoints, and
+resume behavior. A runnable paid OpenAI configuration is available at
+[`experiment_execution.yaml`](examples/experiment_execution.yaml).
 
 ## Documentation
 

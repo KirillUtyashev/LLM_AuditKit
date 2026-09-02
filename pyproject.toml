@@ -10,7 +10,15 @@ readme = "README.md"
 requires-python = ">=3.10"
 license = "MIT"
 license-files = ["LICENSE"]
-dependencies = ["edsl[inference]>=1.0.8,<1.1", "pandas>=2", "python-dotenv>=1"]
+dependencies = [
+    "edsl[inference]>=1.0.8,<1.1",
+    "pandas>=2",
+    "python-dotenv>=1",
+    "PyYAML>=6",
+]
+
+[project.scripts]
+llm-auditkit-experiment = "llm_auditkit.experiments.cli:main"
 
 [project.optional-dependencies]
 test = ["pytest>=8"]

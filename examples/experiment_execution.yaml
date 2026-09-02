@@ -1,0 +1,33 @@
+experiment_id: synthetic-hiring-experiment-v1
+
+dataset:
+  path: data/synthetic_experiment.csv
+  scenario_id_column: scenario_id
+  job_posting_column: job_posting
+  resume_columns:
+    - resume_1
+    - resume_2
+  context_columns:
+    city: city
+
+output:
+  path: output/synthetic_experiment_results.csv
+
+execution:
+  mode: async
+  batch_size: 2
+  save_after_each_batch: true
+
+personas:
+  - id: hiring-manager-v1
+    name: Hiring manager
+    description: You are the hiring manager responsible for this role.
+
+inference:
+  models:
+    - config_id: openai-gpt-4.1-nano-v1
+      provider: openai
+      model: gpt-4.1-nano
+      parameters:
+        temperature: 0
+        logprobs: true
