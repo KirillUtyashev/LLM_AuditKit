@@ -94,14 +94,8 @@ def _load_experiment_dataset(run_config: ExperimentRunConfig) -> pd.DataFrame:
         raise ExperimentDatasetError(
             f"experiment dataset file does not exist: {dataset_path}"
         )
-    scenario_id_column = (
-        run_config.experiment_config.dataset_schema.scenario_id_column
-    )
     try:
-        return pd.read_csv(
-            dataset_path,
-            dtype={scenario_id_column: "string"},
-        )
+        return pd.read_csv(dataset_path, dtype={"scenario_id": "string"})
     except Exception as error:
         raise ExperimentDatasetError(
             f"could not load experiment CSV: {type(error).__name__}: {error}"

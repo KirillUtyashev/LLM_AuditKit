@@ -26,11 +26,18 @@ def _config() -> ExperimentConfig:
     return ExperimentConfig(
         experiment_id="experiment-1",
         dataset_schema=ExperimentDatasetSchema(
-            scenario_id_column="scenario_id",
             job_posting_column="job_posting",
             resume_columns=["resume_1", "resume_2"],
         ),
-        personas=[Persona("manager", "Manager", "Hiring manager persona")],
+        prompt_template="Applicant 1: {resume_1}\nApplicant 2: {resume_2}",
+        personas=[
+            Persona(
+                "manager",
+                "Manager",
+                "Hiring manager persona",
+                "Evaluate applicants",
+            )
+        ],
         inference=InferenceConfig(
             models=[
                 ModelConfig(
@@ -66,7 +73,8 @@ def _record(
         "key": key,
         "request_id": build_experiment_request_id(key),
         "persona_name": "Manager",
-        "persona_description": "Hiring manager persona",
+        "persona_trait_template": "Hiring manager persona",
+        "persona_instruction": "Evaluate applicants",
         "user_prompt": f"Rendered prompt for {key.scenario_id}",
         "system_prompt": "Rendered system prompt",
     }
@@ -105,7 +113,8 @@ def test_initialize_creates_canonical_empty_output_in_memory(tmp_path: Path) -> 
         "model_config_id",
         "request_id",
         "persona_name",
-        "persona_description",
+        "persona_trait_template",
+        "persona_instruction",
         "user_prompt",
         "system_prompt",
         "generated_response",
@@ -191,14 +200,13 @@ def test_save_and_resume_preserve_string_scenario_ids(tmp_path: Path) -> None:
     )
 
 
-def test_mapped_scenario_id_column_is_preserved_with_canonical_identity(
+def test_source_identifier_column_contributes_to_generated_scenario_identity(
     tmp_path: Path,
 ) -> None:
-    dataset = _dataset(scenario_ids=["001", "002"]).rename(
+    dataset = _dataset(scenario_ids=["case-001", "case-002"]).rename(
         columns={"scenario_id": "case_id"}
     )
     config = _config()
-    config.dataset_schema.scenario_id_column = "case_id"
     store = ExperimentResultStore(tmp_path / "results.csv")
     output = store.initialize(dataset, config)
     key = build_experiment_job_keys(dataset, config)[0]
@@ -206,8 +214,9 @@ def test_mapped_scenario_id_column_is_preserved_with_canonical_identity(
     store.save_batch(output, dataset, config, [_record(key)])
     resumed = store.initialize(dataset, config)
 
-    assert resumed.loc[0, "case_id"] == "001"
-    assert resumed.loc[0, "scenario_id"] == "001"
+    assert resumed.loc[0, "case_id"] == "case-001"
+    assert resumed.loc[0, "scenario_id"] == key.scenario_id
+    assert key.scenario_id.startswith("scenario:")
 
 
 def test_save_batch_performs_one_atomic_replacement(

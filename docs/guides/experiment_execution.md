@@ -30,32 +30,63 @@ parameters, input datasets, or committed output.
 
 ## Prepare the Dataset CSV
 
-Every row is one scenario. It must contain a stable, unique scenario ID, one job
-posting, and an ordered non-empty set of populated resumes. Other columns remain
-caller-owned metadata and are repeated on each corresponding output record.
+Every row is one scenario. It must contain one job posting and an ordered non-empty set
+of populated resumes. Other columns remain caller-owned metadata and are repeated on
+each corresponding output record. You do not need to create scenario IDs.
 
 ```csv
-scenario_id,job_posting,resume_1,resume_2,city
-scenario-001,Hire a careful research assistant.,Candidate A has research experience.,Candidate B has retail experience.,Toronto
+job_posting,resume_1,resume_2,city
+Hire a careful research assistant.,Candidate A has research experience.,Candidate B has retail experience.,Toronto
 ```
 
-The command-line entrypoint currently accepts CSV input. It preserves the configured
-scenario ID column as strings, including values such as `001`.
+The command-line entrypoint currently accepts CSV input. AuditKit derives each
+`scenario_id` from the complete source row and stores it in experiment output. Reordering
+columns or changing the DataFrame index does not change the ID, while changing any
+source value does. Exact duplicate rows must include an ordinary stable replicate
+column if they should run as distinct scenarios. A canonical `scenario_id` column from
+an upstream stage is optional and, when present, is preserved as strings.
 
 ## Create the Experiment YAML
+
+Store the dynamic persona trait and static instruction in separate text files. For
+example, `prompts/hiring_manager_trait.txt` can contain:
+
+```text
+You are the hiring manager responsible for a role in {city}.
+```
+
+and `prompts/hiring_manager_instruction.txt` can contain:
+
+```text
+Evaluate each applicant using all information in the applicant materials.
+```
+
+Store the user question in another text file. The question template must reference
+every configured resume column. For example, `prompts/applicant_question.txt` can
+contain:
+
+```text
+Applicant 1: {resume_1}
+
+Applicant 2: {resume_2}
+
+Select each applicant you would invite for an interview, if any.
+```
 
 ```yaml
 experiment_id: research-assistant-audit-v1
 
 dataset:
   path: data/populated_scenarios.csv
-  scenario_id_column: scenario_id
   job_posting_column: job_posting
   resume_columns:
     - resume_1
     - resume_2
   context_columns:
     city: city
+
+prompt:
+  template_path: prompts/applicant_question.txt
 
 output:
   path: results/research-assistant-audit-v1.csv
@@ -68,7 +99,8 @@ execution:
 personas:
   - id: hiring-manager-v1
     name: Hiring manager
-    description: You are the hiring manager responsible for this role.
+    trait_template_path: prompts/hiring_manager_trait.txt
+    instruction_path: prompts/hiring_manager_instruction.txt
 
 inference:
   models:
@@ -86,24 +118,37 @@ before inference. The input and output paths cannot resolve to the same file.
 
 The dataset fields map semantic inputs to actual CSV columns. `resume_columns` order
 defines Applicant 1 through Applicant N and the order of output picks and log
-probabilities. `context_columns` preserves declaration order in the prompt.
+probabilities. `context_columns` provides semantic aliases; the question and persona
+templates determine where those values appear.
 
-Each persona description is passed unchanged as the ordinary system prompt. The
-package does not prepend or replace it with a custom system prompt; EDSL performs its
-normal agent and prompt rendering.
+Question and persona paths resolve relative to the YAML file and must reference
+readable, non-empty UTF-8 `.txt` files. Question and trait templates use simple Python
+format fields. They can refer to source column names, the canonical `{job_posting}`
+alias, and semantic aliases from `context_columns`. The question template must include
+every configured resume column. AuditKit renders the question and trait once per
+scenario, passes the trait as EDSL's standard `persona` trait, and passes the static
+instruction as `Agent.instruction`. EDSL produces the effective prompts shown by
+preview and stored with results. The input DataFrame is not modified.
+
+Paper-compatible templates may also use `{date14}` when `year`, `month`, and `day` are
+mapped: AuditKit adds 14 days and formats the value as `%B %d, %Y`. With a mapped
+`city`, `{newspaper}` resolves Chicago, Boston, and Birmingham to the same newspaper
+names used by the reference implementation.
 
 Experiment execution requires `parameters.logprobs: true` for every model. EDSL owns
 provider scheduling, caching, rate limiting, and retries within each submitted job.
 
-Use a new stable ID whenever its logical definition changes:
+Use a new stable configuration ID whenever its logical definition changes:
 
-- change `experiment_id` when the dataset schema or prompt-defining experiment changes;
-- change a persona `id` when its description changes;
+- change `experiment_id` when the dataset schema or question template changes;
+- change a persona `id` when its trait template or instruction changes;
 - change a model `config_id` when its provider, model, or behavior-affecting parameters
   change.
 
 These IDs determine whether an existing job is safely complete. DataFrame row numbers
-and EDSL positions are never used as durable identity.
+and EDSL positions are never used as durable identity. Scenario IDs are handled by
+AuditKit from source-row content unless a canonical ID already arrives from an upstream
+stage.
 
 ## Preview Before Spending Tokens
 
@@ -172,10 +217,11 @@ pending scenarios × personas × model configurations
 Batches are submitted sequentially. A completed batch is validated and applied before
 the runner requests the next one.
 
-Within one logical batch, the adapter groups requests by model configuration, persona
-system prompt, and response format. Ten compatible requests therefore become one EDSL
-job containing ten scenarios; incompatible requests may become multiple EDSL jobs.
-This grouping is identical in sync and async modes.
+Within one logical batch, the adapter groups requests by model configuration and
+response format. Ten compatible requests therefore become one EDSL job containing ten
+explicitly paired interviews, even when their rendered persona traits differ.
+Incompatible requests may become multiple EDSL jobs. This grouping is identical in
+sync and async modes.
 
 With `execution.save_after_each_batch: true`, the runner performs one atomic CSV
 replacement after each handled batch. A crash or systemic failure therefore leaves the
@@ -192,7 +238,7 @@ The stored CSV contains one row per attempted combination of scenario, persona, 
 model configuration. It preserves source columns and adds:
 
 - stable experiment, scenario, persona, model-configuration, and request IDs;
-- persona name and description;
+- persona name, trait template, and static instruction;
 - effective rendered user and system prompts;
 - the generated structured response and optional comment;
 - `picks`, a JSON array ordered by `resume_columns`;
@@ -211,7 +257,7 @@ The repository includes a synthetic CSV and YAML configuration:
 
 ```bash
 llm-auditkit-experiment \
-  --config examples/experiment_execution.yaml \
+  --config configs/experiments/synthetic_experiment.yaml \
   --preview
 ```
 

@@ -100,6 +100,7 @@ def test_dictionary_response_models_preserve_ordered_fields() -> None:
             ),
         ],
         include_comment=True,
+        include_type_hints=False,
     )
     request = InferenceRequest(
         request_id="request-1",
@@ -113,3 +114,4 @@ def test_dictionary_response_models_preserve_ordered_fields() -> None:
         "Applicant 1",
         "Applicant 2",
     ]
+    assert request.response_format.include_type_hints is False

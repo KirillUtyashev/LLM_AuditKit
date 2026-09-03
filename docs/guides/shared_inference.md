@@ -102,8 +102,8 @@ provider calls.
 
 ## Build Requests
 
-Each request contains one user prompt, an optional system prompt, a target model
-configuration ID, and caller-owned metadata:
+Each request contains one user prompt, an optional system instruction, an optional
+persona, a target model configuration ID, and caller-owned metadata:
 
 ```python
 from llm_auditkit.inference import InferenceRequest
@@ -112,7 +112,8 @@ requests = [
     InferenceRequest(
         request_id="candidate-001:openai-screening-v1",
         prompt="Evaluate this synthetic candidate profile.",
-        system_prompt="You are a hiring manager.",
+        system_prompt="Evaluate the candidate using the supplied evidence.",
+        persona="You are a hiring manager.",
         model_config_id="openai-screening-v1",
         metadata={"candidate_id": "candidate-001"},
     )
@@ -123,8 +124,10 @@ Use durable request IDs derived from domain identifiers. Do not use a DataFrame 
 number, list position, or random value if results will later be resumed. Request IDs
 must be unique within a run.
 
-Requests can use different models and system prompts. LLM AuditKit groups compatible
-requests for EDSL without changing their input or output order.
+`system_prompt` maps to EDSL's agent instruction, while `persona` maps to its standard
+`persona` trait. EDSL combines them into the effective rendered system prompt. Requests
+can use different models, instructions, and personas; explicit EDSL interviews preserve
+each pairing without changing input or output order.
 
 ## Use Metadata to Handle Results
 

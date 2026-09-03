@@ -16,6 +16,7 @@ from llm_auditkit.experiments import (
     ExperimentRunner,
     Persona,
 )
+from llm_auditkit.experiments.planning import build_experiment_job_keys
 from llm_auditkit.inference import (
     InferenceBatchError,
     InferenceConfig,
@@ -158,11 +159,18 @@ def _config(
     return ExperimentConfig(
         experiment_id="experiment-1",
         dataset_schema=ExperimentDatasetSchema(
-            scenario_id_column="scenario_id",
             job_posting_column="job_posting",
             resume_columns=["resume_1", "resume_2"],
         ),
-        personas=[Persona("manager", "Manager", "Hiring manager persona")],
+        prompt_template="Applicant 1: {resume_1}\nApplicant 2: {resume_2}",
+        personas=[
+            Persona(
+                "manager",
+                "Manager",
+                "Hiring manager persona",
+                "Evaluate applicants",
+            )
+        ],
         inference=InferenceConfig(
             models=[
                 ModelConfig(
@@ -220,7 +228,7 @@ def test_preview_renders_only_the_selected_pending_batch(tmp_path: Path) -> None
     assert adapter.sync_calls == []
     assert adapter.async_calls == []
     assert len(preview.prompts) == 1
-    assert preview.prompts[0].system_prompt == "rendered:Hiring manager persona"
+    assert preview.prompts[0].system_prompt == "rendered:Evaluate applicants"
 
 
 def test_sync_run_checkpoints_each_batch_in_canonical_order(
@@ -250,6 +258,26 @@ def test_sync_run_checkpoints_each_batch_in_canonical_order(
         [-0.2, -0.4],
         [-0.2, -0.4],
     ]
+
+
+def test_runner_derives_and_checkpoints_ids_without_mutating_input(
+    tmp_path: Path,
+) -> None:
+    dataset = _dataset(count=2).drop(columns=["scenario_id"])
+    config = _config()
+    expected_ids = [
+        key.scenario_id for key in build_experiment_job_keys(dataset, config)
+    ]
+    adapter = RecordingAdapter()
+    runner, store = _runner(tmp_path, adapter)
+
+    output = runner.run(dataset, config)
+    resumed = store.initialize(dataset, config)
+
+    assert "scenario_id" not in dataset.columns
+    assert expected_ids == output["scenario_id"].tolist()
+    assert expected_ids == resumed["scenario_id"].tolist()
+    assert all(scenario_id.startswith("scenario:") for scenario_id in expected_ids)
 
 
 def test_async_run_uses_native_async_batches_and_matches_sync_output(

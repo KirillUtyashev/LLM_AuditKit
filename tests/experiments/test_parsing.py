@@ -35,7 +35,12 @@ def _key(
 
 
 def _persona(persona_id: str = "manager") -> Persona:
-    return Persona(persona_id, "Manager", "You are a hiring manager.")
+    return Persona(
+        persona_id,
+        "Manager",
+        "You are a hiring manager in {city}.",
+        "Evaluate applicants.",
+    )
 
 
 def _result(

@@ -17,6 +17,7 @@ classDiagram
         +request_id: str
         +prompt: str
         +system_prompt: Optional~str~
+        +persona: Optional~str~
         +model_config_id: str
         +response_format: Optional~DictResponseFormat~
         +metadata: Dict
@@ -24,6 +25,7 @@ classDiagram
     class DictResponseFormat {
         +fields: List~ResponseField~
         +include_comment: bool
+        +include_type_hints: bool
     }
     class ResponseField {
         +name: str
@@ -88,6 +90,13 @@ classDiagram
         +run()
         +run_async()
     }
+    class EDSLInterview {
+        <<Expected Parrot>>
+        +agent
+        +scenario
+        +survey
+        +model
+    }
     InferenceConfig --> ModelConfig
     InferenceRequest --> DictResponseFormat
     DictResponseFormat --> ResponseField
@@ -103,4 +112,5 @@ classDiagram
     InferenceOrchestrator --> InferenceAdapter : delegates batches
     EDSLAdapter ..|> InferenceAdapter : implements
     EDSLAdapter --> ModelConfig : configures
-    EDSLAdapter --> EDSL : submits compatible response-format groups
+    EDSLAdapter --> EDSLInterview : pairs each request exactly once
+    EDSLAdapter --> EDSL : submits model/response-format groups

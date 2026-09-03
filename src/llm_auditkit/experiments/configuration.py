@@ -25,6 +25,7 @@ from .validation import validate_experiment_config
 _TOP_LEVEL_KEYS = {
     "experiment_id",
     "dataset",
+    "prompt",
     "output",
     "execution",
     "personas",
@@ -32,14 +33,14 @@ _TOP_LEVEL_KEYS = {
 }
 _DATASET_KEYS = {
     "path",
-    "scenario_id_column",
     "job_posting_column",
     "resume_columns",
     "context_columns",
 }
+_PROMPT_KEYS = {"template_path"}
 _OUTPUT_KEYS = {"path"}
 _EXECUTION_KEYS = {"mode", "batch_size", "save_after_each_batch"}
-_PERSONA_KEYS = {"id", "name", "description"}
+_PERSONA_KEYS = {"id", "name", "trait_template_path", "instruction_path"}
 _INFERENCE_KEYS = {"models"}
 _MODEL_KEYS = {"config_id", "provider", "model", "parameters"}
 
@@ -60,6 +61,12 @@ def load_experiment_run_config(path: str | Path) -> ExperimentRunConfig:
         "dataset",
         allowed=_DATASET_KEYS,
         required=_DATASET_KEYS - {"context_columns"},
+    )
+    prompt = _mapping(
+        root["prompt"],
+        "prompt",
+        allowed=_PROMPT_KEYS,
+        required=_PROMPT_KEYS,
     )
     output = _mapping(
         root["output"],
@@ -108,12 +115,16 @@ def load_experiment_run_config(path: str | Path) -> ExperimentRunConfig:
     experiment_config = ExperimentConfig(
         experiment_id=root["experiment_id"],
         dataset_schema=ExperimentDatasetSchema(
-            scenario_id_column=dataset["scenario_id_column"],
             job_posting_column=dataset["job_posting_column"],
             resume_columns=dataset["resume_columns"],
             context_columns=dataset.get("context_columns", {}),
         ),
-        personas=_personas(root["personas"]),
+        prompt_template=_read_text_file(
+            prompt["template_path"],
+            config_path,
+            "prompt.template_path",
+        ),
+        personas=_personas(root["personas"], config_path),
         inference=InferenceConfig(
             models=_models(inference["models"]),
             batch_size=execution["batch_size"],
@@ -171,7 +182,7 @@ def _resolve_config_path(
     return resolved.resolve()
 
 
-def _personas(value: object) -> list[Persona]:
+def _personas(value: object, config_path: Path) -> list[Persona]:
     if not isinstance(value, list):
         raise ExperimentConfigurationError("personas must be a YAML sequence")
     personas: list[Persona] = []
@@ -186,10 +197,35 @@ def _personas(value: object) -> list[Persona]:
             Persona(
                 id=persona["id"],
                 name=persona["name"],
-                description=persona["description"],
+                trait_template=_read_text_file(
+                    persona["trait_template_path"],
+                    config_path,
+                    f"personas[{position}].trait_template_path",
+                ),
+                instruction=_read_text_file(
+                    persona["instruction_path"],
+                    config_path,
+                    f"personas[{position}].instruction_path",
+                ),
             )
         )
     return personas
+
+
+def _read_text_file(value: object, config_path: Path, field_name: str) -> str:
+    resolved = _resolve_config_path(value, config_path, field_name)
+    if resolved.suffix.lower() != ".txt":
+        raise ExperimentConfigurationError(f"{field_name} must reference a .txt file")
+    if not resolved.is_file():
+        raise ExperimentConfigurationError(
+            f"{field_name} file does not exist: {resolved}"
+        )
+    try:
+        return resolved.read_text(encoding="utf-8").strip()
+    except OSError as error:
+        raise ExperimentConfigurationError(
+            f"could not read {field_name}: {type(error).__name__}: {error}"
+        ) from error
 
 
 def _models(value: object) -> list[ModelConfig]:

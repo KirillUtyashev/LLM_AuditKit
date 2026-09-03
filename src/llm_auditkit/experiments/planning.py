@@ -15,12 +15,13 @@ from llm_auditkit.inference import (
 )
 
 from .exceptions import ExperimentIdentityError
+from .identity import derive_scenario_ids
 from .models import (
     ExperimentConfig,
     ExperimentJobKey,
     build_experiment_request_id,
 )
-from .prompts import build_experiment_prompt
+from .prompts import build_experiment_prompt, render_persona_trait
 from .validation import validate_experiment_inputs
 
 
@@ -38,7 +39,7 @@ def _build_experiment_job_keys(
     dataset: pd.DataFrame,
     config: ExperimentConfig,
 ) -> list[ExperimentJobKey]:
-    scenario_ids = dataset[config.dataset_schema.scenario_id_column].tolist()
+    scenario_ids = derive_scenario_ids(dataset)
     return [
         ExperimentJobKey(
             experiment_id=config.experiment_id,
@@ -79,11 +80,15 @@ def build_experiment_requests(
             for position in range(1, len(config.dataset_schema.resume_columns) + 1)
         ],
         include_comment=True,
+        include_type_hints=False,
     )
-    rows_by_scenario_id = {
-        row[config.dataset_schema.scenario_id_column]: row
-        for row in dataset.to_dict(orient="records")
-    }
+    rows_by_scenario_id = dict(
+        zip(
+            derive_scenario_ids(dataset),
+            dataset.to_dict(orient="records"),
+            strict=True,
+        )
+    )
     personas_by_id = {persona.id: persona for persona in config.personas}
 
     requests: list[InferenceRequest] = []
@@ -91,13 +96,16 @@ def build_experiment_requests(
         if key in completed:
             continue
         persona = personas_by_id[key.persona_id]
+        row = rows_by_scenario_id[key.scenario_id]
         request = InferenceRequest(
             request_id=build_experiment_request_id(key),
             prompt=build_experiment_prompt(
-                rows_by_scenario_id[key.scenario_id],
+                row,
                 config.dataset_schema,
+                config.prompt_template,
             ),
-            system_prompt=persona.description,
+            system_prompt=persona.instruction,
+            persona=render_persona_trait(row, config.dataset_schema, persona),
             model_config_id=key.model_config_id,
             metadata={
                 "experiment_id": key.experiment_id,

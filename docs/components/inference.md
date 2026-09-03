@@ -10,7 +10,7 @@ For installation and task-oriented examples, see
 [Using Shared Inference](../guides/shared_inference.md). This page defines the detailed
 component contract and implementation boundaries.
 
-The shared layer validates and batches generic requests, partitions each logical batch into EDSL-compatible job groups, delegates those jobs to EDSL, and normalizes the returned outcomes. Requests can share one EDSL job only when they use the same model configuration, system prompt, and response format; their user prompts and request IDs are carried as scenarios. EDSL owns parallel interview execution, provider rate limiting, caching, and retry behavior within each submitted job. LLM AuditKit does not implement a second worker pool or retry loop around individual EDSL interviews.
+The shared layer validates and batches generic requests, partitions each logical batch into EDSL-compatible job groups, delegates those jobs to EDSL, and normalizes the returned outcomes. Requests can share one EDSL job when they use the same model configuration and response format. The adapter creates one explicitly paired EDSL interview for each request, preserving that request's user prompt, persona, system instruction, and request ID without generating extra combinations. EDSL owns parallel interview execution, provider rate limiting, caching, and retry behavior within each submitted job. LLM AuditKit does not implement a second worker pool or retry loop around individual EDSL interviews.
 
 ## Public API
 
@@ -42,7 +42,8 @@ requests = [
     InferenceRequest(
         request_id="candidate-001:screening-model-v1",
         prompt="Evaluate this synthetic candidate profile.",
-        system_prompt="You are a hiring manager.",
+        system_prompt="Evaluate the candidate using the supplied evidence.",
+        persona="You are a hiring manager.",
         model_config_id="screening-model-v1",
         metadata={"candidate_id": "candidate-001"},
     )
@@ -98,7 +99,8 @@ Callers submit domain-neutral `InferenceRequest` objects containing:
 
 - a stable request ID;
 - a user prompt;
-- an optional system prompt;
+- an optional system instruction;
+- an optional persona;
 - the target model configuration ID;
 - an optional generic response format;
 - caller-defined metadata used to associate the result with domain data.
@@ -110,19 +112,22 @@ A request ID must be unique within one inference run and stable when the same lo
 model, and parameter values are not duplicated on individual requests. The caller
 passes the request collection and configuration together to preview or execute it.
 
-`prompt` is always a string. `system_prompt=None` means that the caller supplies no explicit system instructions and the adapter creates an empty EDSL `Agent`. A non-null system prompt is supplied as the standard EDSL agent `persona` trait. EDSL's default agent instruction and rendered prompt behavior are authoritative; LLM AuditKit does not customize the traits-presentation template, suppress EDSL instructions, or reconstruct EDSL's prompt.
+`prompt` is always a string. The adapter supplies a non-null `system_prompt` as the standard EDSL `Agent.instruction` and a non-null `persona` as the standard `Agent` `persona` trait. If neither is supplied, it creates an empty EDSL `Agent`; if only a persona is supplied, EDSL uses its default agent instruction. EDSL's normal agent and prompt rendering remain authoritative, and preview exposes the effective combined system prompt.
 
 `response_format=None` requests free text and preserves the existing
 `QuestionFreeText` behavior. The supported generic structured format is
-`DictResponseFormat`, which contains an ordered list of `ResponseField` definitions and
-whether a comment is included. Each response field has a name, a JSON-compatible value
-type supported by the adapter, and a human-readable description. The EDSL adapter maps
-this generic format to `QuestionDict`; callers never construct or receive an EDSL
-question type directly.
+`DictResponseFormat`, which contains an ordered list of `ResponseField` definitions,
+whether a comment is included, and whether the backend should include explicit
+value-type hints in the rendered question. Each response field has a JSON-compatible
+value type supported by the adapter, and a human-readable description. Disabling type
+hints omits them from EDSL's prompt but does not change the normalized field contract.
+The EDSL adapter maps this generic format to `QuestionDict`; callers never construct or
+receive an EDSL question type directly.
 
 Response format is part of adapter job compatibility. Requests with different response
 formats are submitted in different EDSL job groups even when their model configuration
-and system prompt match.
+matches. Persona and system-instruction differences do not split a group because each
+request is represented by its own paired interview.
 
 Request metadata is optional caller-owned convenience context. It is not sent to the
 model or used for execution decisions. The inference layer copies it to the normalized
@@ -149,7 +154,7 @@ Each `ModelConfig` has:
 
 Changing a model's provider, model name, or behavior-affecting parameters requires a new configuration ID so resume logic cannot mistake results from different model configurations. Credentials and secrets are not model parameters; they remain in the environment or supported EDSL credential stores.
 
-`batch_size` is the maximum number of logical `InferenceRequest` objects in one LLM AuditKit batch. It is not the number of batches and is not necessarily a number of DataFrame rows. For example, one experiment row expanded across five personas and three models represents fifteen logical requests. A logical batch can require multiple EDSL jobs when its requests use different model configurations or system prompts.
+`batch_size` is the maximum number of logical `InferenceRequest` objects in one LLM AuditKit batch. It is not the number of batches and is not necessarily a number of DataFrame rows. For example, one experiment row expanded across five personas and three models represents fifteen logical requests. A logical batch can require multiple EDSL jobs when its requests use different model configurations or response formats.
 
 Concurrency and retry counts are deliberately not duplicated in `InferenceConfig`. EDSL manages those behaviors for each submitted job using the supported EDSL version and its execution configuration.
 
@@ -164,6 +169,7 @@ Before making any model call, the orchestrator validates the complete configurat
 - unique, non-empty request IDs;
 - non-empty prompts;
 - optional system prompts that are strings when provided;
+- optional personas that are strings when provided;
 - supported, internally consistent response formats with unique non-empty field names;
 - string-keyed request metadata dictionaries;
 - references to known model configuration IDs.
@@ -188,7 +194,7 @@ Both interfaces:
 1. validate the configuration and all requests;
 2. preserve request order and partition pending requests into deterministic batches of at most `batch_size`;
 3. delegate one logical batch at a time to the matching synchronous or asynchronous adapter method;
-4. partition that batch into deterministic EDSL job groups keyed by model configuration, system prompt, and response format, then run or await each group with the corresponding EDSL execution method;
+4. partition that batch into deterministic EDSL job groups keyed by model configuration and response format, build one paired EDSL interview per request, then run or await each group with the corresponding EDSL execution method;
 5. verify and normalize exactly one terminal result for every submitted request;
 6. yield an `InferenceBatchResult` before starting the next batch.
 
@@ -211,7 +217,7 @@ The orchestrator does not begin the next batch until the caller requests the nex
 
 `InferenceAdapter` is the domain-neutral protocol consumed by `InferenceOrchestrator`. It accepts only generic requests and a model-configuration lookup and returns only generic rendered prompts or normalized results. This protocol is also the test seam for exercising orchestration without importing EDSL or making network calls.
 
-`EDSLAdapter` implements that protocol by translating a generic request batch and model definitions into Expected Parrot questions, surveys, agents, models, scenarios, and jobs. Each adapter-created job is intentionally limited to one model configuration, one system prompt, and one response format while scenarios supply the request-specific user prompts and stable request IDs. Free-text formats use `QuestionFreeText`; generic dictionary formats use `QuestionDict`. The adapter exposes matching synchronous and asynchronous batch methods that call EDSL's native `run` and `run_async` methods for each group and convert EDSL responses and terminal failures into the same generic results.
+`EDSLAdapter` implements that protocol by translating a generic request batch and model definitions into Expected Parrot questions, surveys, agents, models, scenarios, interviews, and jobs. Each adapter-created job is limited to one model configuration and one response format. Every request becomes one explicit interview pairing its scenario with its own agent and the group's model and survey, so varying personas or instructions cannot create a Cartesian product. Free-text formats use `QuestionFreeText`; generic dictionary formats use `QuestionDict`. The adapter exposes matching synchronous and asynchronous batch methods that call EDSL's native `run` and `run_async` methods for each group and convert EDSL responses and terminal failures into the same generic results.
 
 When a provider returns token log probabilities, the adapter extracts them from the EDSL
 result and normalizes them into ordered `TokenLogprob` records containing the emitted
@@ -243,7 +249,13 @@ Each `InferenceResult` contains:
 For free-text requests, a successful result has generated string content and no
 structured content. For dictionary requests, a successful result retains the generated
 string for auditability and also contains the validated generic dictionary and optional
-comment returned through EDSL. Token log probabilities are supplemental normalized
+comment returned through EDSL. If EDSL returns no validated dictionary but preserves
+complete generated content, the adapter may recover the first dictionary whose keys
+exactly match the requested response fields. This narrow fallback handles fenced or
+pretty-printed multiline dictionaries that EDSL 1.0.8 splits before `QuestionDict`
+validation; Markdown fences are discarded and other surrounding text is retained as
+the comment. Content that does not match the requested fields remains a failed result.
+Token log probabilities are supplemental normalized
 data and may be absent when they were not requested or the provider does not supply
 them. The effective rendered prompt uses the same generic `RenderedPrompt` type as
 preview and lets calling stages persist the prompts actually rendered by EDSL without

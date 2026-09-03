@@ -115,6 +115,10 @@ def validate_inference_requests(
             raise InferenceRequestValidationError(
                 f"request {request.request_id!r} system_prompt must be a string or None"
             )
+        if request.persona is not None and not isinstance(request.persona, str):
+            raise InferenceRequestValidationError(
+                f"request {request.request_id!r} persona must be a string or None"
+            )
         _require_non_empty_string(
             request.model_config_id,
             field_name=f"request {request.request_id!r} model_config_id",
@@ -211,6 +215,11 @@ def _validate_response_format(request: InferenceRequest) -> None:
     if not isinstance(response_format.include_comment, bool):
         raise InferenceRequestValidationError(
             f"request {request.request_id!r} response format include_comment "
+            "must be a boolean"
+        )
+    if not isinstance(response_format.include_type_hints, bool):
+        raise InferenceRequestValidationError(
+            f"request {request.request_id!r} response format include_type_hints "
             "must be a boolean"
         )
 

@@ -88,15 +88,16 @@ def _config(experiment_id: str) -> ExperimentConfig:
     return ExperimentConfig(
         experiment_id=experiment_id,
         dataset_schema=ExperimentDatasetSchema(
-            scenario_id_column="scenario_id",
             job_posting_column="job_posting",
             resume_columns=["resume_1"],
         ),
+        prompt_template="Applicant 1: {resume_1}",
         personas=[
             Persona(
                 id="live-hiring-manager",
                 name="Hiring manager",
-                description="You are the hiring manager responsible for this role.",
+                trait_template="You are the hiring manager responsible for this role.",
+                instruction="Evaluate the applicant material carefully.",
             )
         ],
         inference=InferenceConfig(

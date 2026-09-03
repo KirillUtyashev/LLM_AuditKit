@@ -31,19 +31,25 @@ def _inference_config() -> InferenceConfig:
 
 def test_experiment_model_defaults_are_independent() -> None:
     first_schema = ExperimentDatasetSchema(
-        scenario_id_column="scenario_id",
         job_posting_column="job_posting",
         resume_columns=["resume_1"],
     )
     second_schema = ExperimentDatasetSchema(
-        scenario_id_column="scenario_id",
         job_posting_column="job_posting",
         resume_columns=["resume_1"],
     )
     first = ExperimentConfig(
         experiment_id="experiment-1",
         dataset_schema=first_schema,
-        personas=[Persona("manager", "Manager", "You are a hiring manager.")],
+        prompt_template="Applicant 1: {resume_1}",
+        personas=[
+            Persona(
+                "manager",
+                "Manager",
+                "You are a hiring manager.",
+                "Evaluate applicants.",
+            )
+        ],
         inference=_inference_config(),
     )
 

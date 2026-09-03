@@ -36,6 +36,7 @@ boundary.
 
 - a stable `experiment_id`;
 - an `ExperimentDatasetSchema` describing the experiment input columns;
+- a required user-question template;
 - personas;
 - shared `InferenceConfig`, including model definitions and the YAML execution batch
   size;
@@ -46,7 +47,6 @@ boundary.
 `ExperimentDatasetSchema` maps semantic experiment fields to the actual DataFrame
 columns. It contains:
 
-- `scenario_id_column`;
 - `job_posting_column`;
 - an ordered, non-empty list of `resume_columns`;
 - optional `context_columns`, mapping semantic context names such as `city`, `year`,
@@ -54,15 +54,25 @@ columns. It contains:
 
 The number of applicants `N` is `len(resume_columns)`. There is no separate applicant
 count that can disagree with the configured columns. The runner validates that all
-configured columns exist, scenario IDs are unique and non-empty, and every job posting
-and populated resume required for inference is a non-empty string.
+configured columns exist and every job posting and populated resume required for
+inference is a non-empty string.
 
-The package documents canonical default column names, including `scenario_id`,
-`job_posting`, and `resume_1` through `resume_N`, while allowing callers entering the
-pipeline with an existing DataFrame to map different names explicitly. Other source
-columns are caller-owned scenario metadata and are preserved unchanged in experiment
-output. This is an experiment-boundary schema, not one universal column schema imposed
-on every pipeline stage.
+Input rows do not need a user-created ID. When a canonical `scenario_id` source column
+is present, its unique, non-empty string values are preserved for compatibility with
+upstream pipeline stages. Otherwise, experiment execution derives a collision-resistant
+`scenario_id` from the complete source row. Column names are sorted before hashing, so
+column order and the DataFrame index do not affect identity. All source columns are
+included, so changing a source value changes the generated ID. Exact duplicate rows are
+rejected because they cannot be distinguished durably; an ordinary stable replicate
+column can distinguish intentional repeated scenarios. The ID is persisted in
+experiment output and checkpoints, not added to the caller's input DataFrame.
+
+The package documents canonical default column names such as `job_posting` and
+`resume_1` through `resume_N`, while allowing callers entering the pipeline with an
+existing DataFrame to map different names explicitly. Other source columns are
+caller-owned scenario metadata and are preserved unchanged in experiment output. This
+is an experiment-boundary schema, not one universal column schema imposed on every
+pipeline stage.
 
 ## Job Identity
 
@@ -73,17 +83,34 @@ Each scheduled job has a stable `ExperimentJobKey` composed of:
 - `persona_id`;
 - `model_config_id`.
 
-The runner derives a deterministic, collision-safe inference request ID from this key
-and also carries the key fields in request metadata. The job key and derived request ID
-are persisted in output. The job key, rather than a DataFrame row index or an EDSL
-result position, associates results and errors and determines whether a job is complete.
+The scenario ID is either preserved from the optional canonical input column or
+derived internally from source-row content. The runner derives a deterministic,
+collision-safe inference request ID from the complete job key and also carries the key
+fields in request metadata. The job key and derived request ID are persisted in output.
+The job key, rather than a DataFrame row index or an EDSL result position, associates
+results and errors and determines whether a job is complete.
 
 An experiment ID identifies one logical experiment definition, including its dataset
 schema and prompt construction contract. Changing prompt-defining experiment behavior
 requires a new experiment ID. Persona and model configuration IDs remain stable only
-while they describe the same logical configuration. Changing a persona description or
+while they describe the same logical configuration. Changing a persona trait template or instruction, or
 a model's provider, model name, or behavior-affecting parameters requires a new
 corresponding ID so incompatible prior results are not treated as complete.
+
+## Question Prompt
+
+Every experiment explicitly supplies its user-question template. YAML references a
+readable, non-empty UTF-8 `.txt` file through `prompt.template_path`; the loader stores
+the text in `ExperimentConfig.prompt_template`, so the DataFrame runner remains
+path-independent.
+
+The template uses simple Python format fields. It can reference source DataFrame
+columns, the canonical `{job_posting}` alias, semantic `context_columns` aliases, and
+the paper-compatible derived `{date14}` and `{newspaper}` fields. It must reference
+every configured resume column, preventing an applicant from being silently omitted.
+The rendered text becomes the EDSL question text without package-owned wording being
+added. Different years, perspectives, or experimental treatments can therefore select
+different versioned template files while using the same execution machinery.
 
 ## Personas and System Prompts
 
@@ -91,9 +118,27 @@ Each `Persona` contains:
 
 - `id`;
 - `name`;
-- `description`.
+- a trait template;
+- a static instruction.
 
-The persona description is supplied through the request's system prompt and mapped to the standard EDSL `Agent` `persona` trait. EDSL owns its default agent instruction and normal system-prompt rendering behavior. A batch preview exposes the effective prompt rendered by EDSL without performing inference.
+YAML persona entries reference separate UTF-8 `.txt` files through
+`trait_template_path` and `instruction_path`. Paths resolve relative to the YAML file.
+The trait template can reference source DataFrame columns and semantic
+`context_columns` aliases with Python format fields, such as `{city}`, `{year}`, and
+`{job_posting}`. Experiment execution renders it separately for every scenario without
+mutating the input DataFrame. The instruction text is passed unchanged for every
+scenario using that persona.
+
+For compatibility with the paper experiment, `{date14}` is available when `year`,
+`month`, and `day` semantic context columns are configured; it is the source date plus
+14 days formatted as `%B %d, %Y`. `{newspaper}` is available when `city` is configured
+and uses the paper's Chicago Tribune, Boston Globe, and Birmingham News mapping.
+
+Shared inference maps the rendered trait to the standard EDSL `Agent` `persona` trait
+and the static instruction to `Agent.instruction`. EDSL owns normal system-prompt
+rendering, and batch preview exposes the effective combined system prompt without
+performing inference. A persona ID must change when either file's logical content
+changes.
 
 ## Inference Configuration
 
@@ -127,18 +172,17 @@ For every incomplete combination of scenario, persona, and configured model, the
 
 - a request ID derived from `ExperimentJobKey`;
 - the fully constructed experiment prompt;
-- the persona description as the system prompt;
+- the rendered persona trait;
+- the static persona instruction as the system prompt;
 - the target model configuration ID;
 - a generic dictionary response format with one ordered `Yes` or `No` field per
   applicant and an optional comment;
 - the job key in generic metadata.
 
-Prompt construction is deterministic. It presents the job posting, then configured
-context values in `context_columns` declaration order, then `Applicant 1` through
-`Applicant N` in `resume_columns` order, followed by the fixed applicant-selection
-instruction. The persona description is passed unchanged as the ordinary system
-prompt; experiment execution does not prepend or replace it with package-specific
-system text.
+Prompt construction is deterministic. Experiment execution renders the configured
+question template and selected persona trait from the same scenario row, and passes
+the persona's static instruction unchanged. It does not add question wording or
+reconstruct EDSL's combined system prompt.
 
 The shared inference adapter maps the generic dictionary response format to EDSL's
 standard `QuestionDict`. EDSL renders and validates the structured response. The runner
@@ -175,12 +219,12 @@ updating the output.
 Both entry points are first-class. The synchronous path delegates to EDSL's native blocking execution, and the asynchronous path delegates to EDSL's native async execution. They use the same request construction, batch boundaries, result association, failures, checkpoint behavior, and returned DataFrame shape.
 
 Batches are sequential at the LLM AuditKit layer. Within a batch, the adapter groups
-requests by model configuration, system prompt, and response format and submits those
-EDSL jobs sequentially. Ten mutually compatible logical requests become one EDSL job
-with ten scenarios; incompatible requests may create multiple EDSL jobs. EDSL owns
-parallel scenario-interview execution, provider rate limiting, caching, and retry
-behavior inside each job. The runner does not create its own request-worker pool or
-retry individual EDSL interviews.
+requests by model configuration and response format and submits those EDSL jobs
+sequentially. Ten mutually compatible logical requests become one EDSL job with ten
+explicitly paired interviews even when every request has a different rendered persona;
+incompatible requests may create multiple EDSL jobs. EDSL owns parallel interview
+execution, provider rate limiting, caching, and retry behavior inside each job. The
+runner does not create its own request-worker pool or retry individual EDSL interviews.
 
 The YAML `execution.mode` selects the public runner method: `sync` calls
 `ExperimentRunner.run` and EDSL's blocking execution, while `async` calls
@@ -242,7 +286,7 @@ Each record contains:
 
 - `experiment_id`, `scenario_id`, `persona_id`, `model_config_id`, and the derived
   `request_id`;
-- persona name and description;
+- persona name, trait template, and static instruction;
 - the effective rendered `user_prompt` and `system_prompt`;
 - `generated_response` and the optional structured-response `comment`;
 - `picks`, serialized as a JSON array of `0` and `1` values in configured resume-column

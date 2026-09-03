@@ -17,13 +17,15 @@ experiment_id: real-experiment-v1
 
 dataset:
   path: ../data/populated.csv
-  scenario_id_column: scenario_id
   job_posting_column: job_posting
   resume_columns:
     - resume_1
     - resume_2
   context_columns:
     city: city
+
+prompt:
+  template_path: prompts/question.txt
 
 output:
   path: ../results/experiment.csv
@@ -36,7 +38,8 @@ execution:
 personas:
   - id: manager-v1
     name: Hiring manager
-    description: You are the hiring manager responsible for this role.
+    trait_template_path: prompts/manager_trait.txt
+    instruction_path: prompts/manager_instruction.txt
 
 inference:
   models:
@@ -52,6 +55,20 @@ inference:
 def _write_config(tmp_path: Path, contents: str = _VALID_YAML) -> Path:
     config_directory = tmp_path / "configs"
     config_directory.mkdir()
+    prompt_directory = config_directory / "prompts"
+    prompt_directory.mkdir()
+    (prompt_directory / "manager_trait.txt").write_text(
+        "You are the hiring manager in {city}.",
+        encoding="utf-8",
+    )
+    (prompt_directory / "manager_instruction.txt").write_text(
+        "Evaluate applicants carefully.",
+        encoding="utf-8",
+    )
+    (prompt_directory / "question.txt").write_text(
+        "Applicant 1: {resume_1}\nApplicant 2: {resume_2}",
+        encoding="utf-8",
+    )
     config_path = config_directory / "experiment.yaml"
     config_path.write_text(contents, encoding="utf-8")
     return config_path
@@ -73,6 +90,13 @@ def test_yaml_loads_run_paths_mode_and_typed_experiment_config(
     assert experiment.experiment_id == "real-experiment-v1"
     assert experiment.dataset_schema.resume_columns == ["resume_1", "resume_2"]
     assert experiment.dataset_schema.context_columns == {"city": "city"}
+    assert experiment.prompt_template == (
+        "Applicant 1: {resume_1}\nApplicant 2: {resume_2}"
+    )
+    assert experiment.personas[0].trait_template == (
+        "You are the hiring manager in {city}."
+    )
+    assert experiment.personas[0].instruction == "Evaluate applicants carefully."
     assert experiment.inference.batch_size == 10
     assert experiment.inference.models[0].parameters == {
         "temperature": 0,
@@ -108,6 +132,20 @@ def test_unknown_yaml_field_is_rejected(tmp_path: Path) -> None:
         load_experiment_run_config(config_path)
 
 
+def test_scenario_id_column_is_not_required_or_configurable(tmp_path: Path) -> None:
+    config_path = _write_config(
+        tmp_path,
+        _VALID_YAML.replace(
+            "  job_posting_column: job_posting",
+            "  scenario_id_column: scenario_id\n"
+            "  job_posting_column: job_posting",
+        ),
+    )
+
+    with pytest.raises(ExperimentConfigurationError, match="scenario_id_column"):
+        load_experiment_run_config(config_path)
+
+
 def test_duplicate_yaml_key_is_rejected(tmp_path: Path) -> None:
     config_path = _write_config(
         tmp_path,
@@ -128,6 +166,19 @@ def test_missing_required_yaml_field_is_rejected(tmp_path: Path) -> None:
     )
 
     with pytest.raises(ExperimentConfigurationError, match="save_after_each_batch"):
+        load_experiment_run_config(config_path)
+
+
+def test_question_prompt_section_is_required(tmp_path: Path) -> None:
+    config_path = _write_config(
+        tmp_path,
+        _VALID_YAML.replace(
+            "prompt:\n  template_path: prompts/question.txt\n\n",
+            "",
+        ),
+    )
+
+    with pytest.raises(ExperimentConfigurationError, match="prompt"):
         load_experiment_run_config(config_path)
 
 
@@ -164,11 +215,57 @@ def test_configuration_path_must_be_an_existing_yaml_file(tmp_path: Path) -> Non
         load_experiment_run_config(text_path)
 
 
+@pytest.mark.parametrize(
+    ("field_name", "path", "message"),
+    [
+        ("trait_template_path", "prompts/missing.txt", "does not exist"),
+        ("instruction_path", "prompts/instruction.md", ".txt"),
+    ],
+)
+def test_persona_prompt_paths_must_reference_existing_text_files(
+    tmp_path: Path,
+    field_name: str,
+    path: str,
+    message: str,
+) -> None:
+    config_path = _write_config(
+        tmp_path,
+        _VALID_YAML.replace(
+            f"{field_name}: prompts/manager_{'trait' if field_name == 'trait_template_path' else 'instruction'}.txt",
+            f"{field_name}: {path}",
+        ),
+    )
+
+    with pytest.raises(ExperimentConfigurationError, match=message):
+        load_experiment_run_config(config_path)
+
+
+@pytest.mark.parametrize(
+    ("path", "message"),
+    [("prompts/missing.txt", "does not exist"), ("prompts/question.md", ".txt")],
+)
+def test_question_prompt_path_must_reference_an_existing_text_file(
+    tmp_path: Path,
+    path: str,
+    message: str,
+) -> None:
+    config_path = _write_config(
+        tmp_path,
+        _VALID_YAML.replace(
+            "template_path: prompts/question.txt",
+            f"template_path: {path}",
+        ),
+    )
+
+    with pytest.raises(ExperimentConfigurationError, match=message):
+        load_experiment_run_config(config_path)
+
+
 def test_repository_example_configuration_is_loadable() -> None:
     repository_root = Path(__file__).resolve().parents[2]
 
     run_config = load_experiment_run_config(
-        repository_root / "examples/experiment_execution.yaml"
+        repository_root / "configs/experiments/synthetic_experiment.yaml"
     )
 
     assert run_config.mode == "async"

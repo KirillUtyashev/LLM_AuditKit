@@ -71,11 +71,18 @@ def _run_config(tmp_path: Path, mode: str) -> ExperimentRunConfig:
         experiment_config=ExperimentConfig(
             experiment_id="experiment-1",
             dataset_schema=ExperimentDatasetSchema(
-                scenario_id_column="scenario_id",
                 job_posting_column="job_posting",
                 resume_columns=["resume_1"],
             ),
-            personas=[Persona("manager", "Manager", "Hiring manager")],
+            prompt_template="Applicant 1: {resume_1}",
+            personas=[
+                Persona(
+                    "manager",
+                    "Manager",
+                    "Hiring manager",
+                    "Evaluate applicants",
+                )
+            ],
             inference=InferenceConfig(
                 models=[
                     ModelConfig(
@@ -155,6 +162,18 @@ def test_command_csv_loader_preserves_string_scenario_ids(tmp_path: Path) -> Non
     dataset = cli._load_experiment_dataset(run_config)
 
     assert dataset["scenario_id"].tolist() == ["001"]
+
+
+def test_command_csv_loader_does_not_require_scenario_ids(tmp_path: Path) -> None:
+    run_config = _run_config(tmp_path, "sync")
+    run_config.dataset_path.write_text(
+        "job_posting,resume_1\nPosting,Resume\n",
+        encoding="utf-8",
+    )
+
+    dataset = cli._load_experiment_dataset(run_config)
+
+    assert list(dataset.columns) == ["job_posting", "resume_1"]
 
 
 def test_command_rejects_missing_or_non_csv_dataset(tmp_path: Path) -> None:

@@ -13,12 +13,12 @@ classDiagram
     class ExperimentConfig {
         +experiment_id: str
         +dataset_schema: ExperimentDatasetSchema
+        +prompt_template: str
         +personas: List~Persona~
         +inference: InferenceConfig
         +save_after_each_batch: bool
     }
     class ExperimentDatasetSchema {
-        +scenario_id_column: str
         +job_posting_column: str
         +resume_columns: List~str~
         +context_columns: Dict~str, str~
@@ -26,7 +26,16 @@ classDiagram
     class Persona {
         +id: str
         +name: str
-        +description: str
+        +trait_template: str
+        +instruction: str
+    }
+    class PersonaTraitRenderer {
+        <<internal>>
+        +render(row: Mapping, schema: ExperimentDatasetSchema, persona: Persona) str
+    }
+    class QuestionPromptRenderer {
+        <<internal>>
+        +render(row: Mapping, schema: ExperimentDatasetSchema, template: str) str
     }
     class InferenceConfig {
         <<shared inference>>
@@ -53,6 +62,10 @@ classDiagram
         +persona_id: str
         +model_config_id: str
     }
+    class ScenarioIdentity {
+        <<internal>>
+        +derive(source_row: Mapping) str
+    }
     class ExperimentOutcome {
         +picks: List~int~
         +logprobs: List~float~
@@ -63,7 +76,8 @@ classDiagram
         +key: ExperimentJobKey
         +request_id: str
         +persona_name: str
-        +persona_description: str
+        +persona_trait_template: str
+        +persona_instruction: str
         +user_prompt: Optional~str~
         +system_prompt: Optional~str~
         +outcome: Optional~ExperimentOutcome~
@@ -103,7 +117,10 @@ classDiagram
     ExperimentConfig --> ExperimentDatasetSchema
     ExperimentConfig --> InferenceConfig
     ExperimentRunner --> ExperimentConfig
+    ExperimentRunner --> ScenarioIdentity : derives or preserves
     ExperimentRunner --> ExperimentJobKey : derives request identity
+    ExperimentRunner --> QuestionPromptRenderer : renders each scenario
+    ExperimentRunner --> PersonaTraitRenderer : renders each scenario
     ExperimentRunner --> InferenceRequest : builds pending requests
     ExperimentRunner --> InferenceBatchPreview : previews
     ExperimentRunner --> InferenceOrchestrator : consumes batches
@@ -113,6 +130,7 @@ classDiagram
     ExperimentRunner --> ExperimentOutputRecord : builds
     ExperimentRunner --> ExperimentResultStore : checkpoints completed batches
     ExperimentRunner --> DataFrame : processes
+    ExperimentResultStore --> ScenarioIdentity : validates checkpoints against
     ExperimentResultStore --> ExperimentJobKey : indexes by
     ExperimentResultStore --> ExperimentOutputRecord : stores
     ExperimentResultStore --> DataFrame : updates and persists

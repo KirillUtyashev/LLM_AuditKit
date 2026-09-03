@@ -3,11 +3,24 @@
 from __future__ import annotations
 
 import logging
+import ast
+import json
 import math
 from collections.abc import Mapping, Sequence
 
-from edsl import Agent, Model, QuestionDict, QuestionFreeText, Scenario, ScenarioList
+from edsl import (
+    Agent,
+    AgentList,
+    Jobs,
+    Model,
+    QuestionDict,
+    QuestionFreeText,
+    Scenario,
+    ScenarioList,
+    Survey,
+)
 from edsl.inference_services.registry import GLOBAL_REGISTRY
+from edsl.interviews import Interview
 
 from .batching import AdapterJobGroup, group_requests_by_compatibility
 from .exceptions import InferenceBatchError
@@ -132,28 +145,49 @@ async def _close_edsl_async_clients(
 
 def _build_job(group: AdapterJobGroup) -> object:
     question = _build_question(group)
-    scenarios = ScenarioList(
-        [
-            Scenario(
-                {
-                    _REQUEST_ID_FIELD: request.request_id,
-                    _PROMPT_FIELD: request.prompt,
-                }
-            )
-            for request in group.requests
-        ]
-    )
-    agent = (
-        Agent()
-        if group.system_prompt is None
-        else Agent(traits={"persona": group.system_prompt})
-    )
+    survey = Survey([question])
     model = Model(
         group.model_config.model,
         service_name=group.model_config.provider,
         **group.model_config.parameters,
     )
-    return question.by(scenarios).by(agent).by(model)
+    scenarios = [
+        Scenario(
+            {
+                _REQUEST_ID_FIELD: request.request_id,
+                _PROMPT_FIELD: request.prompt,
+            }
+        )
+        for request in group.requests
+    ]
+    agents = [_build_agent(request) for request in group.requests]
+    interviews = [
+        Interview(
+            agent=agent,
+            survey=survey,
+            scenario=scenario,
+            model=model,
+        )
+        for agent, scenario in zip(agents, scenarios, strict=True)
+    ]
+    job = Jobs.from_interviews(interviews)
+
+    # EDSL 1.0.8's public ``from_interviews`` constructor retains the explicit
+    # interviews but does not populate these collections, while ``prompts`` uses them
+    # to calculate stable preview indices. Supplying the same paired objects keeps
+    # preview and execution behavior aligned without creating a Cartesian product.
+    job.agents = AgentList(agents)
+    job.scenarios = ScenarioList(scenarios)
+    return job
+
+
+def _build_agent(request: InferenceRequest) -> object:
+    agent_options: dict[str, object] = {}
+    if request.persona is not None:
+        agent_options["traits"] = {"persona": request.persona}
+    if request.system_prompt is not None:
+        agent_options["instruction"] = request.system_prompt
+    return Agent(**agent_options)
 
 
 def _build_question(group: AdapterJobGroup) -> object:
@@ -167,10 +201,14 @@ def _build_question(group: AdapterJobGroup) -> object:
         question_name=_QUESTION_NAME,
         question_text="{{ prompt }}",
         answer_keys=[field.name for field in group.response_format.fields],
-        value_types=[
-            _VALUE_TYPE_MAP[field.value_type]
-            for field in group.response_format.fields
-        ],
+        value_types=(
+            [
+                _VALUE_TYPE_MAP[field.value_type]
+                for field in group.response_format.fields
+            ]
+            if group.response_format.include_type_hints
+            else None
+        ),
         value_descriptions=[
             field.description for field in group.response_format.fields
         ],
@@ -257,7 +295,7 @@ def _normalize_results(
 
         request = requests_by_id[request_id]
         rendered_prompt = _result_rendered_prompt(result, request_id)
-        content, structured_content = _result_response(result, request)
+        content, structured_content, comment = _result_response(result, request)
         if content is None:
             error = task_errors.get(
                 request_id,
@@ -270,11 +308,6 @@ def _normalize_results(
             token_logprobs: list[TokenLogprob] = []
         else:
             error = None
-            comment = (
-                _result_comment(result, request_id)
-                if request.response_format is not None
-                else None
-            )
             token_logprobs = _result_token_logprobs(result, request_id)
 
         results_by_id[request_id] = InferenceResult(
@@ -308,39 +341,184 @@ def _result_request_id(result: object) -> str:
 def _result_response(
     result: object,
     request: InferenceRequest,
-) -> tuple[str | None, dict[str, object] | None]:
+) -> tuple[str | None, dict[str, object] | None, str | None]:
     answer = getattr(result, "answer", None)
-    if answer is None:
-        return None, None
-    if not isinstance(answer, Mapping):
+    if answer is not None and not isinstance(answer, Mapping):
         raise InferenceBatchError(
             f"EDSL result for request {request.request_id!r} has an invalid answer "
             "mapping"
         )
 
-    response = answer.get(_QUESTION_NAME)
-    if response is None:
-        return None, None
+    response = None if answer is None else answer.get(_QUESTION_NAME)
     if request.response_format is None:
+        if response is None:
+            return None, None, None
         if not isinstance(response, str):
             raise InferenceBatchError(
                 f"EDSL result for request {request.request_id!r} has non-string "
                 "response content"
             )
-        return response, None
+        return response, None, None
+
+    generated_content = _result_generated_content(result, request.request_id)
+    if response is None:
+        if generated_content is None:
+            return None, None, None
+        recovered = _recover_structured_response(
+            generated_content,
+            expected_fields=[field.name for field in request.response_format.fields],
+        )
+        if recovered is None:
+            return None, None, None
+        structured_content, comment = recovered
+        return generated_content, structured_content, comment
+
     if not isinstance(response, Mapping):
         raise InferenceBatchError(
             f"EDSL result for request {request.request_id!r} has a non-dictionary "
             "structured response"
         )
 
-    generated_content = _result_generated_content(result, request.request_id)
     if generated_content is None:
         raise InferenceBatchError(
             f"EDSL structured result for request {request.request_id!r} is missing "
             "generated response content"
         )
-    return generated_content, dict(response)
+    return (
+        generated_content,
+        dict(response),
+        _result_comment(result, request.request_id),
+    )
+
+
+def _recover_structured_response(
+    generated_content: str,
+    *,
+    expected_fields: Sequence[str],
+) -> tuple[dict[str, object], str | None] | None:
+    """Recover a schema-matching dictionary from EDSL's complete model output.
+
+    EDSL 1.0.8 splits non-free-text responses at the first newline before its
+    ``QuestionDict`` validator runs. Consequently, fenced or pretty-printed
+    dictionaries can produce a missing validated answer even though
+    ``generated_tokens`` contains the complete response. This recovery remains
+    adapter-local and runs only after EDSL's normal validation has failed.
+    """
+
+    expected_field_set = set(expected_fields)
+    for start, end in _braced_spans(generated_content):
+        candidate = generated_content[start:end]
+        parsed = _decode_mapping(candidate)
+        if parsed is None:
+            continue
+        if len(parsed) != len(expected_fields) or set(parsed) != expected_field_set:
+            continue
+        if not all(_is_json_compatible(value) for value in parsed.values()):
+            continue
+
+        ordered = {field: parsed[field] for field in expected_fields}
+        comment = _surrounding_response_text(generated_content, start, end)
+        return ordered, comment
+
+    return None
+
+
+def _braced_spans(content: str) -> list[tuple[int, int]]:
+    """Return balanced top-level brace spans while respecting quoted strings."""
+
+    spans: list[tuple[int, int]] = []
+    start: int | None = None
+    depth = 0
+    quote: str | None = None
+    escaped = False
+
+    for index, character in enumerate(content):
+        if depth == 0:
+            if character == "{":
+                start = index
+                depth = 1
+            continue
+
+        if quote is not None:
+            if escaped:
+                escaped = False
+            elif character == "\\":
+                escaped = True
+            elif character == quote:
+                quote = None
+            continue
+
+        if character in {'"', "'"}:
+            quote = character
+        elif character == "{":
+            depth += 1
+        elif character == "}":
+            depth -= 1
+            if depth == 0 and start is not None:
+                spans.append((start, index + 1))
+                start = None
+
+    return spans
+
+
+def _decode_mapping(candidate: str) -> dict[str, object] | None:
+    parsed: object
+    try:
+        parsed = json.loads(candidate)
+    except json.JSONDecodeError:
+        try:
+            parsed = ast.literal_eval(candidate)
+        except (SyntaxError, ValueError):
+            return None
+
+    if not isinstance(parsed, dict) or not all(
+        isinstance(key, str) for key in parsed
+    ):
+        return None
+    return parsed
+
+
+def _is_json_compatible(value: object) -> bool:
+    if value is None or isinstance(value, (str, bool, int)):
+        return True
+    if isinstance(value, float):
+        return math.isfinite(value)
+    if isinstance(value, list):
+        return all(_is_json_compatible(item) for item in value)
+    if isinstance(value, dict):
+        return all(
+            isinstance(key, str) and _is_json_compatible(item)
+            for key, item in value.items()
+        )
+    return False
+
+
+def _surrounding_response_text(
+    generated_content: str,
+    start: int,
+    end: int,
+) -> str | None:
+    surrounding = "\n".join(
+        part
+        for part in (
+            _strip_fence_lines(generated_content[:start]),
+            _strip_fence_lines(generated_content[end:]),
+        )
+        if part
+    ).strip()
+    for prefix in ("COMMENT:", "CORRECTION:"):
+        if surrounding.upper().startswith(prefix):
+            surrounding = surrounding[len(prefix) :].strip()
+            break
+    return surrounding or None
+
+
+def _strip_fence_lines(content: str) -> str:
+    return "\n".join(
+        line
+        for line in content.strip().splitlines()
+        if line.strip().lower() not in {"```", "```json", "```python"}
+    ).strip()
 
 
 def _result_generated_content(result: object, request_id: str) -> str | None:

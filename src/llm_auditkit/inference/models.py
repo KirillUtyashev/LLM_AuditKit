@@ -44,6 +44,7 @@ class DictResponseFormat:
 
     fields: list[ResponseField]
     include_comment: bool = True
+    include_type_hints: bool = True
 
 
 @dataclass(slots=True)
@@ -56,6 +57,7 @@ class InferenceRequest:
     system_prompt: str | None = None
     metadata: dict[str, object] = field(default_factory=dict)
     response_format: DictResponseFormat | None = None
+    persona: str | None = None
 
 
 @dataclass(slots=True)

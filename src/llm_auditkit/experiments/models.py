@@ -18,18 +18,18 @@ ExperimentExecutionMode: TypeAlias = Literal["sync", "async"]
 
 @dataclass(slots=True)
 class Persona:
-    """Stable persona supplied as an inference system prompt."""
+    """Stable persona definition rendered for each experiment scenario."""
 
     id: str
     name: str
-    description: str
+    trait_template: str
+    instruction: str
 
 
 @dataclass(slots=True)
 class ExperimentDatasetSchema:
     """Map semantic experiment inputs to DataFrame columns."""
 
-    scenario_id_column: str
     job_posting_column: str
     resume_columns: list[str]
     context_columns: dict[str, str] = field(default_factory=dict)
@@ -41,6 +41,7 @@ class ExperimentConfig:
 
     experiment_id: str
     dataset_schema: ExperimentDatasetSchema
+    prompt_template: str
     personas: list[Persona]
     inference: InferenceConfig
     save_after_each_batch: bool = True
@@ -83,7 +84,8 @@ class ExperimentOutputRecord:
     key: ExperimentJobKey
     request_id: str
     persona_name: str
-    persona_description: str
+    persona_trait_template: str
+    persona_instruction: str
     user_prompt: str | None
     system_prompt: str | None
     outcome: ExperimentOutcome | None = None

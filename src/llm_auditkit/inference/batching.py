@@ -9,7 +9,7 @@ from .exceptions import InferenceConfigurationError, InferenceRequestValidationE
 from .models import DictResponseFormat, InferenceRequest, ModelConfig
 
 
-ResponseFormatKey = tuple[bool, tuple[tuple[str, str, str], ...]] | None
+ResponseFormatKey = tuple[bool, bool, tuple[tuple[str, str, str], ...]] | None
 
 
 @dataclass(frozen=True, slots=True)
@@ -25,13 +25,12 @@ class RequestBatch:
 class AdapterJobGroup:
     """Requests compatible with one backend job.
 
-    EDSL jobs created by the shared adapter use exactly one model configuration, one
-    system prompt, and one response format. Request-specific user prompts remain
-    separate scenarios.
+    EDSL jobs created by the shared adapter use exactly one model configuration and
+    one response format. Request-specific prompts and agents remain explicitly paired
+    as interviews.
     """
 
     model_config: ModelConfig
-    system_prompt: str | None
     response_format: DictResponseFormat | None
     requests: tuple[InferenceRequest, ...]
 
@@ -72,14 +71,14 @@ def group_requests_by_compatibility(
 ) -> tuple[AdapterJobGroup, ...]:
     """Build compatible job groups without adding request combinations.
 
-    Groups and requests within each group preserve first-seen input order. ``None``
-    and an explicitly empty system prompt are distinct grouping keys. Structurally
-    equivalent dictionary response formats share a group even when callers constructed
-    separate format objects.
+    Groups and requests within each group preserve first-seen input order.
+    Structurally equivalent dictionary response formats share a group even when callers
+    constructed separate format objects. Request-specific persona and system-prompt
+    values do not split groups because EDSL interviews preserve their exact pairing.
     """
 
     grouped_requests: dict[
-        tuple[str, str | None, ResponseFormatKey],
+        tuple[str, ResponseFormatKey],
         list[InferenceRequest],
     ] = {}
 
@@ -91,7 +90,6 @@ def group_requests_by_compatibility(
             )
         group_key = (
             request.model_config_id,
-            request.system_prompt,
             _response_format_key(request.response_format),
         )
         grouped_requests.setdefault(group_key, []).append(request)
@@ -99,13 +97,11 @@ def group_requests_by_compatibility(
     return tuple(
         AdapterJobGroup(
             model_config=models[model_config_id],
-            system_prompt=system_prompt,
             response_format=group_requests[0].response_format,
             requests=tuple(group_requests),
         )
         for (
             model_config_id,
-            system_prompt,
             _response_format,
         ), group_requests in grouped_requests.items()
     )
@@ -118,6 +114,7 @@ def _response_format_key(
         return None
     return (
         response_format.include_comment,
+        response_format.include_type_hints,
         tuple(
             (field.name, field.value_type, field.description)
             for field in response_format.fields

@@ -14,6 +14,7 @@ from tempfile import NamedTemporaryFile
 import pandas as pd
 
 from .exceptions import ExperimentResultStoreError
+from .identity import derive_scenario_ids
 from .models import (
     ExperimentConfig,
     ExperimentJobKey,
@@ -34,7 +35,8 @@ _IDENTITY_COLUMNS = [
 ]
 _DETAIL_COLUMNS = [
     "persona_name",
-    "persona_description",
+    "persona_trait_template",
+    "persona_instruction",
     "user_prompt",
     "system_prompt",
     "generated_response",
@@ -97,10 +99,13 @@ class ExperimentResultStore:
             for row in output_dataset.to_dict(orient="records")
             if _key_from_row(row) not in replaced_keys
         ]
-        source_rows = {
-            row[config.dataset_schema.scenario_id_column]: row
-            for row in dataset.to_dict(orient="records")
-        }
+        source_rows = dict(
+            zip(
+                derive_scenario_ids(dataset),
+                dataset.to_dict(orient="records"),
+                strict=True,
+            )
+        )
         new_rows = [
             _record_to_row(record, source_rows[record.key.scenario_id], config)
             for record in validated_records
@@ -201,7 +206,6 @@ class ExperimentResultStore:
                     "dataset and experiment configuration"
                 )
             string_columns = set(_IDENTITY_COLUMNS)
-            string_columns.add(config.dataset_schema.scenario_id_column)
             return pd.read_csv(
                 self.output_path,
                 dtype={column: "string" for column in string_columns},
@@ -277,10 +281,7 @@ def _validate_source_columns(
             raise ExperimentResultStoreError(
                 "experiment source column names must be strings for CSV persistence"
             )
-        if (
-            column == "scenario_id"
-            and column == config.dataset_schema.scenario_id_column
-        ):
+        if column == "scenario_id":
             continue
         if (
             column in _RESERVED_STATIC_COLUMNS
@@ -307,7 +308,6 @@ def _validate_existing_output(
     planned_keys = set(build_experiment_job_keys(dataset, config))
     seen_keys: set[ExperimentJobKey] = set()
     personas = {persona.id: persona for persona in config.personas}
-    source_scenario_column = config.dataset_schema.scenario_id_column
     for row in output_dataset.to_dict(orient="records"):
         key = _key_from_row(row)
         if key in seen_keys:
@@ -324,19 +324,14 @@ def _validate_existing_output(
             raise ExperimentResultStoreError(
                 "output_dataset contains a request ID that does not match its job key"
             )
-        if (
-            not _is_non_empty_string(row[source_scenario_column])
-            or row[source_scenario_column] != key.scenario_id
-        ):
-            raise ExperimentResultStoreError(
-                "output_dataset source scenario ID does not match its job key"
-            )
         persona = personas[key.persona_id]
         if (
             not _is_non_empty_string(row["persona_name"])
-            or not _is_non_empty_string(row["persona_description"])
+            or not _is_non_empty_string(row["persona_trait_template"])
+            or not _is_non_empty_string(row["persona_instruction"])
             or row["persona_name"] != persona.name
-            or row["persona_description"] != persona.description
+            or row["persona_trait_template"] != persona.trait_template
+            or row["persona_instruction"] != persona.instruction
         ):
             raise ExperimentResultStoreError(
                 "output_dataset persona fields do not match the current configuration"
@@ -387,7 +382,8 @@ def _validate_records(
         persona = personas[record.key.persona_id]
         if (
             record.persona_name != persona.name
-            or record.persona_description != persona.description
+            or record.persona_trait_template != persona.trait_template
+            or record.persona_instruction != persona.instruction
         ):
             raise ExperimentResultStoreError(
                 "batch record persona fields do not match the current configuration"
@@ -472,7 +468,8 @@ def _record_to_row(
             "model_config_id": record.key.model_config_id,
             "request_id": record.request_id,
             "persona_name": record.persona_name,
-            "persona_description": record.persona_description,
+            "persona_trait_template": record.persona_trait_template,
+            "persona_instruction": record.persona_instruction,
             "user_prompt": record.user_prompt,
             "system_prompt": record.system_prompt,
             "generated_response": None,

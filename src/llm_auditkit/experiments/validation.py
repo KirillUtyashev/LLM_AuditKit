@@ -10,7 +10,13 @@ from llm_auditkit.inference import InferenceConfigurationError
 from llm_auditkit.inference.validation import validate_inference_config
 
 from .exceptions import ExperimentConfigurationError, ExperimentDatasetError
+from .identity import SCENARIO_ID_COLUMN, derive_scenario_ids
 from .models import ExperimentConfig, ExperimentDatasetSchema, Persona
+from .prompts import (
+    derived_persona_trait_fields,
+    experiment_prompt_fields,
+    persona_trait_fields,
+)
 
 
 def validate_experiment_config(config: ExperimentConfig) -> None:
@@ -21,6 +27,7 @@ def validate_experiment_config(config: ExperimentConfig) -> None:
 
     _require_non_empty_string(config.experiment_id, "experiment_id")
     _validate_dataset_schema(config.dataset_schema)
+    _validate_prompt_template(config.prompt_template, config.dataset_schema)
     _validate_personas(config.personas)
 
     try:
@@ -59,11 +66,12 @@ def validate_experiment_dataset(
         raise ExperimentDatasetError("dataset must be a pandas DataFrame")
     if not dataset.columns.is_unique:
         raise ExperimentDatasetError("dataset column names must be unique")
+    if not all(isinstance(column, str) for column in dataset.columns):
+        raise ExperimentDatasetError("dataset column names must be strings")
 
     required_columns = list(
         dict.fromkeys(
             [
-                schema.scenario_id_column,
                 schema.job_posting_column,
                 *schema.resume_columns,
                 *schema.context_columns.values(),
@@ -81,16 +89,17 @@ def validate_experiment_dataset(
             f"dataset is missing configured columns: {names}"
         )
 
-    scenario_ids = dataset[schema.scenario_id_column]
-    if not scenario_ids.map(_is_non_empty_string).all():
+    scenario_ids = derive_scenario_ids(dataset)
+    if SCENARIO_ID_COLUMN in dataset.columns and not all(
+        _is_non_empty_string(scenario_id) for scenario_id in scenario_ids
+    ):
         raise ExperimentDatasetError(
-            f"scenario ID column {schema.scenario_id_column!r} must contain "
-            "non-empty strings"
+            "optional scenario ID values in scenario_id must be non-empty strings"
         )
-    if scenario_ids.duplicated().any():
+    if len(scenario_ids) != len(set(scenario_ids)):
         raise ExperimentDatasetError(
-            f"scenario ID column {schema.scenario_id_column!r} must contain "
-            "unique values"
+            "scenario IDs must be unique; remove duplicate scenario_id values "
+            "or add a stable replicate column to distinguish identical source rows"
         )
 
     text_columns = [schema.job_posting_column, *schema.resume_columns]
@@ -110,6 +119,52 @@ def validate_experiment_inputs(
 
     validate_experiment_config(config)
     validate_experiment_dataset(dataset, config.dataset_schema)
+    available_trait_fields = set(dataset.columns)
+    available_trait_fields.add("job_posting")
+    available_trait_fields.update(config.dataset_schema.context_columns)
+    available_trait_fields.update(
+        derived_persona_trait_fields(config.dataset_schema)
+    )
+    missing_prompt_fields = sorted(
+        experiment_prompt_fields(config.prompt_template).difference(
+            available_trait_fields
+        )
+    )
+    if missing_prompt_fields:
+        rendered = ", ".join(repr(field) for field in missing_prompt_fields)
+        raise ExperimentDatasetError(
+            "experiment prompt template references unavailable dataset fields: "
+            f"{rendered}"
+        )
+    for persona in config.personas:
+        missing_fields = sorted(
+            persona_trait_fields(persona).difference(available_trait_fields)
+        )
+        if missing_fields:
+            rendered = ", ".join(repr(field) for field in missing_fields)
+            raise ExperimentDatasetError(
+                f"persona {persona.id!r} trait template references unavailable "
+                f"dataset fields: {rendered}"
+            )
+
+
+def _validate_prompt_template(
+    prompt_template: object,
+    schema: ExperimentDatasetSchema,
+) -> None:
+    _require_non_empty_string(prompt_template, "prompt_template")
+    fields = experiment_prompt_fields(prompt_template)
+    missing_resumes = [
+        column_name
+        for column_name in schema.resume_columns
+        if column_name not in fields
+    ]
+    if missing_resumes:
+        rendered = ", ".join(repr(column) for column in missing_resumes)
+        raise ExperimentConfigurationError(
+            "prompt_template must reference every configured resume column: "
+            f"{rendered}"
+        )
 
 
 def _validate_dataset_schema(schema: ExperimentDatasetSchema) -> None:
@@ -118,7 +173,6 @@ def _validate_dataset_schema(schema: ExperimentDatasetSchema) -> None:
             "dataset_schema must be an ExperimentDatasetSchema"
         )
 
-    _require_non_empty_string(schema.scenario_id_column, "scenario_id_column")
     _require_non_empty_string(schema.job_posting_column, "job_posting_column")
     if not _is_sequence(schema.resume_columns) or not schema.resume_columns:
         raise ExperimentConfigurationError(
@@ -131,13 +185,12 @@ def _validate_dataset_schema(schema: ExperimentDatasetSchema) -> None:
         )
 
     core_columns = [
-        schema.scenario_id_column,
         schema.job_posting_column,
         *schema.resume_columns,
     ]
     if len(set(core_columns)) != len(core_columns):
         raise ExperimentConfigurationError(
-            "scenario, job-posting, and resume column names must be distinct"
+            "job-posting and resume column names must be distinct"
         )
 
     if not isinstance(schema.context_columns, dict):
@@ -165,9 +218,14 @@ def _validate_personas(personas: Sequence[Persona]) -> None:
         _require_non_empty_string(persona.id, f"persona at position {index} id")
         _require_non_empty_string(persona.name, f"persona {persona.id!r} name")
         _require_non_empty_string(
-            persona.description,
-            f"persona {persona.id!r} description",
+            persona.trait_template,
+            f"persona {persona.id!r} trait_template",
         )
+        _require_non_empty_string(
+            persona.instruction,
+            f"persona {persona.id!r} instruction",
+        )
+        persona_trait_fields(persona)
         if persona.id in seen_ids:
             raise ExperimentConfigurationError(
                 f"duplicate persona ID: {persona.id!r}"

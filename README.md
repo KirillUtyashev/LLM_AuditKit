@@ -50,10 +50,10 @@ failures, and checkpoint integration.
 
 For the higher-level YAML workflow, read
 [Running Hiring Experiments](docs/guides/experiment_execution.md). The guide covers
-dataset and output paths, schema mapping, personas, stable IDs, log probabilities,
-prompt preview, synchronous and asynchronous execution, atomic CSV checkpoints, and
-resume behavior. A runnable paid OpenAI configuration is available at
-[`experiment_execution.yaml`](examples/experiment_execution.yaml).
+dataset and output paths, schema mapping, explicit question and persona templates,
+stable IDs, log probabilities, prompt preview, synchronous and asynchronous execution,
+atomic CSV checkpoints, and resume behavior. A runnable paid OpenAI configuration is available at
+[`synthetic_experiment.yaml`](configs/experiments/synthetic_experiment.yaml).
 
 ## Documentation
 

@@ -38,6 +38,7 @@ def main() -> int:
             request_id="quickstart-sync",
             prompt="Reply with exactly: HELLO_AUDITKIT",
             system_prompt="Follow the requested output format exactly.",
+            persona="You are a concise API test assistant.",
             model_config_id="openai-quickstart",
             metadata={"example": "sync"},
         )

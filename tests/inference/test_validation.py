@@ -147,6 +147,15 @@ def test_empty_explicit_system_prompt_is_valid() -> None:
     validate_inference_requests([_request(system_prompt="")], _config())
 
 
+def test_persona_must_be_a_string_or_none() -> None:
+    with pytest.raises(InferenceRequestValidationError, match="persona"):
+        validate_inference_requests([_request(persona=123)], _config())
+
+
+def test_empty_explicit_persona_is_valid() -> None:
+    validate_inference_requests([_request(persona="")], _config())
+
+
 @pytest.mark.parametrize("metadata", [[], {1: "non-string key"}])
 def test_request_metadata_must_be_a_string_keyed_dictionary(metadata: object) -> None:
     with pytest.raises(InferenceRequestValidationError, match="metadata"):
@@ -218,6 +227,13 @@ def test_dictionary_response_format_is_valid() -> None:
                 include_comment=1,
             ),
             "include_comment",
+        ),
+        (
+            DictResponseFormat(
+                fields=[ResponseField("decision", "string", "Yes or No")],
+                include_type_hints=1,
+            ),
+            "include_type_hints",
         ),
     ],
 )

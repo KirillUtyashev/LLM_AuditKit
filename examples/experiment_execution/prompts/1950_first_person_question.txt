@@ -1,0 +1,11 @@
+Here are four additional application forms you received this week:
+
+                Applicant 1: {resume_1}.
+
+                Applicant 2: {resume_2}.
+
+                Applicant 3: {resume_3}.
+
+                Applicant 4: {resume_4}.
+
+                Based on your expectations of the applicant pool, please select the candidates from this group whom you would like to invite for an interview, if any. Note that there is no need to interview any of the four if you feel some good applicants have already applied. Keep in mind that interviews are costly, so consider your selections carefully.
