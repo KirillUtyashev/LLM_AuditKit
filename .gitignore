@@ -35,3 +35,6 @@ htmlcov/
 
 # Local checkouts of private reference repositories
 .references/
+
+# Generated research datasets, regression results, and figures
+/outputs/

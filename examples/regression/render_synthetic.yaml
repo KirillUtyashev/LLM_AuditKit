@@ -1,0 +1,25 @@
+# Synthetic saved coefficients: demonstrates styling, not research findings.
+# Paths are relative to this YAML file, not the shell's working directory.
+results_paths:
+  - ../../tests/r/fixtures/regression/render_results_synthetic.csv
+output_path: ../../outputs/regression/synthetic_paper_style.png
+term: black
+confidence_level: 0.95
+period_variable: period
+panel_variable: audit_id
+outcome_by_panel:
+  audit_a: pick_top
+  audit_b: pick_threshold
+  audit_c: pick_threshold
+  audit_d: pick_threshold
+period_order: [1970, 1980, 1990, 2000, 2010, 2020]
+panel_order: [audit_a, audit_b, audit_c, audit_d]
+panel_labels:
+  audit_a: 'Panel A: Model A (synthetic; top-share outcome)'
+  audit_b: 'Panel B: Model B (synthetic; probability-threshold outcome)'
+  audit_c: 'Panel C: Model C (synthetic; probability-threshold outcome)'
+  audit_d: 'Panel D: Model D (synthetic; probability-threshold outcome)'
+x_label: Period
+y_label: Black coefficient
+# Remaining fields use the documented paper-style defaults, including
+# a 2-column grid and a 12 x 8 inch, 300 DPI PNG.

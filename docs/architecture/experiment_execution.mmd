@@ -49,6 +49,19 @@ classDiagram
     class DataFrame {
         <<pandas>>
     }
+    class RawExperimentResults {
+        <<CSV>>
+        +row_grain: experiment_job_key
+        +scenario_id: str
+        +persona_id: str
+        +model_config_id: str
+        +result_status: str
+        +stable candidate fields
+    }
+    class RegressionDataPreparation {
+        <<R>>
+        +role: downstream_preparation_consumer
+    }
     ExperimentConfig --> Persona
     ExperimentConfig --> InferenceConfig
     ExperimentRunner --> ExperimentConfig
@@ -61,3 +74,5 @@ classDiagram
     ExperimentResultStore --> ExperimentJobKey : indexes by
     ExperimentResultStore --> InferenceResult : stores
     ExperimentResultStore --> DataFrame : updates and persists
+    ExperimentResultStore --> RawExperimentResults : writes atomically
+    RawExperimentResults ..> RegressionDataPreparation : audit-partitioned handoff pending production issue 13

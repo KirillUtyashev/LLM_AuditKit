@@ -102,4 +102,41 @@ If a job fails after `inference.max_retries` attempts:
 
 ## Output
 
-The output preserves the scenario data and adds the corresponding experiment results and error information. Results are persisted as CSV with one record per `ExperimentJobKey`, providing the input contract for regression analysis.
+The output preserves structured scenario and candidate metadata and adds the
+corresponding experiment results and error information. Results are persisted
+as a raw CSV with one record per `ExperimentJobKey`. This CSV is the upstream
+source for [regression-data preparation](regression_analysis.md#1-regression-data-preparation),
+not directly for regression estimation; when it contains multiple personas or
+models, an audit-partitioned writer output or handoff adapter becomes the
+preparation command's direct input.
+
+The raw output must preserve:
+
+- `scenario_id`, `persona_id`, and `model_config_id`;
+- the `result_status` completion indicator;
+- configurable candidate cardinality;
+- a stable candidate/resume identity for every candidate;
+- structured candidate covariates needed for later analysis;
+- candidate-level raw selections and emitted-answer log probabilities; and
+- structured ranking fields such as city and year.
+
+An experiment configuration may schedule several personas and model
+configurations into one aggregate result table. The current regression
+preparation boundary does not filter such a table: each configured CSV set must
+already represent one persona, one model configuration, and one distinguishable
+run or batch before the researcher assigns its `audit_id`.
+
+The [regression integration handoff](../integration/regression_analysis.md)
+verifies the downstream workflow with audit-partitioned public fixtures and
+records a compatibility-only smoke test for the legacy private sample. It does
+not select the production handoff design. Issue #13 must either make the
+finalized writer emit audit-partitioned CSVs or provide an explicit, validated
+adapter that partitions aggregate output first. Because `ExperimentJobKey`
+currently has no run/batch field, the writer or adapter must also preserve that
+provenance rather than asking preparation to infer it. The temporary legacy
+sample mapping is not a production adapter.
+
+Candidate indices may describe the wide CSV layout but are not durable
+identities. The exact consumer-facing column convention and validation rules are
+defined by the linked regression-data preparation contract and must be
+coordinated with this component before production integration.

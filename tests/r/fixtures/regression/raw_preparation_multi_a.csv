@@ -1,0 +1,4 @@
+scenario_id,persona_id,model_config_id,result_status,candidate_count,city,year,job_category,candidate_1_id,candidate_1_pick,candidate_1_log_probability,candidate_1_black,candidate_2_id,candidate_2_pick,candidate_2_log_probability,candidate_2_black,candidate_3_id,candidate_3_pick,candidate_3_log_probability,candidate_3_black
+job-007,persona-a,model-a,completed,3,Toronto,2010,administrative,cand-001-a,1,-0.001,1,cand-001-b,1,-0.02,0,cand-001-c,0,-0.00001,1
+job-001,persona-a,model-a,completed,3,Toronto,2010,administrative,cand-001-a,1,-0.001,1,cand-001-b,0,-0.005,0,cand-001-c,1,-0.03,1
+job-002,persona-a,model-a,completed,2,Toronto,2010,sales,cand-002-a,1,-0.01005033585350145,0,cand-002-b,0,,1,,,,

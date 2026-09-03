@@ -28,6 +28,13 @@ The paper's historical output-cleaning, regression, and plotting workflow is in 
 
 Use `samples/edsl_raw_results_sample.csv` to inspect the post-EDSL result shape and `samples/regression_ready_results_sample.csv` to inspect the cleaned regression input, including raw picks and log-probability-based pick columns. These slices are schema examples, not statistically representative data.
 
+The [regression integration handoff](integration/regression_analysis.md#private-reference-smoke-test)
+records the 2026-09-01 compatibility-only manual smoke test of the raw sample.
+The mapping and all generated artifacts remained temporary and untracked. That
+run checks mechanical stage compatibility only; it does not make the legacy
+schema authoritative or validate substantive findings, canonical identities,
+or modern emitted-answer probability semantics.
+
 Do not treat legacy module boundaries, hard-coded paths, dependencies, or operational shortcuts as current design decisions. In particular:
 
 - LLM AuditKit architecture documentation is authoritative when it conflicts with the reference.

@@ -1,0 +1,27 @@
+# Independent rendering from the two saved tidy result CSVs.
+results_paths:
+  - ../../../outputs/regression/end_to_end/audit_a/regression_results.csv
+  - ../../../outputs/regression/end_to_end/audit_b/regression_results.csv
+output_path: ../../../outputs/regression/end_to_end/multi_audit_black_coefficients.png
+term: black
+outcome_variable: pick_threshold
+confidence_level: 0.95
+period_variable: year
+series_variable: city
+panel_variable: audit_id
+period_order: [2010, 2020]
+series_order: [Montreal, Toronto]
+panel_order:
+  - synthetic_historian_model_a_run_001
+  - synthetic_historian_model_b_run_001
+panel_labels:
+  synthetic_historian_model_a_run_001: 'Panel A: Synthetic model A'
+  synthetic_historian_model_b_run_001: 'Panel B: Synthetic model B'
+x_label: Year
+y_label: Black coefficient
+y_limits: [-1.5, 1.5]
+y_break_interval: 0.5
+panel_columns: 2
+width: 10
+height: 5
+dpi: 120
