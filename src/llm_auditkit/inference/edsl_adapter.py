@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 from collections.abc import Mapping, Sequence
 
 from edsl import Agent, Model, QuestionFreeText, Scenario, ScenarioList
@@ -21,6 +22,7 @@ from .models import (
 _QUESTION_NAME = "response"
 _REQUEST_ID_FIELD = "request_id"
 _PROMPT_FIELD = "prompt"
+_LOGGER = logging.getLogger(__name__)
 
 
 class EDSLAdapter:
@@ -91,7 +93,13 @@ class EDSLAdapter:
 
             return _order_results(requests, normalized_results)
         finally:
-            await _close_edsl_async_clients(requests, models)
+            try:
+                await _close_edsl_async_clients(requests, models)
+            except Exception:
+                _LOGGER.warning(
+                    "EDSL async client cleanup failed after batch execution",
+                    exc_info=True,
+                )
 
 
 async def _close_edsl_async_clients(

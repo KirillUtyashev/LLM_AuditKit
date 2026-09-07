@@ -378,6 +378,90 @@ def test_async_execution_uses_only_sequential_run_async_calls(
     assert cleanup_calls == [["request-1", "request-2", "request-3"]]
 
 
+def test_async_cleanup_failure_preserves_successful_batch_outcome(
+    fake_edsl: FakeEDSLRuntime,
+    monkeypatch: pytest.MonkeyPatch,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    cleanup_error = RuntimeError("cleanup broke")
+
+    class FailingService:
+        @staticmethod
+        async def close_async_clients() -> None:
+            raise cleanup_error
+
+    class FailingRegistry:
+        @staticmethod
+        def get_service_class(provider_name: str) -> type[FailingService]:
+            del provider_name
+            return FailingService
+
+    monkeypatch.setattr(adapter_module, "GLOBAL_REGISTRY", FailingRegistry())
+    requests = _requests()
+    config = InferenceConfig(models=list(_models().values()), batch_size=3)
+    inference = InferenceOrchestrator(EDSLAdapter())
+
+    async def collect_batches() -> list[InferenceBatchResult]:
+        return [
+            batch
+            async for batch in inference.run_batches_async(requests, config)
+        ]
+
+    with caplog.at_level("WARNING", logger=adapter_module.__name__):
+        batches = asyncio.run(collect_batches())
+
+    assert [result.request_id for result in batches[0].results] == [
+        "request-1",
+        "request-2",
+        "request-3",
+    ]
+    assert len(caplog.records) == 1
+    assert caplog.records[0].exc_info is not None
+    assert caplog.records[0].exc_info[1] is cleanup_error
+
+
+def test_async_cleanup_failure_preserves_original_execution_error(
+    fake_edsl: FakeEDSLRuntime,
+    monkeypatch: pytest.MonkeyPatch,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    execution_error = RuntimeError("async execution broke")
+    cleanup_error = RuntimeError("cleanup broke")
+    fake_edsl.async_error = execution_error
+
+    class FailingService:
+        @staticmethod
+        async def close_async_clients() -> None:
+            raise cleanup_error
+
+    class FailingRegistry:
+        @staticmethod
+        def get_service_class(provider_name: str) -> type[FailingService]:
+            del provider_name
+            return FailingService
+
+    monkeypatch.setattr(adapter_module, "GLOBAL_REGISTRY", FailingRegistry())
+    requests = _requests()
+    config = InferenceConfig(models=list(_models().values()), batch_size=3)
+    inference = InferenceOrchestrator(EDSLAdapter())
+
+    async def collect_batches() -> None:
+        async for _ in inference.run_batches_async(requests, config):
+            pass
+
+    with caplog.at_level("WARNING", logger=adapter_module.__name__):
+        with pytest.raises(
+            InferenceBatchError,
+            match="async execution broke",
+        ) as reported_error:
+            asyncio.run(collect_batches())
+
+    assert reported_error.value.__cause__ is execution_error
+    assert len(caplog.records) == 1
+    assert caplog.records[0].exc_info is not None
+    assert caplog.records[0].exc_info[1] is cleanup_error
+
+
 def test_task_history_exception_is_used_for_a_missing_response(
     fake_edsl: FakeEDSLRuntime,
 ) -> None:
