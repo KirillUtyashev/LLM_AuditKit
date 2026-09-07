@@ -26,8 +26,8 @@ class AdapterJobGroup:
     """Requests compatible with one backend job.
 
     EDSL jobs created by the shared adapter use exactly one model configuration and
-    one response format. Request-specific prompts and agents remain explicitly paired
-    as interviews.
+    one response format. Each request is represented by one agent and the job uses one
+    neutral scenario, yielding exactly one EDSL interview per request.
     """
 
     model_config: ModelConfig
@@ -74,7 +74,8 @@ def group_requests_by_compatibility(
     Groups and requests within each group preserve first-seen input order.
     Structurally equivalent dictionary response formats share a group even when callers
     constructed separate format objects. Request-specific persona and system-prompt
-    values do not split groups because EDSL interviews preserve their exact pairing.
+    values do not split groups because each request is represented by its own EDSL
+    agent.
     """
 
     grouped_requests: dict[

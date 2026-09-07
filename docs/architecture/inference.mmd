@@ -90,12 +90,19 @@ classDiagram
         +run()
         +run_async()
     }
-    class EDSLInterview {
+    class EDSLJob {
         <<Expected Parrot>>
-        +agent
-        +scenario
-        +survey
-        +model
+        +request_agents
+        +neutral_scenario
+        +single_model
+        +single_response_format
+    }
+    class EDSLAgent {
+        <<Expected Parrot>>
+        +instruction
+        +persona
+        +private_request_id
+        +private_prompt
     }
     InferenceConfig --> ModelConfig
     InferenceRequest --> DictResponseFormat
@@ -112,5 +119,6 @@ classDiagram
     InferenceOrchestrator --> InferenceAdapter : delegates batches
     EDSLAdapter ..|> InferenceAdapter : implements
     EDSLAdapter --> ModelConfig : configures
-    EDSLAdapter --> EDSLInterview : pairs each request exactly once
+    EDSLAdapter --> EDSLJob : creates compatible group
+    EDSLJob --> EDSLAgent : one per request
     EDSLAdapter --> EDSL : submits model/response-format groups

@@ -2,9 +2,9 @@
 
 from __future__ import annotations
 
-import logging
 import ast
 import json
+import logging
 import math
 from collections.abc import Mapping, Sequence
 
@@ -20,7 +20,7 @@ from edsl import (
     Survey,
 )
 from edsl.inference_services.registry import GLOBAL_REGISTRY
-from edsl.interviews import Interview
+from edsl.questions.question_dict import DictResponseValidator
 
 from .batching import AdapterJobGroup, group_requests_by_compatibility
 from .exceptions import InferenceBatchError
@@ -36,7 +36,8 @@ from .models import (
 
 _QUESTION_NAME = "response"
 _REQUEST_ID_FIELD = "request_id"
-_PROMPT_FIELD = "prompt"
+_AGENT_PROMPT_FIELD = "llm_auditkit_prompt"
+_QUESTION_PROMPT_TEMPLATE = f"{{{{ agent[{_AGENT_PROMPT_FIELD!r}] }}}}"
 _LOGGER = logging.getLogger(__name__)
 _VALUE_TYPE_MAP = {
     "string": "str",
@@ -44,6 +45,32 @@ _VALUE_TYPE_MAP = {
     "number": "float",
     "boolean": "bool",
 }
+class _GeneratedContentDictResponseValidator(DictResponseValidator):
+    """Repair EDSL's split dictionary answer from its complete generated text."""
+
+    def fix(self, response: object, verbose: bool = False) -> object:
+        if isinstance(response, Mapping):
+            generated_content = response.get("generated_tokens")
+            if isinstance(generated_content, str):
+                recovered = _recover_structured_response(
+                    generated_content,
+                    expected_fields=self.answer_keys,
+                )
+                if recovered is not None:
+                    answer, comment = recovered
+                    return {
+                        "answer": answer,
+                        "comment": comment,
+                        "generated_tokens": generated_content,
+                    }
+        return super().fix(response, verbose=verbose)
+
+
+class _RecoverableQuestionDict(QuestionDict):
+    """QuestionDict variant whose validator reads complete generated content."""
+
+    question_type = "llm_auditkit_dict"
+    response_validator_class = _GeneratedContentDictResponseValidator
 
 
 class EDSLAdapter:
@@ -151,40 +178,28 @@ def _build_job(group: AdapterJobGroup) -> object:
         service_name=group.model_config.provider,
         **group.model_config.parameters,
     )
-    scenarios = [
-        Scenario(
-            {
-                _REQUEST_ID_FIELD: request.request_id,
-                _PROMPT_FIELD: request.prompt,
-            }
-        )
-        for request in group.requests
-    ]
     agents = [_build_agent(request) for request in group.requests]
-    interviews = [
-        Interview(
-            agent=agent,
-            survey=survey,
-            scenario=scenario,
-            model=model,
-        )
-        for agent, scenario in zip(agents, scenarios, strict=True)
-    ]
-    job = Jobs.from_interviews(interviews)
-
-    # EDSL 1.0.8's public ``from_interviews`` constructor retains the explicit
-    # interviews but does not populate these collections, while ``prompts`` uses them
-    # to calculate stable preview indices. Supplying the same paired objects keeps
-    # preview and execution behavior aligned without creating a Cartesian product.
-    job.agents = AgentList(agents)
-    job.scenarios = ScenarioList(scenarios)
-    return job
+    return Jobs(
+        survey=survey,
+        agents=AgentList(agents),
+        scenarios=ScenarioList([Scenario({})]),
+        models=[model],
+    )
 
 
 def _build_agent(request: InferenceRequest) -> object:
-    agent_options: dict[str, object] = {}
+    traits: dict[str, object] = {
+        _REQUEST_ID_FIELD: request.request_id,
+        _AGENT_PROMPT_FIELD: request.prompt,
+    }
+    traits_presentation_template = ""
     if request.persona is not None:
-        agent_options["traits"] = {"persona": request.persona}
+        traits["persona"] = request.persona
+        traits_presentation_template = "Your traits: {{ {'persona': persona} }}"
+    agent_options: dict[str, object] = {
+        "traits": traits,
+        "traits_presentation_template": traits_presentation_template,
+    }
     if request.system_prompt is not None:
         agent_options["instruction"] = request.system_prompt
     return Agent(**agent_options)
@@ -194,12 +209,12 @@ def _build_question(group: AdapterJobGroup) -> object:
     if group.response_format is None:
         return QuestionFreeText(
             question_name=_QUESTION_NAME,
-            question_text="{{ prompt }}",
+            question_text=_QUESTION_PROMPT_TEMPLATE,
         )
 
-    return QuestionDict(
+    return _RecoverableQuestionDict(
         question_name=_QUESTION_NAME,
-        question_text="{{ prompt }}",
+        question_text=_QUESTION_PROMPT_TEMPLATE,
         answer_keys=[field.name for field in group.response_format.fields],
         value_types=(
             [
@@ -237,30 +252,30 @@ def _normalize_rendered_prompts(
         if not isinstance(row, Mapping):
             raise InferenceBatchError("EDSL rendered prompt row must be a mapping")
 
-        scenario_index = row.get("scenario_index")
+        agent_index = row.get("agent_index")
         if (
-            isinstance(scenario_index, bool)
-            or not isinstance(scenario_index, int)
-            or scenario_index < 0
-            or scenario_index >= len(group.requests)
+            isinstance(agent_index, bool)
+            or not isinstance(agent_index, int)
+            or agent_index < 0
+            or agent_index >= len(group.requests)
         ):
             raise InferenceBatchError(
-                "EDSL rendered prompt row has an invalid scenario index"
+                "EDSL rendered prompt row has an invalid agent index"
             )
-        if scenario_index in prompts_by_index:
+        if agent_index in prompts_by_index:
             raise InferenceBatchError(
-                f"EDSL rendered duplicate prompts for scenario index {scenario_index}"
+                f"EDSL rendered duplicate prompts for agent index {agent_index}"
             )
 
-        request = group.requests[scenario_index]
-        prompts_by_index[scenario_index] = RenderedPrompt(
+        request = group.requests[agent_index]
+        prompts_by_index[agent_index] = RenderedPrompt(
             request_id=request.request_id,
             user_prompt=_extract_prompt_text(row.get("user_prompt"), "user"),
             system_prompt=_extract_prompt_text(row.get("system_prompt"), "system"),
         )
 
     if len(prompts_by_index) != len(group.requests):
-        raise InferenceBatchError("EDSL rendered prompts are missing a scenario index")
+        raise InferenceBatchError("EDSL rendered prompts are missing an agent index")
     return [prompts_by_index[index] for index in range(len(group.requests))]
 
 
@@ -327,15 +342,19 @@ def _normalize_results(
 
 def _result_request_id(result: object) -> str:
     scenario = getattr(result, "scenario", None)
-    try:
-        request_id = scenario[_REQUEST_ID_FIELD]
-    except (KeyError, TypeError) as error:
-        raise InferenceBatchError(
-            "EDSL result scenario is missing its request ID"
-        ) from error
+    request_id = _request_id_from_mapping(scenario)
+    if request_id is None:
+        agent = getattr(result, "agent", None)
+        request_id = _request_id_from_mapping(getattr(agent, "traits", None))
     if not isinstance(request_id, str) or not request_id:
-        raise InferenceBatchError("EDSL result request ID must be a non-empty string")
+        raise InferenceBatchError(
+            "EDSL result agent is missing its non-empty request ID"
+        )
     return request_id
+
+
+def _request_id_from_mapping(value: object) -> object:
+    return value.get(_REQUEST_ID_FIELD) if isinstance(value, Mapping) else None
 
 
 def _result_response(
@@ -776,10 +795,10 @@ def _extract_task_errors(edsl_results: object) -> dict[str, InferenceError]:
 def _exception_request_id(entry: object) -> str | None:
     invigilator = getattr(entry, "invigilator", None)
     scenario = getattr(invigilator, "scenario", None)
-    try:
-        request_id = scenario[_REQUEST_ID_FIELD]
-    except (KeyError, TypeError):
-        return None
+    request_id = _request_id_from_mapping(scenario)
+    if request_id is None:
+        agent = getattr(invigilator, "agent", None)
+        request_id = _request_id_from_mapping(getattr(agent, "traits", None))
     return request_id if isinstance(request_id, str) and request_id else None
 
 

@@ -21,6 +21,7 @@ from llm_auditkit.inference import (
     TokenLogprob,
 )
 from llm_auditkit.inference import edsl_adapter as adapter_module
+from llm_auditkit.inference.batching import AdapterJobGroup
 
 
 @dataclass
@@ -71,9 +72,11 @@ def fake_edsl(monkeypatch: pytest.MonkeyPatch) -> FakeEDSLRuntime:
         def __init__(
             self,
             traits: dict[str, object] | None = None,
+            traits_presentation_template: str | None = None,
             **kwargs: object,
         ) -> None:
             self.traits = traits
+            self.traits_presentation_template = traits_presentation_template
             self.kwargs = kwargs
             runtime.agents.append(self)
 
@@ -109,21 +112,28 @@ def fake_edsl(monkeypatch: pytest.MonkeyPatch) -> FakeEDSLRuntime:
             self.model = model
 
     class FakeInvigilator:
-        def __init__(self, scenario: FakeScenario) -> None:
-            self.scenario = scenario
+        def __init__(self, interview: FakeInterview) -> None:
+            self.scenario = interview.scenario
+            self.agent = interview.agent
 
     class FakeExceptionEntry:
-        def __init__(self, scenario: FakeScenario, exception: Exception) -> None:
-            self.invigilator = FakeInvigilator(scenario)
+        def __init__(self, interview: FakeInterview, exception: Exception) -> None:
+            self.invigilator = FakeInvigilator(interview)
             self.exception = exception
             self.exception_type = type(exception).__name__
 
     class FakeTaskHistory:
-        def __init__(self, scenarios: list[FakeScenario]) -> None:
+        def __init__(self, interviews: list[FakeInterview]) -> None:
             entries = [
-                FakeExceptionEntry(scenario, runtime.exceptions[scenario["request_id"]])
-                for scenario in scenarios
-                if scenario["request_id"] in runtime.exceptions
+                FakeExceptionEntry(
+                    interview,
+                    runtime.exceptions[
+                        interview.agent.traits[adapter_module._REQUEST_ID_FIELD]
+                    ],
+                )
+                for interview in interviews
+                if interview.agent.traits[adapter_module._REQUEST_ID_FIELD]
+                in runtime.exceptions
             ]
             self.exceptions = [{"response": entries}] if entries else []
 
@@ -133,10 +143,12 @@ def fake_edsl(monkeypatch: pytest.MonkeyPatch) -> FakeEDSLRuntime:
             scenario: FakeScenario,
             answer: object,
             data: dict[str, object],
+            agent: FakeAgent,
         ) -> None:
             self.scenario = scenario
             self.answer = answer
             self.data = data
+            self.agent = agent
 
     class FakeResults(list[FakeResult]):
         def __init__(
@@ -161,8 +173,9 @@ def fake_edsl(monkeypatch: pytest.MonkeyPatch) -> FakeEDSLRuntime:
             parts = []
             if "instruction" in agent.kwargs:
                 parts.append(f"instruction:{agent.kwargs['instruction']}")
-            if agent.traits is not None:
-                parts.append(f"persona:{agent.traits['persona']}")
+            persona = agent.traits.get("persona")
+            if persona is not None:
+                parts.append(f"persona:{persona}")
             return "" if not parts else f"EDSL system:{'|'.join(parts)}"
 
         def prompts(self) -> FakeDataset:
@@ -171,9 +184,11 @@ def fake_edsl(monkeypatch: pytest.MonkeyPatch) -> FakeEDSLRuntime:
             runtime.events.append(("prompts", self.model.model_name, {}))
             rows = [
                 {
-                    "scenario_index": index,
+                    "agent_index": index,
+                    "scenario_index": 0,
                     "user_prompt": FakePrompt(
-                        f"EDSL user:{interview.scenario['prompt']}"
+                        "EDSL user:"
+                        f"{interview.agent.traits[adapter_module._AGENT_PROMPT_FIELD]}"
                     ),
                     "system_prompt": FakePrompt(
                         self._system_prompt(interview.agent)
@@ -199,7 +214,9 @@ def fake_edsl(monkeypatch: pytest.MonkeyPatch) -> FakeEDSLRuntime:
             result_items = []
             for interview in reversed(self.interviews):
                 scenario = interview.scenario
-                request_id = scenario["request_id"]
+                request_id = interview.agent.traits[
+                    adapter_module._REQUEST_ID_FIELD
+                ]
                 if request_id in runtime.omitted_request_ids:
                     continue
                 if request_id in runtime.responses:
@@ -226,7 +243,8 @@ def fake_edsl(monkeypatch: pytest.MonkeyPatch) -> FakeEDSLRuntime:
                     },
                     "prompt": {
                         "response_user_prompt": FakePrompt(
-                            f"EDSL user:{scenario['prompt']}"
+                            "EDSL user:"
+                            f"{interview.agent.traits[adapter_module._AGENT_PROMPT_FIELD]}"
                         ),
                         "response_system_prompt": FakePrompt(
                             self._system_prompt(interview.agent)
@@ -234,20 +252,40 @@ def fake_edsl(monkeypatch: pytest.MonkeyPatch) -> FakeEDSLRuntime:
                     },
                 }
                 result_items.append(
-                    FakeResult(scenario, {"response": response}, data)
+                    FakeResult(
+                        scenario,
+                        {"response": response},
+                        data,
+                        interview.agent,
+                    )
                 )
             return FakeResults(
                 result_items,
-                [interview.scenario for interview in self.interviews],
+                self.interviews,
             )
 
     class FakeJobs:
-        @classmethod
-        def from_interviews(
+        def __new__(
             cls,
-            interviews: list[FakeInterview],
+            *,
+            survey: FakeSurvey,
+            agents: FakeAgentList,
+            scenarios: FakeScenarioList,
+            models: list[FakeModel],
         ) -> FakeJob:
-            return FakeJob(interviews)
+            interviews = [
+                FakeInterview(
+                    agent=agent,
+                    survey=survey,
+                    scenario=scenarios[0],
+                    model=models[0],
+                )
+                for agent in agents
+            ]
+            job = FakeJob(interviews)
+            job.agents = agents
+            job.scenarios = scenarios
+            return job
 
     class FakeQuestionFreeText:
         def __init__(self, *, question_name: str, question_text: str) -> None:
@@ -277,11 +315,10 @@ def fake_edsl(monkeypatch: pytest.MonkeyPatch) -> FakeEDSLRuntime:
 
     monkeypatch.setattr(adapter_module, "Agent", FakeAgent)
     monkeypatch.setattr(adapter_module, "AgentList", FakeAgentList)
-    monkeypatch.setattr(adapter_module, "Interview", FakeInterview)
     monkeypatch.setattr(adapter_module, "Jobs", FakeJobs)
     monkeypatch.setattr(adapter_module, "Model", FakeModel)
     monkeypatch.setattr(adapter_module, "QuestionFreeText", FakeQuestionFreeText)
-    monkeypatch.setattr(adapter_module, "QuestionDict", FakeQuestionDict)
+    monkeypatch.setattr(adapter_module, "_RecoverableQuestionDict", FakeQuestionDict)
     monkeypatch.setattr(adapter_module, "Scenario", FakeScenario)
     monkeypatch.setattr(adapter_module, "ScenarioList", FakeScenarioList)
     monkeypatch.setattr(adapter_module, "Survey", FakeSurvey)
@@ -332,6 +369,69 @@ def _requests() -> list[InferenceRequest]:
 
 def test_edsl_adapter_implements_the_generic_protocol() -> None:
     assert isinstance(EDSLAdapter(), InferenceAdapter)
+
+
+def test_real_edsl_job_has_one_interview_per_request() -> None:
+    requests = tuple(
+        InferenceRequest(
+            request_id=f"request-{index}",
+            prompt=f"Prompt {index}",
+            model_config_id="model",
+            system_prompt=f"Instruction {index}",
+            persona=f"Persona {index}",
+        )
+        for index in range(5)
+    )
+    group = AdapterJobGroup(
+        model_config=ModelConfig("model", "test", "test"),
+        response_format=None,
+        requests=requests,
+    )
+
+    job = adapter_module._build_job(group)
+
+    assert len(job.agents) == 5
+    assert len(job.scenarios) == 1
+    assert len(job.models) == 1
+    assert job.num_interviews == 5
+    assert len(job.prompts().to_dicts()) == 5
+
+
+def test_recoverable_question_survives_edsl_serialization_and_validation() -> None:
+    from edsl.questions.question_base import QuestionBase
+
+    generated_content = """```json
+{
+  "Applicant 1": "Yes",
+  "Applicant 2": "No"
+}
+```
+Applicant 1 has more relevant experience."""
+    question = adapter_module._RecoverableQuestionDict(
+        question_name="response",
+        question_text="Choose applicants.",
+        answer_keys=["Applicant 1", "Applicant 2"],
+        value_types=None,
+        value_descriptions=["Yes or No", "Yes or No"],
+        include_comment=True,
+    )
+
+    restored = QuestionBase.from_dict(question.to_dict())
+    validated = restored._validate_answer(
+        {
+            "answer": "```json",
+            "comment": generated_content.split("\n", 1)[1],
+            "generated_tokens": generated_content,
+        }
+    )
+
+    assert isinstance(restored, adapter_module._RecoverableQuestionDict)
+    assert validated["answer"] == {
+        "Applicant 1": "Yes",
+        "Applicant 2": "No",
+    }
+    assert validated["comment"] == "Applicant 1 has more relevant experience."
+    assert validated["generated_tokens"] == generated_content
 
 
 def test_public_orchestrator_api_integrates_with_edsl_adapter(
@@ -396,7 +496,7 @@ def test_render_batch_uses_effective_edsl_prompts_without_inference(
     ]
 
 
-def test_job_construction_uses_explicitly_paired_edsl_interviews(
+def test_job_construction_uses_one_agent_per_request_and_one_scenario(
     fake_edsl: FakeEDSLRuntime,
 ) -> None:
     requests = _requests()
@@ -404,30 +504,31 @@ def test_job_construction_uses_explicitly_paired_edsl_interviews(
     results = EDSLAdapter().execute_batch(requests, _models())
 
     assert len(fake_edsl.jobs) == 2
-    assert [scenario["request_id"] for scenario in fake_edsl.jobs[0].scenarios] == [
-        "request-1",
-        "request-3",
-    ]
-    assert all(
-        set(scenario) == {"request_id", "prompt"}
-        for job in fake_edsl.jobs
-        for scenario in job.scenarios
-    )
+    assert fake_edsl.jobs[0].scenarios == [{}]
+    assert fake_edsl.jobs[1].scenarios == [{}]
     assert [
-        interview.scenario["request_id"]
+        interview.agent.traits[adapter_module._REQUEST_ID_FIELD]
         for interview in fake_edsl.jobs[0].interviews
     ] == ["request-1", "request-3"]
     assert [
-        interview.agent.traits for interview in fake_edsl.jobs[0].interviews
-    ] == [{"persona": "persona-a"}, {"persona": "persona-c"}]
+        interview.agent.traits[adapter_module._AGENT_PROMPT_FIELD]
+        for interview in fake_edsl.jobs[0].interviews
+    ] == ["First prompt", "Third prompt"]
+    assert [
+        interview.agent.traits["persona"]
+        for interview in fake_edsl.jobs[0].interviews
+    ] == ["persona-a", "persona-c"]
     assert fake_edsl.agents[0].kwargs == {"instruction": "instruction-a"}
     assert fake_edsl.agents[1].kwargs == {"instruction": "instruction-a"}
-    assert fake_edsl.agents[2].traits is None
+    assert "persona" not in fake_edsl.agents[2].traits
     assert fake_edsl.models[0].model_name == "first-model"
     assert fake_edsl.models[0].service_name == "provider-1"
     assert fake_edsl.models[0].parameters == {"temperature": 0.2}
     assert fake_edsl.questions[0].question_name == "response"
-    assert fake_edsl.questions[0].question_text == "{{ prompt }}"
+    assert (
+        fake_edsl.questions[0].question_text
+        == "{{ agent['llm_auditkit_prompt'] }}"
+    )
     assert fake_edsl.events == [
         ("run", "first-model", {"print_exceptions": False}),
         ("run", "second-model", {"print_exceptions": False}),
@@ -598,7 +699,7 @@ def test_successful_response_ignores_a_prior_task_history_exception(
     assert result.error is None
 
 
-def test_none_and_empty_system_prompts_create_distinct_interview_agents(
+def test_none_and_empty_system_prompts_preserve_edsl_instruction_behavior(
     fake_edsl: FakeEDSLRuntime,
 ) -> None:
     requests = [
@@ -609,10 +710,13 @@ def test_none_and_empty_system_prompts_create_distinct_interview_agents(
     EDSLAdapter().execute_batch(requests, _models())
 
     assert len(fake_edsl.jobs) == 1
-    assert fake_edsl.agents[0].traits is None
+    assert fake_edsl.agents[0].traits[adapter_module._REQUEST_ID_FIELD] == "request-1"
     assert fake_edsl.agents[0].kwargs == {}
-    assert fake_edsl.agents[1].traits is None
+    assert fake_edsl.agents[1].traits[adapter_module._REQUEST_ID_FIELD] == "request-2"
     assert fake_edsl.agents[1].kwargs == {"instruction": ""}
+    assert all(
+        agent.traits_presentation_template == "" for agent in fake_edsl.agents
+    )
 
 
 def test_non_string_edsl_response_is_a_systemic_failure(

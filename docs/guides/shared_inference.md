@@ -126,8 +126,8 @@ must be unique within a run.
 
 `system_prompt` maps to EDSL's agent instruction, while `persona` maps to its standard
 `persona` trait. EDSL combines them into the effective rendered system prompt. Requests
-can use different models, instructions, and personas; explicit EDSL interviews preserve
-each pairing without changing input or output order.
+can use different models, instructions, and personas; the adapter represents each
+request as one agent inside a compatible EDSL job and preserves input and output order.
 
 ## Use Metadata to Handle Results
 
