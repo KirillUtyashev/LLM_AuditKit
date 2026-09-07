@@ -16,8 +16,15 @@ classDiagram
     }
     class InferenceConfig {
         <<shared inference>>
+        +batch_size: int
     }
     class InferenceRequest {
+        <<shared inference>>
+    }
+    class InferenceBatchPreview {
+        <<shared inference>>
+    }
+    class InferenceBatchResult {
         <<shared inference>>
     }
     class InferenceResult {
@@ -34,7 +41,7 @@ classDiagram
     class ExperimentRunner {
         -inference_orchestrator: InferenceOrchestrator
         -result_store: ExperimentResultStore
-        -save_lock: asyncio.Lock
+        +preview(dataset: DataFrame, config: ExperimentConfig, batch_number: int) InferenceBatchPreview
         +run(dataset: DataFrame, config: ExperimentConfig) DataFrame
         +run_async(dataset: DataFrame, config: ExperimentConfig) DataFrame
         -build_requests(dataset: DataFrame, config: ExperimentConfig) List~InferenceRequest~
@@ -52,11 +59,13 @@ classDiagram
     ExperimentConfig --> Persona
     ExperimentConfig --> InferenceConfig
     ExperimentRunner --> ExperimentConfig
-    ExperimentRunner --> ExperimentJobKey : identifies jobs
-    ExperimentRunner --> InferenceRequest : builds
-    ExperimentRunner --> InferenceOrchestrator : submits requests
-    InferenceOrchestrator --> InferenceResult : yields
-    ExperimentRunner --> ExperimentResultStore : persists results
+    ExperimentRunner --> ExperimentJobKey : derives request identity
+    ExperimentRunner --> InferenceRequest : builds pending requests
+    ExperimentRunner --> InferenceBatchPreview : previews
+    ExperimentRunner --> InferenceOrchestrator : consumes batches
+    InferenceOrchestrator --> InferenceBatchResult : yields sequentially
+    InferenceBatchResult --> InferenceResult
+    ExperimentRunner --> ExperimentResultStore : checkpoints results
     ExperimentRunner --> DataFrame : processes
     ExperimentResultStore --> ExperimentJobKey : indexes by
     ExperimentResultStore --> InferenceResult : stores

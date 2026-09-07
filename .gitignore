@@ -15,6 +15,11 @@ venv/
 env/
 ENV/
 
+# Local credentials
+.env
+.env.*
+!.env.example
+
 # Test and coverage artifacts
 .pytest_cache/
 .coverage

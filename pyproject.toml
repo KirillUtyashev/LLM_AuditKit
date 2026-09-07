@@ -10,7 +10,7 @@ readme = "README.md"
 requires-python = ">=3.10"
 license = "MIT"
 license-files = ["LICENSE"]
-dependencies = []
+dependencies = ["edsl[inference]>=1.0.8,<1.1", "python-dotenv>=1"]
 
 [project.optional-dependencies]
 test = ["pytest>=8"]
@@ -22,3 +22,6 @@ where = ["src"]
 minversion = "8.0"
 addopts = "--strict-config --strict-markers"
 testpaths = ["tests"]
+markers = [
+    "live_inference: opt-in tests that make paid calls to external model providers",
+]

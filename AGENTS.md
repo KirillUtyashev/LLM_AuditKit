@@ -33,7 +33,9 @@ When an architectural contract represented in a Mermaid diagram changes, update 
 - The hiring workflow has five pipeline stages: dataset loading, template generation, template population, experiment execution, and regression analysis.
 - Template generation and experiment execution must use the shared inference layer in `src/llm_auditkit/inference/`.
 - Keep Expected Parrot EDSL-specific types and behavior behind the inference adapter. Domain packages must use generic inference requests, results, and configuration rather than importing EDSL concepts directly.
-- The shared inference layer owns model configuration, concurrency, retries, execution, and normalized outcomes. Calling stages own domain prompts, response parsing, checkpoint policy, and output storage.
+- The shared inference layer owns generic model configuration, deterministic request batching, EDSL execution, and normalized outcomes. It delegates parallel interview execution, provider rate limiting, caching, and retries within each batch to EDSL rather than implementing a second worker pool or retry loop. Calling stages own domain prompts, response parsing, checkpoint policy, and output storage.
+- Shared inference batch size is measured in logical inference requests, not DataFrame rows. Batches are submitted sequentially so calling stages can validate and checkpoint one completed batch before another spends tokens.
+- Shared inference must provide behaviorally equivalent synchronous and asynchronous batch APIs backed by EDSL's matching synchronous and asynchronous execution methods. Do not implement the synchronous API by driving an event loop or the asynchronous API by hiding blocking execution in a worker thread.
 - Template counts are configurable as `N`; do not hard-code four resumes or templates.
 - Resume and completion behavior must use stable scenario, persona, model-configuration, and job identifiers. Never use a DataFrame row index as durable identity.
 - Keep `save_after_each_result` stage-specific and configurable. Incremental file writes must use an atomic replacement strategy.
@@ -136,6 +138,8 @@ Flag changes that:
 - use row positions as persistent identifiers;
 - hard-code template cardinality;
 - make checkpointing unconditional or perform non-atomic incremental writes;
+- add a caller-side request worker pool or retry loop around EDSL-managed batch execution;
+- make synchronous and asynchronous inference paths differ in validation, batching, result normalization, failure semantics, or checkpoint boundaries;
 - change architecture represented in Mermaid without updating both its prose and diagram;
 - introduce live network calls into unit tests;
 - commit secrets, private data, or generated result artifacts other than explicitly reviewed synthetic test fixtures.

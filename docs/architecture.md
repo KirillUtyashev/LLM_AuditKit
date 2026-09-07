@@ -31,10 +31,20 @@ The package uses `pandas.DataFrame` as the common tabular representation passed 
 
 ```text
 Template Generation ─┐
-                     ├──> Inference Orchestrator ──> EDSL
+                     ├──> Inference Batching ──> EDSL Sync or Async Jobs
 Experiment Execution ┘
 ```
 
-The inference layer owns model configuration, concurrency, retries, EDSL execution, and normalized inference results. Pipeline stages own domain-specific prompt construction, response parsing, checkpointing, and output storage.
+The inference layer owns generic model configuration, deterministic request batching, compatible EDSL job grouping through its adapter, and normalized batch results. A logical batch is grouped by model configuration and system prompt; EDSL owns parallel scenario-interview execution, provider rate limiting, caching, and retries within each submitted job. Pipeline stages own domain-specific prompt construction, response parsing, checkpointing, and output storage.
+
+Batches are submitted sequentially. A calling stage validates and checkpoints the current completed batch before requesting the next one, which bounds uncheckpointed work and prevents a systemic prompt or integration error from consuming tokens across the remaining dataset.
+
+The shared inference layer provides equivalent synchronous and asynchronous batch APIs. Each delegates to the corresponding EDSL execution method while preserving the same validation, batching, normalization, and failure contract.
+
+## Logging and Observability
+
+A repository-wide logging contract is still to be designed before the pipeline is considered complete. It should cover the shared inference layer and every pipeline stage, including template generation and experiment execution, rather than introducing unrelated stage-specific logging behavior.
+
+The design must decide how progress, batch timing, checkpoint activity, terminal request failures, and systemic failures are exposed; how library logging relates to any command-line progress display; and which events belong to LLM AuditKit versus EDSL. Prompts, system prompts, model responses, credentials, private dataset values, and provider parameters must not be logged by default. Until that contract is defined, documented progress fields are data available to callers and do not imply a particular logger, callback, or terminal interface.
 
 Experiment results cross the Python-to-R boundary as CSV files. Regression configuration is provided as YAML, and the R analysis produces both raw regression results and plots.
