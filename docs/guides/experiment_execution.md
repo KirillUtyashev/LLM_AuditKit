@@ -238,7 +238,7 @@ The stored CSV contains one row per attempted combination of scenario, persona, 
 model configuration. It preserves source columns and adds:
 
 - stable experiment, scenario, persona, model-configuration, and request IDs;
-- persona name, trait template, and static instruction;
+- the static persona instruction;
 - effective rendered user and system prompts;
 - the generated structured response and optional comment;
 - `picks`, a JSON array ordered by `resume_columns`;

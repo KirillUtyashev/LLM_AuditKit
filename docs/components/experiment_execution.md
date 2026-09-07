@@ -286,7 +286,7 @@ Each record contains:
 
 - `experiment_id`, `scenario_id`, `persona_id`, `model_config_id`, and the derived
   `request_id`;
-- persona name, trait template, and static instruction;
+- the static persona instruction;
 - the effective rendered `user_prompt` and `system_prompt`;
 - `generated_response` and the optional structured-response `comment`;
 - `picks`, serialized as a JSON array of `0` and `1` values in configured resume-column

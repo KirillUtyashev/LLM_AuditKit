@@ -86,8 +86,6 @@ def parse_experiment_result(
     record_values = {
         "key": key,
         "request_id": result.request_id,
-        "persona_name": persona.name,
-        "persona_trait_template": persona.trait_template,
         "persona_instruction": persona.instruction,
         "user_prompt": user_prompt,
         "system_prompt": system_prompt,

@@ -72,8 +72,6 @@ def _record(
     values = {
         "key": key,
         "request_id": build_experiment_request_id(key),
-        "persona_name": "Manager",
-        "persona_trait_template": "Hiring manager persona",
         "persona_instruction": "Evaluate applicants",
         "user_prompt": f"Rendered prompt for {key.scenario_id}",
         "system_prompt": "Rendered system prompt",
@@ -112,8 +110,6 @@ def test_initialize_creates_canonical_empty_output_in_memory(tmp_path: Path) -> 
         "persona_id",
         "model_config_id",
         "request_id",
-        "persona_name",
-        "persona_trait_template",
         "persona_instruction",
         "user_prompt",
         "system_prompt",

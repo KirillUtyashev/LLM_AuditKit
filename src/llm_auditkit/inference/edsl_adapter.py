@@ -45,6 +45,8 @@ _VALUE_TYPE_MAP = {
     "number": "float",
     "boolean": "bool",
 }
+
+
 class _GeneratedContentDictResponseValidator(DictResponseValidator):
     """Repair EDSL's split dictionary answer from its complete generated text."""
 

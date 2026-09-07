@@ -83,8 +83,6 @@ class ExperimentOutputRecord:
 
     key: ExperimentJobKey
     request_id: str
-    persona_name: str
-    persona_trait_template: str
     persona_instruction: str
     user_prompt: str | None
     system_prompt: str | None

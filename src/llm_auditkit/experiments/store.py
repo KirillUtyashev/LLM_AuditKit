@@ -34,8 +34,6 @@ _IDENTITY_COLUMNS = [
     "request_id",
 ]
 _DETAIL_COLUMNS = [
-    "persona_name",
-    "persona_trait_template",
     "persona_instruction",
     "user_prompt",
     "system_prompt",
@@ -326,11 +324,7 @@ def _validate_existing_output(
             )
         persona = personas[key.persona_id]
         if (
-            not _is_non_empty_string(row["persona_name"])
-            or not _is_non_empty_string(row["persona_trait_template"])
-            or not _is_non_empty_string(row["persona_instruction"])
-            or row["persona_name"] != persona.name
-            or row["persona_trait_template"] != persona.trait_template
+            not _is_non_empty_string(row["persona_instruction"])
             or row["persona_instruction"] != persona.instruction
         ):
             raise ExperimentResultStoreError(
@@ -380,11 +374,7 @@ def _validate_records(
                 "batch record request ID does not match its experiment job key"
             )
         persona = personas[record.key.persona_id]
-        if (
-            record.persona_name != persona.name
-            or record.persona_trait_template != persona.trait_template
-            or record.persona_instruction != persona.instruction
-        ):
+        if record.persona_instruction != persona.instruction:
             raise ExperimentResultStoreError(
                 "batch record persona fields do not match the current configuration"
             )
@@ -467,8 +457,6 @@ def _record_to_row(
             "persona_id": record.key.persona_id,
             "model_config_id": record.key.model_config_id,
             "request_id": record.request_id,
-            "persona_name": record.persona_name,
-            "persona_trait_template": record.persona_trait_template,
             "persona_instruction": record.persona_instruction,
             "user_prompt": record.user_prompt,
             "system_prompt": record.system_prompt,
