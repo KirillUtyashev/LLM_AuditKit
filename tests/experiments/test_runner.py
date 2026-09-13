@@ -119,13 +119,19 @@ def _result_for_request(
         )
 
     token_logprobs = [
+        TokenLogprob('{"Applicant 1":"', -0.01),
         TokenLogprob("Yes", -0.2),
+        TokenLogprob('","Applicant 2":"', -0.01),
         TokenLogprob("No", -0.4),
+        TokenLogprob('"}', -0.01),
     ]
     if scenario_id in adapter.parse_error_scenarios:
         token_logprobs = [
+            TokenLogprob('{"Applicant 1":"', -0.01),
             TokenLogprob("No", -0.2),
+            TokenLogprob('","Applicant 2":"', -0.01),
             TokenLogprob("No", -0.4),
+            TokenLogprob('"}', -0.01),
         ]
     return InferenceResult(
         request_id=request.request_id,
@@ -253,6 +259,11 @@ def test_sync_run_checkpoints_each_batch_in_canonical_order(
         "scenario-3",
     ]
     assert output["picks"].tolist() == ["[1,0]", "[1,0]", "[1,0]"]
+    assert output[["persona_name", "model", "provider"]].values.tolist() == [
+        ["Manager", "test-model", "openai"],
+        ["Manager", "test-model", "openai"],
+        ["Manager", "test-model", "openai"],
+    ]
     assert output[["logprob1", "logprob2"]].values.tolist() == [
         [-0.2, -0.4],
         [-0.2, -0.4],
@@ -329,6 +340,7 @@ def test_resume_retries_failures_skips_completed_jobs_and_noops_when_done(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     dataset = _dataset(count=2)
+    dataset["caller_metadata"] = ["00007", "NA"]
     config = _config()
     first_adapter = RecordingAdapter(failure_scenarios={"scenario-1"})
     first_runner, store = _runner(tmp_path, first_adapter)
@@ -343,6 +355,7 @@ def test_resume_retries_failures_skips_completed_jobs_and_noops_when_done(
 
     assert retry_adapter.sync_calls == [["scenario-1"]]
     assert retry_output["scenario_id"].tolist() == ["scenario-1", "scenario-2"]
+    assert retry_output["caller_metadata"].tolist() == ["00007", "NA"]
     assert retry_output["error_type"].isna().all()
     assert len(store.completed_keys(retry_output, dataset, config)) == 2
 

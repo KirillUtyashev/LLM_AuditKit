@@ -192,6 +192,14 @@ def _validate_dataset_schema(schema: ExperimentDatasetSchema) -> None:
         raise ExperimentConfigurationError(
             "job-posting and resume column names must be distinct"
         )
+    if (
+        schema.job_posting_column != "job_posting"
+        and "job_posting" in schema.resume_columns
+    ):
+        raise ExperimentConfigurationError(
+            "resume column 'job_posting' conflicts with the canonical job-posting "
+            "prompt alias"
+        )
 
     if not isinstance(schema.context_columns, dict):
         raise ExperimentConfigurationError("context_columns must be a dictionary")
@@ -201,6 +209,17 @@ def _validate_dataset_schema(schema: ExperimentDatasetSchema) -> None:
             column_name,
             f"context column {context_name!r}",
         )
+        protected_aliases = {
+            "job_posting": schema.job_posting_column,
+            schema.job_posting_column: schema.job_posting_column,
+            **{column: column for column in schema.resume_columns},
+        }
+        protected_source = protected_aliases.get(context_name)
+        if protected_source is not None and column_name != protected_source:
+            raise ExperimentConfigurationError(
+                f"context alias {context_name!r} cannot replace configured job or "
+                "applicant content"
+            )
 
 
 def _validate_personas(personas: Sequence[Persona]) -> None:

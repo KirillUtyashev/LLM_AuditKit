@@ -205,6 +205,19 @@ def test_dataset_and_output_paths_cannot_collide(tmp_path: Path) -> None:
         load_experiment_run_config(config_path)
 
 
+def test_output_path_must_be_a_csv_file(tmp_path: Path) -> None:
+    config_path = _write_config(
+        tmp_path,
+        _VALID_YAML.replace(
+            "../results/experiment.csv",
+            "prompts/question.txt",
+        ),
+    )
+
+    with pytest.raises(ExperimentConfigurationError, match=".csv"):
+        load_experiment_run_config(config_path)
+
+
 def test_configuration_path_must_be_an_existing_yaml_file(tmp_path: Path) -> None:
     with pytest.raises(ExperimentConfigurationError, match="does not exist"):
         load_experiment_run_config(tmp_path / "missing.yaml")

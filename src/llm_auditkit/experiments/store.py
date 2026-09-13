@@ -7,6 +7,7 @@ import math
 import os
 import re
 from collections.abc import Sequence
+from io import StringIO
 from numbers import Real
 from pathlib import Path
 from tempfile import NamedTemporaryFile
@@ -34,6 +35,9 @@ _IDENTITY_COLUMNS = [
     "request_id",
 ]
 _DETAIL_COLUMNS = [
+    "persona_name",
+    "model",
+    "provider",
     "persona_instruction",
     "user_prompt",
     "system_prompt",
@@ -57,6 +61,8 @@ class ExperimentResultStore:
                 "output_path must be a non-empty string or Path"
             )
         self.output_path = Path(output_path)
+        if self.output_path.suffix.lower() != ".csv":
+            raise ExperimentResultStoreError("output_path must reference a .csv file")
         if self.output_path.exists() and self.output_path.is_dir():
             raise ExperimentResultStoreError("output_path must not be a directory")
 
@@ -72,7 +78,7 @@ class ExperimentResultStore:
         if not self.output_path.exists():
             return pd.DataFrame(columns=expected_columns)
 
-        output_dataset = self._read_existing(expected_columns, config)
+        output_dataset = self._read_existing(expected_columns, dataset, config)
         _validate_existing_output(output_dataset, dataset, config)
         return _canonicalize_output(output_dataset, dataset, config)
 
@@ -194,6 +200,7 @@ class ExperimentResultStore:
     def _read_existing(
         self,
         expected_columns: list[str],
+        dataset: pd.DataFrame,
         config: ExperimentConfig,
     ) -> pd.DataFrame:
         try:
@@ -203,11 +210,12 @@ class ExperimentResultStore:
                     "existing experiment CSV columns do not match the current "
                     "dataset and experiment configuration"
                 )
-            string_columns = set(_IDENTITY_COLUMNS)
-            return pd.read_csv(
+            output_dataset = pd.read_csv(
                 self.output_path,
-                dtype={column: "string" for column in string_columns},
+                dtype="string",
+                keep_default_na=False,
             )
+            return _restore_checkpoint_types(output_dataset, dataset, config)
         except ExperimentResultStoreError:
             raise
         except Exception as error:
@@ -259,6 +267,82 @@ def _expected_columns(
     ]
 
 
+def _restore_checkpoint_types(
+    output_dataset: pd.DataFrame,
+    dataset: pd.DataFrame,
+    config: ExperimentConfig,
+) -> pd.DataFrame:
+    """Validate serialized source cells, then restore caller-owned source values."""
+
+    output = output_dataset.copy(deep=True)
+    source_columns = list(dataset.columns)
+    scenario_ids = derive_scenario_ids(dataset)
+    source_rows = dict(
+        zip(scenario_ids, dataset.to_dict(orient="records"), strict=True)
+    )
+
+    serialized_buffer = StringIO()
+    dataset.to_csv(serialized_buffer, index=False)
+    serialized_buffer.seek(0)
+    serialized_dataset = pd.read_csv(
+        serialized_buffer,
+        dtype="string",
+        keep_default_na=False,
+    )
+    serialized_rows = dict(
+        zip(
+            scenario_ids,
+            serialized_dataset.to_dict(orient="records"),
+            strict=True,
+        )
+    )
+
+    for column in source_columns:
+        output[column] = output[column].astype(object)
+    for row_index, row in output.iterrows():
+        scenario_id = row["scenario_id"]
+        if scenario_id not in source_rows:
+            raise ExperimentResultStoreError(
+                "existing experiment CSV contains source data outside the current "
+                "dataset"
+            )
+        for column in source_columns:
+            if row[column] != serialized_rows[scenario_id][column]:
+                raise ExperimentResultStoreError(
+                    "existing experiment CSV source values do not match the current "
+                    "dataset"
+                )
+            output.at[row_index, column] = source_rows[scenario_id][column]
+
+    resume_count = len(config.dataset_schema.resume_columns)
+    numeric_columns = [
+        *[f"pick{position}" for position in range(1, resume_count + 1)],
+        *[f"logprob{position}" for position in range(1, resume_count + 1)],
+    ]
+    for column in numeric_columns:
+        raw_values = output[column]
+        parsed_values = pd.to_numeric(
+            raw_values.mask(raw_values == ""),
+            errors="coerce",
+        )
+        invalid = (raw_values != "") & parsed_values.isna()
+        if invalid.any():
+            raise ExperimentResultStoreError(
+                f"existing experiment CSV column {column!r} contains a non-numeric "
+                "result value"
+            )
+        output[column] = parsed_values
+
+    output_text_columns = [
+        column
+        for column in _output_columns(config)
+        if column not in source_columns and column not in numeric_columns
+    ]
+    for column in output_text_columns:
+        output[column] = output[column].astype(object).mask(output[column] == "")
+    return output
+
+
 def _output_columns(config: ExperimentConfig) -> list[str]:
     resume_count = len(config.dataset_schema.resume_columns)
     return (
@@ -306,6 +390,7 @@ def _validate_existing_output(
     planned_keys = set(build_experiment_job_keys(dataset, config))
     seen_keys: set[ExperimentJobKey] = set()
     personas = {persona.id: persona for persona in config.personas}
+    models = {model.config_id: model for model in config.inference.models}
     for row in output_dataset.to_dict(orient="records"):
         key = _key_from_row(row)
         if key in seen_keys:
@@ -323,12 +408,17 @@ def _validate_existing_output(
                 "output_dataset contains a request ID that does not match its job key"
             )
         persona = personas[key.persona_id]
+        model = models[key.model_config_id]
         if (
-            not _is_non_empty_string(row["persona_instruction"])
+            row["persona_name"] != persona.name
+            or row["model"] != model.model
+            or row["provider"] != model.provider
+            or not _is_non_empty_string(row["persona_instruction"])
             or row["persona_instruction"] != persona.instruction
         ):
             raise ExperimentResultStoreError(
-                "output_dataset persona fields do not match the current configuration"
+                "output_dataset descriptive fields do not match the current "
+                "configuration"
             )
         seen_keys.add(key)
 
@@ -349,6 +439,7 @@ def _validate_records(
     validated_records = list(records)
     planned_keys = set(build_experiment_job_keys(dataset, config))
     personas = {persona.id: persona for persona in config.personas}
+    models = {model.config_id: model for model in config.inference.models}
     seen_keys: set[ExperimentJobKey] = set()
     completed_keys = {
         _key_from_row(row)
@@ -374,7 +465,13 @@ def _validate_records(
                 "batch record request ID does not match its experiment job key"
             )
         persona = personas[record.key.persona_id]
-        if record.persona_instruction != persona.instruction:
+        model = models[record.key.model_config_id]
+        if (
+            record.persona_name != persona.name
+            or record.model != model.model
+            or record.provider != model.provider
+            or record.persona_instruction != persona.instruction
+        ):
             raise ExperimentResultStoreError(
                 "batch record persona fields do not match the current configuration"
             )
@@ -457,6 +554,9 @@ def _record_to_row(
             "persona_id": record.key.persona_id,
             "model_config_id": record.key.model_config_id,
             "request_id": record.request_id,
+            "persona_name": record.persona_name,
+            "model": record.model,
+            "provider": record.provider,
             "persona_instruction": record.persona_instruction,
             "user_prompt": record.user_prompt,
             "system_prompt": record.system_prompt,

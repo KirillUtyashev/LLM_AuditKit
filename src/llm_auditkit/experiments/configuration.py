@@ -97,6 +97,8 @@ def load_experiment_run_config(path: str | Path) -> ExperimentRunConfig:
         config_path,
         "output.path",
     )
+    if output_path.suffix.lower() != ".csv":
+        raise ExperimentConfigurationError("output.path must reference a .csv file")
     if dataset_path == output_path:
         raise ExperimentConfigurationError(
             "dataset.path and output.path must resolve to different files"

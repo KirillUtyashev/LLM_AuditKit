@@ -27,10 +27,10 @@ It contains:
 - execution mode, exactly `sync` or `async`;
 - the validated domain `ExperimentConfig`.
 
-Relative paths are resolved from the YAML file's directory. Unknown or duplicate YAML
-keys, path collisions, and invalid values fail before inference. The input and output
-paths never enter `ExperimentRunner`; the command resolves them at the composition
-boundary.
+Relative paths are resolved from the YAML file's directory. The output path must end in
+`.csv`. Unknown or duplicate YAML keys, path collisions, and invalid values fail before
+inference. The input and output paths never enter `ExperimentRunner`; the command
+resolves them at the composition boundary.
 
 `ExperimentConfig` contains:
 
@@ -51,6 +51,10 @@ columns. It contains:
 - an ordered, non-empty list of `resume_columns`;
 - optional `context_columns`, mapping semantic context names such as `city`, `year`,
   `month`, and `day` to DataFrame columns used by prompt construction.
+
+Context aliases may repeat the same canonical source mapping, but validation rejects an
+alias that would replace the configured job posting or any applicant resume with a
+different source column.
 
 The number of applicants `N` is `len(resume_columns)`. There is no separate applicant
 count that can disagree with the configured columns. The runner validates that all
@@ -187,8 +191,10 @@ reconstruct EDSL's combined system prompt.
 The shared inference adapter maps the generic dictionary response format to EDSL's
 standard `QuestionDict`. EDSL renders and validates the structured response. The runner
 then performs domain validation, converts the ordered applicant answers to `0` or `1`,
-and associates each answer with its normalized emitted-token log probability. Raw EDSL
-or provider response objects do not cross the inference boundary.
+and associates each answer with the token span for its field value in the emitted
+structured dictionary. Decision words in surrounding commentary are ignored; missing,
+duplicate, or ambiguous field-to-token associations remain failed parse results. Raw
+EDSL or provider response objects do not cross the inference boundary.
 
 `ExperimentRunner.preview` returns the selected shared-inference batch preview without making model calls. Previewing the first small batch is the recommended way to inspect EDSL-rendered prompts and verify persona mapping, model mapping, and request cardinality before a large run.
 
@@ -242,8 +248,8 @@ The shared inference layer is responsible for:
 
 - constructing domain prompts and stable job identities;
 - excluding completed jobs before inference;
-- validating one structured `Yes` or `No` answer and one selected-token log probability
-  for each configured resume column;
+- validating one structured `Yes` or `No` answer and binding its emitted-token log
+  probability to the corresponding configured resume column;
 - associating and parsing normalized results;
 - incremental persistence and resume behavior;
 - recording terminal errors;
@@ -270,6 +276,12 @@ result store writes records in canonical job order regardless of prior CSV row o
 asynchronous completion order. Batch boundaries are not durable identity and can change
 when a run resumes with fewer pending jobs.
 
+The command loads source CSV cells as strings without treating literals such as `NA` as
+missing. Checkpoint reload validates serialized source cells against the current input
+DataFrame, restores the caller-owned source values, and parses AuditKit's numeric result
+columns explicitly. Leading zeroes and numeric-looking prompt or metadata strings are
+therefore not changed by a resumed run.
+
 ## Failure Handling
 
 After EDSL completes its retry behavior, a terminal failure for an individual logical request is recorded against its job key, remains incomplete for resume purposes, and execution can continue for other requests.
@@ -286,6 +298,8 @@ Each record contains:
 
 - `experiment_id`, `scenario_id`, `persona_id`, `model_config_id`, and the derived
   `request_id`;
+- the readable `persona_name`, selected `model`, and `provider` alongside their stable
+  IDs;
 - the static persona instruction;
 - the effective rendered `user_prompt` and `system_prompt`;
 - `generated_response` and the optional structured-response `comment`;

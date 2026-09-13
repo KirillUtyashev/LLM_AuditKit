@@ -114,12 +114,15 @@ inference:
 
 Dataset and output paths resolve relative to the YAML file, not the current working
 directory. Unknown fields, missing fields, duplicate YAML keys, and invalid values fail
-before inference. The input and output paths cannot resolve to the same file.
+before inference. The output path must end in `.csv`, and the input and output paths
+cannot resolve to the same file.
 
 The dataset fields map semantic inputs to actual CSV columns. `resume_columns` order
 defines Applicant 1 through Applicant N and the order of output picks and log
 probabilities. `context_columns` provides semantic aliases; the question and persona
-templates determine where those values appear.
+templates determine where those values appear. An alias may repeat its canonical source
+mapping, but it cannot replace the configured job posting or a resume with another
+column.
 
 Question and persona paths resolve relative to the YAML file and must reference
 readable, non-empty UTF-8 `.txt` files. Question and trait templates use simple Python
@@ -228,6 +231,11 @@ replacement after each handled batch. A crash or systemic failure therefore leav
 last complete checkpoint intact. With `false`, handled batches remain only in memory
 and one CSV is written after successful execution.
 
+The command reads source CSV cells as strings without treating values such as `NA` as
+missing, so identifiers, resumes, and other caller values retain leading zeroes and
+literal text. Checkpoint reload parses AuditKit's numeric result columns explicitly and
+restores source values from the current input DataFrame.
+
 Rerunning with the same YAML loads the output CSV, skips complete job keys, and retries
 failed or incomplete job keys. A fully complete checkpoint causes a no-op run with no
 provider calls.
@@ -238,6 +246,7 @@ The stored CSV contains one row per attempted combination of scenario, persona, 
 model configuration. It preserves source columns and adds:
 
 - stable experiment, scenario, persona, model-configuration, and request IDs;
+- the readable persona name, selected model name, and provider;
 - the static persona instruction;
 - effective rendered user and system prompts;
 - the generated structured response and optional comment;

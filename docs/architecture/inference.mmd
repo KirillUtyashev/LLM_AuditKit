@@ -92,8 +92,7 @@ classDiagram
     }
     class EDSLJob {
         <<Expected Parrot>>
-        +request_agents
-        +neutral_scenario
+        +paired_interviews
         +single_model
         +single_response_format
     }
@@ -101,8 +100,16 @@ classDiagram
         <<Expected Parrot>>
         +instruction
         +persona
-        +private_request_id
-        +private_prompt
+    }
+    class EDSLScenario {
+        <<Expected Parrot>>
+        +request_id
+        +prompt
+    }
+    class EDSLInterview {
+        <<Expected Parrot>>
+        +agent
+        +scenario
     }
     InferenceConfig --> ModelConfig
     InferenceRequest --> DictResponseFormat
@@ -120,5 +127,7 @@ classDiagram
     EDSLAdapter ..|> InferenceAdapter : implements
     EDSLAdapter --> ModelConfig : configures
     EDSLAdapter --> EDSLJob : creates compatible group
-    EDSLJob --> EDSLAgent : one per request
+    EDSLJob --> EDSLInterview : one per request
+    EDSLInterview --> EDSLAgent : paired
+    EDSLInterview --> EDSLScenario : paired
     EDSLAdapter --> EDSL : submits model/response-format groups

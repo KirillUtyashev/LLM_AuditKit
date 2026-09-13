@@ -195,6 +195,7 @@ class ExperimentRunner:
             batch.results,
             expected_keys,
             {persona.id: persona for persona in config.personas},
+            {model.config_id: model for model in config.inference.models},
             resume_count=len(config.dataset_schema.resume_columns),
         )
         if config.save_after_each_batch:

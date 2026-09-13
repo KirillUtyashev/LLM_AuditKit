@@ -20,6 +20,7 @@ from edsl import (
     Survey,
 )
 from edsl.inference_services.registry import GLOBAL_REGISTRY
+from edsl.interviews import Interview
 from edsl.questions.question_dict import DictResponseValidator
 
 from .batching import AdapterJobGroup, group_requests_by_compatibility
@@ -36,8 +37,9 @@ from .models import (
 
 _QUESTION_NAME = "response"
 _REQUEST_ID_FIELD = "request_id"
-_AGENT_PROMPT_FIELD = "llm_auditkit_prompt"
-_QUESTION_PROMPT_TEMPLATE = f"{{{{ agent[{_AGENT_PROMPT_FIELD!r}] }}}}"
+_PROMPT_FIELD = "llm_auditkit_prompt"
+_PAIRING_FIELD = "_llm_auditkit_pair_index"
+_QUESTION_PROMPT_TEMPLATE = f"{{{{ {_PROMPT_FIELD} }}}}"
 _LOGGER = logging.getLogger(__name__)
 _VALUE_TYPE_MAP = {
     "string": "str",
@@ -180,20 +182,38 @@ def _build_job(group: AdapterJobGroup) -> object:
         service_name=group.model_config.provider,
         **group.model_config.parameters,
     )
-    agents = [_build_agent(request) for request in group.requests]
-    return Jobs(
-        survey=survey,
-        agents=AgentList(agents),
-        scenarios=ScenarioList([Scenario({})]),
-        models=[model],
-    )
+    agents = [
+        _build_agent(request, pair_index)
+        for pair_index, request in enumerate(group.requests)
+    ]
+    scenarios = [
+        Scenario(
+            {
+                _REQUEST_ID_FIELD: request.request_id,
+                _PROMPT_FIELD: request.prompt,
+            }
+        )
+        for request in group.requests
+    ]
+    interviews = [
+        Interview(
+            agent=agent,
+            survey=survey,
+            scenario=scenario,
+            model=model,
+        )
+        for agent, scenario in zip(agents, scenarios, strict=True)
+    ]
+    job = Jobs.from_interviews(interviews)
+    # EDSL 1.0.8's prompt preview builds index lookups from these collections even
+    # when a job was created from explicit interviews.
+    job.agents = AgentList(agents)
+    job.scenarios = ScenarioList(scenarios)
+    return job
 
 
-def _build_agent(request: InferenceRequest) -> object:
-    traits: dict[str, object] = {
-        _REQUEST_ID_FIELD: request.request_id,
-        _AGENT_PROMPT_FIELD: request.prompt,
-    }
+def _build_agent(request: InferenceRequest, pair_index: int) -> object:
+    traits: dict[str, object] = {_PAIRING_FIELD: pair_index}
     traits_presentation_template = ""
     if request.persona is not None:
         traits["persona"] = request.persona
@@ -427,6 +447,7 @@ def _recover_structured_response(
     """
 
     expected_field_set = set(expected_fields)
+    matches: list[tuple[dict[str, object], int, int]] = []
     for start, end in _braced_spans(generated_content):
         candidate = generated_content[start:end]
         parsed = _decode_mapping(candidate)
@@ -438,10 +459,15 @@ def _recover_structured_response(
             continue
 
         ordered = {field: parsed[field] for field in expected_fields}
-        comment = _surrounding_response_text(generated_content, start, end)
-        return ordered, comment
+        matches.append((ordered, start, end))
 
-    return None
+    if not matches:
+        return None
+    selected, start, end = matches[0]
+    if any(candidate != selected for candidate, _, _ in matches[1:]):
+        return None
+    comment = _surrounding_response_text(generated_content, start, end)
+    return selected, comment
 
 
 def _braced_spans(content: str) -> list[tuple[int, int]]:

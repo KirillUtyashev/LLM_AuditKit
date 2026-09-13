@@ -26,8 +26,8 @@ class AdapterJobGroup:
     """Requests compatible with one backend job.
 
     EDSL jobs created by the shared adapter use exactly one model configuration and
-    one response format. Each request is represented by one agent and the job uses one
-    neutral scenario, yielding exactly one EDSL interview per request.
+    one response format. Each request is represented by one explicitly paired agent,
+    scenario, and interview.
     """
 
     model_config: ModelConfig

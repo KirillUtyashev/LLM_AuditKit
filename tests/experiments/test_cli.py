@@ -164,6 +164,24 @@ def test_command_csv_loader_preserves_string_scenario_ids(tmp_path: Path) -> Non
     assert dataset["scenario_id"].tolist() == ["001"]
 
 
+def test_command_csv_loader_preserves_all_literal_strings(tmp_path: Path) -> None:
+    run_config = _run_config(tmp_path, "sync")
+    run_config.dataset_path.write_text(
+        "scenario_id,job_posting,resume_1,case_id\n"
+        "001,NA,00007,00009\n",
+        encoding="utf-8",
+    )
+
+    dataset = cli._load_experiment_dataset(run_config)
+
+    assert dataset.iloc[0].to_dict() == {
+        "scenario_id": "001",
+        "job_posting": "NA",
+        "resume_1": "00007",
+        "case_id": "00009",
+    }
+
+
 def test_command_csv_loader_does_not_require_scenario_ids(tmp_path: Path) -> None:
     run_config = _run_config(tmp_path, "sync")
     run_config.dataset_path.write_text(

@@ -17,6 +17,7 @@ from llm_auditkit.experiments.parsing import (
 from llm_auditkit.inference import (
     InferenceError,
     InferenceResult,
+    ModelConfig,
     RenderedPrompt,
     TokenLogprob,
 )
@@ -43,6 +44,10 @@ def _persona(persona_id: str = "manager") -> Persona:
     )
 
 
+def _model() -> ModelConfig:
+    return ModelConfig("model-1", "openai", "gpt-test", {"logprobs": True})
+
+
 def _result(
     key: ExperimentJobKey | None = None,
     **changes: object,
@@ -61,10 +66,11 @@ def _result(
         "structured_content": {"Applicant 1": "Yes", "Applicant 2": "No"},
         "comment": "Interview the first applicant.",
         "token_logprobs": [
-            TokenLogprob("{", -0.01),
-            TokenLogprob(" Yes", -0.2),
-            TokenLogprob(",", -0.01),
+            TokenLogprob('{"Applicant 1":"', -0.01),
+            TokenLogprob("Yes", -0.2),
+            TokenLogprob('","Applicant 2":"', -0.01),
             TokenLogprob("No", -0.4),
+            TokenLogprob('"}', -0.01),
         ],
         "rendered_prompt": RenderedPrompt(
             request_id=build_experiment_request_id(key),
@@ -81,6 +87,7 @@ def test_successful_result_parses_decisions_logprobs_and_prompts() -> None:
         _result(),
         _key(),
         _persona(),
+        _model(),
         resume_count=2,
     )
 
@@ -92,6 +99,9 @@ def test_successful_result_parses_decisions_logprobs_and_prompts() -> None:
     assert record.outcome.comment == "Interview the first applicant."
     assert record.user_prompt == "Rendered user prompt"
     assert record.system_prompt == "Rendered system prompt"
+    assert record.persona_name == "Manager"
+    assert record.model == "gpt-test"
+    assert record.provider == "openai"
 
 
 def test_batch_associates_by_request_id_and_restores_expected_order() -> None:
@@ -101,6 +111,7 @@ def test_batch_associates_by_request_id_and_restores_expected_order() -> None:
         [_result(keys[1]), _result(keys[0])],
         keys,
         {"manager": _persona()},
+        {"model-1": _model()},
         resume_count=2,
     )
 
@@ -117,7 +128,13 @@ def test_terminal_inference_error_becomes_an_incomplete_record() -> None:
         error=InferenceError("ProviderError", "request failed after retries"),
     )
 
-    record = parse_experiment_result(result, _key(), _persona(), resume_count=2)
+    record = parse_experiment_result(
+        result,
+        _key(),
+        _persona(),
+        _model(),
+        resume_count=2,
+    )
 
     assert not record.is_successful
     assert record.outcome is None
@@ -161,9 +178,10 @@ def test_malformed_domain_response_becomes_a_parse_error_record(
 ) -> None:
     record = parse_experiment_result(
         _result(**changes),
-        _key(),
-        _persona(),
-        resume_count=2,
+            _key(),
+            _persona(),
+            _model(),
+            resume_count=2,
     )
 
     assert not record.is_successful
@@ -176,28 +194,33 @@ def test_missing_decision_logprobs_becomes_a_parse_error_record() -> None:
         _result(token_logprobs=[TokenLogprob("Yes", -0.2)]),
         _key(),
         _persona(),
+        _model(),
         resume_count=2,
     )
 
     assert record.error_type == "ExperimentResponseParseError"
-    assert "expected 2" in (record.error_message or "")
+    assert "unambiguously" in (record.error_message or "")
 
 
 def test_mismatched_decision_tokens_becomes_a_parse_error_record() -> None:
     record = parse_experiment_result(
         _result(
             token_logprobs=[
+                TokenLogprob('{"Applicant 1":"', -0.01),
                 TokenLogprob("No", -0.2),
+                TokenLogprob('","Applicant 2":"', -0.01),
                 TokenLogprob("No", -0.4),
+                TokenLogprob('"}', -0.01),
             ]
         ),
         _key(),
         _persona(),
+        _model(),
         resume_count=2,
     )
 
     assert record.error_type == "ExperimentResponseParseError"
-    assert "do not match" in (record.error_message or "")
+    assert "unambiguously" in (record.error_message or "")
 
 
 @pytest.mark.parametrize(
@@ -210,7 +233,13 @@ def test_mismatched_decision_tokens_becomes_a_parse_error_record() -> None:
 )
 def test_identity_mismatch_is_a_systemic_error(result: InferenceResult) -> None:
     with pytest.raises(ExperimentResultAssociationError):
-        parse_experiment_result(result, _key(), _persona(), resume_count=2)
+        parse_experiment_result(
+            result,
+            _key(),
+            _persona(),
+            _model(),
+            resume_count=2,
+        )
 
 
 def test_duplicate_and_missing_batch_results_are_systemic_errors() -> None:
@@ -221,6 +250,7 @@ def test_duplicate_and_missing_batch_results_are_systemic_errors() -> None:
             [_result(keys[0]), _result(keys[0])],
             keys,
             {"manager": _persona()},
+            {"model-1": _model()},
             resume_count=2,
         )
 
@@ -229,19 +259,116 @@ def test_duplicate_and_missing_batch_results_are_systemic_errors() -> None:
             [_result(keys[0])],
             keys,
             {"manager": _persona()},
+            {"model-1": _model()},
             resume_count=2,
         )
 
 
 def test_parser_supports_arbitrary_configured_resume_count() -> None:
     result = _result(
-        content='{done}',
+        content='{"Applicant 1":"No"}',
         structured_content={"Applicant 1": "No"},
-        token_logprobs=[TokenLogprob(" No", -0.7)],
+        token_logprobs=[
+            TokenLogprob('{"Applicant 1":"', -0.01),
+            TokenLogprob("No", -0.7),
+            TokenLogprob('"}', -0.01),
+        ],
     )
 
-    record = parse_experiment_result(result, _key(), _persona(), resume_count=1)
+    record = parse_experiment_result(
+        result,
+        _key(),
+        _persona(),
+        _model(),
+        resume_count=1,
+    )
 
     assert record.outcome is not None
     assert record.outcome.picks == [0]
     assert record.outcome.logprobs == [-0.7]
+
+
+def test_logprobs_are_bound_to_fields_not_unrelated_decision_words() -> None:
+    result = _result(
+        token_logprobs=[
+            TokenLogprob("Yes, preliminary note. ", -9.0),
+            TokenLogprob('{"Applicant 2":"', -0.01),
+            TokenLogprob("No", -0.4),
+            TokenLogprob('","Applicant 1":"', -0.01),
+            TokenLogprob("Yes", -0.2),
+            TokenLogprob('"} No afterthought', -8.0),
+        ]
+    )
+
+    record = parse_experiment_result(
+        result,
+        _key(),
+        _persona(),
+        _model(),
+        resume_count=2,
+    )
+
+    assert record.outcome is not None
+    assert record.outcome.logprobs == [-0.2, -0.4]
+
+
+def test_multitoken_decision_logprob_is_summed_for_its_field() -> None:
+    result = _result(
+        token_logprobs=[
+            TokenLogprob('{"Applicant 1":"', -0.01),
+            TokenLogprob("Y", -0.1),
+            TokenLogprob("es", -0.2),
+            TokenLogprob('","Applicant 2":"', -0.01),
+            TokenLogprob("No", -0.4),
+            TokenLogprob('"}', -0.01),
+        ]
+    )
+
+    record = parse_experiment_result(
+        result,
+        _key(),
+        _persona(),
+        _model(),
+        resume_count=2,
+    )
+
+    assert record.outcome is not None
+    assert record.outcome.logprobs == [pytest.approx(-0.3), -0.4]
+
+
+def test_reordered_twelve_applicant_fields_keep_their_own_logprobs() -> None:
+    decisions = {
+        f"Applicant {position}": "Yes" if position % 2 else "No"
+        for position in range(1, 13)
+    }
+    token_logprobs = [TokenLogprob("{", -9.0)]
+    for offset, position in enumerate(range(12, 0, -1)):
+        separator = "" if offset == 0 else ","
+        field = f"Applicant {position}"
+        token_logprobs.extend(
+            [
+                TokenLogprob(f'{separator}"{field}":"', -9.0),
+                TokenLogprob(decisions[field], -position / 100),
+                TokenLogprob('"', -9.0),
+            ]
+        )
+    token_logprobs.append(TokenLogprob("}", -9.0))
+    content = "".join(token.token for token in token_logprobs)
+    result = _result(
+        content=content,
+        structured_content=decisions,
+        token_logprobs=token_logprobs,
+    )
+
+    record = parse_experiment_result(
+        result,
+        _key(),
+        _persona(),
+        _model(),
+        resume_count=12,
+    )
+
+    assert record.outcome is not None
+    assert record.outcome.logprobs == [
+        pytest.approx(-position / 100) for position in range(1, 13)
+    ]

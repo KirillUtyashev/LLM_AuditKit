@@ -72,6 +72,9 @@ def _record(
     values = {
         "key": key,
         "request_id": build_experiment_request_id(key),
+        "persona_name": "Manager",
+        "model": "test-model",
+        "provider": "openai",
         "persona_instruction": "Evaluate applicants",
         "user_prompt": f"Rendered prompt for {key.scenario_id}",
         "system_prompt": "Rendered system prompt",
@@ -110,6 +113,9 @@ def test_initialize_creates_canonical_empty_output_in_memory(tmp_path: Path) -> 
         "persona_id",
         "model_config_id",
         "request_id",
+        "persona_name",
+        "model",
+        "provider",
         "persona_instruction",
         "user_prompt",
         "system_prompt",
@@ -123,6 +129,11 @@ def test_initialize_creates_canonical_empty_output_in_memory(tmp_path: Path) -> 
         "error_type",
         "error_message",
     ]
+
+
+def test_result_store_requires_a_csv_output_path(tmp_path: Path) -> None:
+    with pytest.raises(ExperimentResultStoreError, match=".csv"):
+        ExperimentResultStore(tmp_path / "persona.txt")
 
 
 def test_apply_batch_repeats_source_rows_and_restores_canonical_order(
@@ -194,6 +205,48 @@ def test_save_and_resume_preserve_string_scenario_ids(tmp_path: Path) -> None:
         normalized_resumed,
         check_dtype=False,
     )
+
+
+def test_checkpoint_resume_preserves_literal_source_and_configuration_strings(
+    tmp_path: Path,
+) -> None:
+    dataset = _dataset(scenario_ids=["001", "002"])
+    dataset["caller_metadata"] = ["00007", "NA"]
+    dataset["resume_1"] = ["000123", "000456"]
+    config = _config()
+    config.personas[0].name = "NA"
+    config.personas[0].instruction = "00009"
+    config.inference.models[0].model = "00011"
+    record = _record(build_experiment_job_keys(dataset, config)[0])
+    record.persona_name = "NA"
+    record.persona_instruction = "00009"
+    record.model = "00011"
+    store = ExperimentResultStore(tmp_path / "results.csv")
+    output = store.initialize(dataset, config)
+
+    store.save_batch(output, dataset, config, [record])
+    resumed = store.initialize(dataset, config)
+
+    assert resumed.loc[0, "scenario_id"] == "001"
+    assert resumed.loc[0, "caller_metadata"] == "00007"
+    assert resumed.loc[0, "resume_1"] == "000123"
+    assert resumed.loc[0, "persona_name"] == "NA"
+    assert resumed.loc[0, "persona_instruction"] == "00009"
+    assert resumed.loc[0, "model"] == "00011"
+
+
+def test_checkpoint_rejects_changed_source_values(tmp_path: Path) -> None:
+    dataset = _dataset()
+    config = _config()
+    store = ExperimentResultStore(tmp_path / "results.csv")
+    output = store.initialize(dataset, config)
+    key = build_experiment_job_keys(dataset, config)[0]
+    saved = store.apply_batch(output, dataset, config, [_record(key)])
+    saved.loc[0, "caller_metadata"] = "changed"
+    store.save(saved)
+
+    with pytest.raises(ExperimentResultStoreError, match="source values"):
+        store.initialize(dataset, config)
 
 
 def test_source_identifier_column_contributes_to_generated_scenario_identity(

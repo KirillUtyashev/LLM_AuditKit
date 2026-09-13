@@ -192,6 +192,37 @@ def test_invalid_dataset_schemas_are_rejected(
         validate_experiment_config(_config(dataset_schema=schema))
 
 
+@pytest.mark.parametrize(
+    "schema",
+    [
+        _schema(context_columns={"resume_1": "city"}),
+        _schema(context_columns={"job_posting": "city"}),
+        _schema(
+            job_posting_column="posting",
+            resume_columns=["job_posting", "resume_2"],
+        ),
+    ],
+)
+def test_dataset_schema_rejects_aliases_that_replace_prompt_content(
+    schema: ExperimentDatasetSchema,
+) -> None:
+    with pytest.raises(ExperimentConfigurationError, match="alias|replace"):
+        validate_experiment_config(_config(dataset_schema=schema))
+
+
+def test_dataset_schema_allows_context_aliases_for_the_same_source() -> None:
+    validate_experiment_config(
+        _config(
+            dataset_schema=_schema(
+                context_columns={
+                    "job_posting": "job_posting",
+                    "resume_1": "resume_1",
+                }
+            )
+        )
+    )
+
+
 def test_shared_inference_configuration_is_validated() -> None:
     invalid_inference = InferenceConfig(models=[], batch_size=0)
 
