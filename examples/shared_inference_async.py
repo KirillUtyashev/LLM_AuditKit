@@ -39,6 +39,7 @@ async def run() -> int:
             request_id="quickstart-async",
             prompt="Reply with exactly: ASYNC_AUDITKIT",
             system_prompt="Follow the requested output format exactly.",
+            persona="You are a concise API test assistant.",
             model_config_id="openai-quickstart",
             metadata={"example": "async"},
         )

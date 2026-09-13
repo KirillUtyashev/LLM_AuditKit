@@ -8,6 +8,7 @@ from collections.abc import Iterable, Mapping, Sequence
 import pytest
 
 from llm_auditkit.inference import (
+    DictResponseFormat,
     InferenceBatchError,
     InferenceConfig,
     InferenceError,
@@ -18,6 +19,8 @@ from llm_auditkit.inference import (
     InferenceValidationError,
     ModelConfig,
     RenderedPrompt,
+    ResponseField,
+    TokenLogprob,
 )
 
 
@@ -274,6 +277,80 @@ def test_terminal_request_failure_is_a_normalized_result() -> None:
         type="ProviderError",
         message="request failed after retries",
     )
+
+
+def test_structured_result_data_is_validated_and_preserved() -> None:
+    request = _requests(1)[0]
+    request.response_format = DictResponseFormat(
+        fields=[ResponseField("decision", "string", "Yes or No")],
+        include_comment=True,
+    )
+    rendered = RenderedPrompt(
+        request_id=request.request_id,
+        user_prompt="Rendered prompt",
+        system_prompt="Rendered system prompt",
+    )
+    result = InferenceResult(
+        request_id=request.request_id,
+        model_config_id=request.model_config_id,
+        content='{\"decision\": \"Yes\"}',
+        metadata={"adapter": "must not leak"},
+        structured_content={"decision": "Yes"},
+        comment="Interview",
+        token_logprobs=[TokenLogprob("Yes", -0.25)],
+        rendered_prompt=rendered,
+    )
+
+    batch = next(
+        InferenceOrchestrator(FixedResultsAdapter([result])).run_batches(
+            [request],
+            _config(),
+        )
+    )
+
+    normalized = batch.results[0]
+    assert normalized.structured_content == {"decision": "Yes"}
+    assert normalized.comment == "Interview"
+    assert normalized.token_logprobs == [TokenLogprob("Yes", -0.25)]
+    assert normalized.rendered_prompt == rendered
+    assert normalized.metadata == request.metadata
+
+
+@pytest.mark.parametrize(
+    ("changes", "message"),
+    [
+        ({"structured_content": None}, "no structured content"),
+        ({"structured_content": {"wrong": "Yes"}}, "fields do not match"),
+        ({"token_logprobs": [TokenLogprob("Yes", float("nan"))]}, "finite"),
+        (
+            {"rendered_prompt": RenderedPrompt("wrong", "prompt", None)},
+            "rendered prompt",
+        ),
+    ],
+)
+def test_invalid_structured_result_contract_stops_the_batch(
+    changes: dict[str, object],
+    message: str,
+) -> None:
+    request = _requests(1)[0]
+    request.response_format = DictResponseFormat(
+        fields=[ResponseField("decision", "string", "Yes or No")]
+    )
+    values: dict[str, object] = {
+        "request_id": request.request_id,
+        "model_config_id": request.model_config_id,
+        "content": '{\"decision\": \"Yes\"}',
+        "metadata": {},
+        "structured_content": {"decision": "Yes"},
+    }
+    values.update(changes)
+
+    iterator = InferenceOrchestrator(
+        FixedResultsAdapter([InferenceResult(**values)])  # type: ignore[arg-type]
+    ).run_batches([request], _config())
+
+    with pytest.raises(InferenceBatchError, match=message):
+        next(iterator)
 
 
 def test_complete_collection_is_validated_before_an_adapter_call() -> None:

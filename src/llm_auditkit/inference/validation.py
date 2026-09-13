@@ -9,7 +9,14 @@ from .exceptions import (
     InferenceConfigurationError,
     InferenceRequestValidationError,
 )
-from .models import InferenceConfig, InferenceRequest, JSONValue, ModelConfig
+from .models import (
+    DictResponseFormat,
+    InferenceConfig,
+    InferenceRequest,
+    JSONValue,
+    ModelConfig,
+    ResponseField,
+)
 
 
 _RESERVED_MODEL_PARAMETERS = frozenset(
@@ -20,6 +27,9 @@ _RESERVED_MODEL_PARAMETERS = frozenset(
         "model_name",
         "service_name",
     }
+)
+_SUPPORTED_RESPONSE_VALUE_TYPES = frozenset(
+    {"string", "integer", "number", "boolean"}
 )
 
 
@@ -105,6 +115,10 @@ def validate_inference_requests(
             raise InferenceRequestValidationError(
                 f"request {request.request_id!r} system_prompt must be a string or None"
             )
+        if request.persona is not None and not isinstance(request.persona, str):
+            raise InferenceRequestValidationError(
+                f"request {request.request_id!r} persona must be a string or None"
+            )
         _require_non_empty_string(
             request.model_config_id,
             field_name=f"request {request.request_id!r} model_config_id",
@@ -115,6 +129,8 @@ def validate_inference_requests(
                 f"request {request.request_id!r} references unknown model "
                 f"configuration ID {request.model_config_id!r}"
             )
+
+        _validate_response_format(request)
 
         if not isinstance(request.metadata, dict):
             raise InferenceRequestValidationError(
@@ -180,6 +196,71 @@ def _validate_model_config(model_config: ModelConfig, *, index: int) -> None:
         location=f"model {model_config.config_id!r} parameters",
         ancestors=set(),
     )
+
+
+def _validate_response_format(request: InferenceRequest) -> None:
+    response_format = request.response_format
+    if response_format is None:
+        return
+    if not isinstance(response_format, DictResponseFormat):
+        raise InferenceRequestValidationError(
+            f"request {request.request_id!r} response_format must be a "
+            "DictResponseFormat or None"
+        )
+    if not _is_sequence(response_format.fields) or not response_format.fields:
+        raise InferenceRequestValidationError(
+            f"request {request.request_id!r} response format fields must be a "
+            "non-empty sequence"
+        )
+    if not isinstance(response_format.include_comment, bool):
+        raise InferenceRequestValidationError(
+            f"request {request.request_id!r} response format include_comment "
+            "must be a boolean"
+        )
+    if not isinstance(response_format.include_type_hints, bool):
+        raise InferenceRequestValidationError(
+            f"request {request.request_id!r} response format include_type_hints "
+            "must be a boolean"
+        )
+
+    seen_names: set[str] = set()
+    for index, response_field in enumerate(response_format.fields):
+        if not isinstance(response_field, ResponseField):
+            raise InferenceRequestValidationError(
+                f"request {request.request_id!r} response field at position "
+                f"{index} must be a ResponseField"
+            )
+        _require_non_empty_string(
+            response_field.name,
+            field_name=(
+                f"request {request.request_id!r} response field at position "
+                f"{index} name"
+            ),
+            exception_type=InferenceRequestValidationError,
+        )
+        if response_field.name in seen_names:
+            raise InferenceRequestValidationError(
+                f"request {request.request_id!r} has duplicate response field "
+                f"name {response_field.name!r}"
+            )
+        seen_names.add(response_field.name)
+        if (
+            not isinstance(response_field.value_type, str)
+            or response_field.value_type not in _SUPPORTED_RESPONSE_VALUE_TYPES
+        ):
+            raise InferenceRequestValidationError(
+                f"request {request.request_id!r} response field "
+                f"{response_field.name!r} has unsupported value type "
+                f"{response_field.value_type!r}"
+            )
+        _require_non_empty_string(
+            response_field.description,
+            field_name=(
+                f"request {request.request_id!r} response field "
+                f"{response_field.name!r} description"
+            ),
+            exception_type=InferenceRequestValidationError,
+        )
 
 
 def _validate_json_value(

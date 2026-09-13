@@ -33,12 +33,16 @@ When an architectural contract represented in a Mermaid diagram changes, update 
 - The hiring workflow has five pipeline stages: dataset loading, template generation, template population, experiment execution, and regression analysis.
 - Template generation and experiment execution must use the shared inference layer in `src/llm_auditkit/inference/`.
 - Keep Expected Parrot EDSL-specific types and behavior behind the inference adapter. Domain packages must use generic inference requests, results, and configuration rather than importing EDSL concepts directly.
-- The shared inference layer owns generic model configuration, deterministic request batching, EDSL execution, and normalized outcomes. It delegates parallel interview execution, provider rate limiting, caching, and retries within each batch to EDSL rather than implementing a second worker pool or retry loop. Calling stages own domain prompts, response parsing, checkpoint policy, and output storage.
+- Dataset loading is the single path-to-DataFrame boundary. Downstream Python stages accept and return `pandas.DataFrame` objects rather than loading input paths from stage configuration.
+- The shared inference layer owns generic model and response-format configuration, deterministic request batching, EDSL execution, and normalized outcomes, including structured content and token log probabilities when requested. It delegates parallel interview execution, provider rate limiting, caching, and retries within each batch to EDSL rather than implementing a second worker pool or retry loop. Calling stages own domain prompts, response parsing, checkpoint policy, and output storage.
 - Shared inference batch size is measured in logical inference requests, not DataFrame rows. Batches are submitted sequentially so calling stages can validate and checkpoint one completed batch before another spends tokens.
 - Shared inference must provide behaviorally equivalent synchronous and asynchronous batch APIs backed by EDSL's matching synchronous and asynchronous execution methods. Do not implement the synchronous API by driving an event loop or the asynchronous API by hiding blocking execution in a worker thread.
 - Template counts are configurable as `N`; do not hard-code four resumes or templates.
-- Resume and completion behavior must use stable scenario, persona, model-configuration, and job identifiers. Never use a DataFrame row index as durable identity.
-- Keep `save_after_each_result` stage-specific and configurable. Incremental file writes must use an atomic replacement strategy.
+- Experiment resume and completion behavior must use stable experiment, scenario, persona, model-configuration, request, and job identifiers. Never use a DataFrame row index or EDSL-generated position as durable identity.
+- Keep checkpoint policies stage-specific and configurable. Template generation uses
+  `save_after_each_result`; experiment execution uses `save_after_each_batch` and
+  writes at most once per completed logical batch. Incremental file writes must use an
+  atomic replacement strategy.
 - The Python-to-R boundary uses CSV experiment outputs and YAML regression configuration. R analysis is invoked through an `Rscript` command-line entry point.
 
 ## Repository Layout

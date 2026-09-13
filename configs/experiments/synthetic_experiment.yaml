@@ -1,0 +1,36 @@
+experiment_id: synthetic-hiring-experiment-v1
+
+dataset:
+  path: ../../examples/experiment_execution/data/synthetic_experiment.csv
+  job_posting_column: job_posting
+  resume_columns:
+    - resume_1
+    - resume_2
+  context_columns:
+    city: city
+
+prompt:
+  template_path: ../../examples/experiment_execution/prompts/synthetic_question.txt
+
+output:
+  path: ../../examples/output/synthetic_experiment_results.csv
+
+execution:
+  mode: async
+  batch_size: 2
+  save_after_each_batch: true
+
+personas:
+  - id: hiring-manager-v1
+    name: Hiring manager
+    trait_template_path: ../../examples/experiment_execution/prompts/hiring_manager_trait.txt
+    instruction_path: ../../examples/experiment_execution/prompts/hiring_manager_instruction.txt
+
+inference:
+  models:
+    - config_id: openai-gpt-4.1-nano-v1
+      provider: openai
+      model: gpt-4.1-nano
+      parameters:
+        temperature: 0
+        logprobs: true

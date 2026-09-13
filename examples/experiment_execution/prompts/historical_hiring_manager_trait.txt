@@ -1,0 +1,1 @@
+Today is {date14}. You are the HR manager of your company in {city} and are screening job applicants for your recent job post on the {newspaper}: {job_posting}.

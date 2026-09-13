@@ -17,8 +17,20 @@ classDiagram
         +request_id: str
         +prompt: str
         +system_prompt: Optional~str~
+        +persona: Optional~str~
         +model_config_id: str
+        +response_format: Optional~DictResponseFormat~
         +metadata: Dict
+    }
+    class DictResponseFormat {
+        +fields: List~ResponseField~
+        +include_comment: bool
+        +include_type_hints: bool
+    }
+    class ResponseField {
+        +name: str
+        +value_type: str
+        +description: str
     }
     class RenderedPrompt {
         +request_id: str
@@ -40,8 +52,16 @@ classDiagram
         +request_id: str
         +model_config_id: str
         +content: Optional~str~
+        +structured_content: Optional~Dict~
+        +comment: Optional~str~
+        +token_logprobs: List~TokenLogprob~
+        +rendered_prompt: Optional~RenderedPrompt~
         +metadata: Dict
         +error: Optional~InferenceError~
+    }
+    class TokenLogprob {
+        +token: str
+        +logprob: float
     }
     class InferenceError {
         +type: str
@@ -70,15 +90,44 @@ classDiagram
         +run()
         +run_async()
     }
+    class EDSLJob {
+        <<Expected Parrot>>
+        +paired_interviews
+        +single_model
+        +single_response_format
+    }
+    class EDSLAgent {
+        <<Expected Parrot>>
+        +instruction
+        +persona
+    }
+    class EDSLScenario {
+        <<Expected Parrot>>
+        +request_id
+        +prompt
+    }
+    class EDSLInterview {
+        <<Expected Parrot>>
+        +agent
+        +scenario
+    }
     InferenceConfig --> ModelConfig
+    InferenceRequest --> DictResponseFormat
+    DictResponseFormat --> ResponseField
     InferenceOrchestrator --> InferenceConfig : validates and batches
     InferenceOrchestrator --> InferenceRequest : preserves identity
     InferenceOrchestrator --> InferenceBatchPreview : previews
     InferenceBatchPreview --> RenderedPrompt
     InferenceOrchestrator --> InferenceBatchResult : yields sequentially
     InferenceBatchResult --> InferenceResult
+    InferenceResult --> RenderedPrompt
+    InferenceResult --> TokenLogprob
     InferenceResult --> InferenceError
     InferenceOrchestrator --> InferenceAdapter : delegates batches
     EDSLAdapter ..|> InferenceAdapter : implements
     EDSLAdapter --> ModelConfig : configures
-    EDSLAdapter --> EDSL : submits sequential model and system-prompt groups
+    EDSLAdapter --> EDSLJob : creates compatible group
+    EDSLJob --> EDSLInterview : one per request
+    EDSLInterview --> EDSLAgent : paired
+    EDSLInterview --> EDSLScenario : paired
+    EDSLAdapter --> EDSL : submits model/response-format groups

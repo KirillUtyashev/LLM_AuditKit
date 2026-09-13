@@ -8,6 +8,7 @@ from dataclasses import dataclass, field
 import pytest
 
 from llm_auditkit.inference import (
+    DictResponseFormat,
     EDSLAdapter,
     InferenceAdapter,
     InferenceBatchError,
@@ -16,13 +17,19 @@ from llm_auditkit.inference import (
     InferenceOrchestrator,
     InferenceRequest,
     ModelConfig,
+    ResponseField,
+    TokenLogprob,
 )
 from llm_auditkit.inference import edsl_adapter as adapter_module
+from llm_auditkit.inference.batching import AdapterJobGroup
 
 
 @dataclass
 class FakeEDSLRuntime:
     responses: dict[str, object] = field(default_factory=dict)
+    generated_content: dict[str, object] = field(default_factory=dict)
+    comments: dict[str, object] = field(default_factory=dict)
+    raw_model_responses: dict[str, object] = field(default_factory=dict)
     exceptions: dict[str, Exception] = field(default_factory=dict)
     omitted_request_ids: set[str] = field(default_factory=set)
     prompt_error: Exception | None = None
@@ -58,13 +65,18 @@ def fake_edsl(monkeypatch: pytest.MonkeyPatch) -> FakeEDSLRuntime:
     class FakeScenarioList(list[FakeScenario]):
         pass
 
+    class FakeAgentList(list[object]):
+        pass
+
     class FakeAgent:
         def __init__(
             self,
             traits: dict[str, object] | None = None,
+            traits_presentation_template: str | None = None,
             **kwargs: object,
         ) -> None:
             self.traits = traits
+            self.traits_presentation_template = traits_presentation_template
             self.kwargs = kwargs
             runtime.agents.append(self)
 
@@ -81,29 +93,62 @@ def fake_edsl(monkeypatch: pytest.MonkeyPatch) -> FakeEDSLRuntime:
             self.parameters = parameters
             runtime.models.append(self)
 
-    class FakeInvigilator:
-        def __init__(self, scenario: FakeScenario) -> None:
+    class FakeSurvey:
+        def __init__(self, questions: list[object]) -> None:
+            self.questions = questions
+
+    class FakeInterview:
+        def __init__(
+            self,
+            *,
+            agent: FakeAgent,
+            survey: FakeSurvey,
+            scenario: FakeScenario,
+            model: FakeModel,
+        ) -> None:
+            self.agent = agent
+            self.survey = survey
             self.scenario = scenario
+            self.model = model
+
+    class FakeInvigilator:
+        def __init__(self, interview: FakeInterview) -> None:
+            self.scenario = interview.scenario
+            self.agent = interview.agent
 
     class FakeExceptionEntry:
-        def __init__(self, scenario: FakeScenario, exception: Exception) -> None:
-            self.invigilator = FakeInvigilator(scenario)
+        def __init__(self, interview: FakeInterview, exception: Exception) -> None:
+            self.invigilator = FakeInvigilator(interview)
             self.exception = exception
             self.exception_type = type(exception).__name__
 
     class FakeTaskHistory:
-        def __init__(self, scenarios: list[FakeScenario]) -> None:
+        def __init__(self, interviews: list[FakeInterview]) -> None:
             entries = [
-                FakeExceptionEntry(scenario, runtime.exceptions[scenario["request_id"]])
-                for scenario in scenarios
-                if scenario["request_id"] in runtime.exceptions
+                FakeExceptionEntry(
+                    interview,
+                    runtime.exceptions[
+                        interview.scenario[adapter_module._REQUEST_ID_FIELD]
+                    ],
+                )
+                for interview in interviews
+                if interview.scenario[adapter_module._REQUEST_ID_FIELD]
+                in runtime.exceptions
             ]
             self.exceptions = [{"response": entries}] if entries else []
 
     class FakeResult:
-        def __init__(self, scenario: FakeScenario, answer: object) -> None:
+        def __init__(
+            self,
+            scenario: FakeScenario,
+            answer: object,
+            data: dict[str, object],
+            agent: FakeAgent,
+        ) -> None:
             self.scenario = scenario
             self.answer = answer
+            self.data = data
+            self.agent = agent
 
     class FakeResults(list[FakeResult]):
         def __init__(
@@ -115,78 +160,134 @@ def fake_edsl(monkeypatch: pytest.MonkeyPatch) -> FakeEDSLRuntime:
             self.task_history = FakeTaskHistory(scenarios)
 
     class FakeJob:
-        def __init__(
-            self,
-            question: object,
-            scenarios: FakeScenarioList,
-        ) -> None:
-            self.question = question
-            self.scenarios = scenarios
-            self.agent: FakeAgent | None = None
-            self.model: FakeModel | None = None
+        def __init__(self, interviews: list[FakeInterview]) -> None:
+            self.interviews = interviews
+            self.question = interviews[0].survey.questions[0]
+            self.scenarios = FakeScenarioList()
+            self.agents = FakeAgentList()
+            self.model = interviews[0].model
             runtime.jobs.append(self)
 
-        def by(self, value: object) -> FakeJob:
-            if isinstance(value, FakeAgent):
-                self.agent = value
-            elif isinstance(value, FakeModel):
-                self.model = value
-            else:
-                raise AssertionError(f"unexpected EDSL job binding: {value!r}")
-            return self
+        @staticmethod
+        def _system_prompt(agent: FakeAgent) -> str:
+            parts = []
+            if "instruction" in agent.kwargs:
+                parts.append(f"instruction:{agent.kwargs['instruction']}")
+            persona = agent.traits.get("persona")
+            if persona is not None:
+                parts.append(f"persona:{persona}")
+            return "" if not parts else f"EDSL system:{'|'.join(parts)}"
 
         def prompts(self) -> FakeDataset:
             if runtime.prompt_error is not None:
                 raise runtime.prompt_error
-            assert self.agent is not None
-            assert self.model is not None
             runtime.events.append(("prompts", self.model.model_name, {}))
-            system_prompt = (
-                ""
-                if self.agent.traits is None
-                else f"EDSL system:{self.agent.traits['persona']}"
-            )
             rows = [
                 {
-                    "scenario_index": index,
+                    "agent_index": index,
+                    "scenario_index": 0,
                     "user_prompt": FakePrompt(
-                        f"EDSL user:{scenario['prompt']}"
+                        "EDSL user:"
+                        f"{interview.scenario[adapter_module._PROMPT_FIELD]}"
                     ),
-                    "system_prompt": FakePrompt(system_prompt),
+                    "system_prompt": FakePrompt(
+                        self._system_prompt(interview.agent)
+                    ),
                 }
-                for index, scenario in enumerate(self.scenarios)
+                for index, interview in enumerate(self.interviews)
             ]
             return FakeDataset(list(reversed(rows)))
 
         def run(self, **kwargs: object) -> FakeResults:
             if runtime.sync_error is not None:
                 raise runtime.sync_error
-            assert self.model is not None
             runtime.events.append(("run", self.model.model_name, kwargs))
             return self._results()
 
         async def run_async(self, **kwargs: object) -> FakeResults:
             if runtime.async_error is not None:
                 raise runtime.async_error
-            assert self.model is not None
             runtime.events.append(("run_async", self.model.model_name, kwargs))
             return self._results()
 
         def _results(self) -> FakeResults:
-            result_items = [
-                FakeResult(
-                    scenario,
-                    {
-                        "response": runtime.responses.get(
-                            scenario["request_id"],
-                            f"answer:{scenario['request_id']}",
+            result_items = []
+            for interview in reversed(self.interviews):
+                scenario = interview.scenario
+                request_id = interview.scenario[adapter_module._REQUEST_ID_FIELD]
+                if request_id in runtime.omitted_request_ids:
+                    continue
+                if request_id in runtime.responses:
+                    response = runtime.responses[request_id]
+                elif isinstance(self.question, FakeQuestionDict):
+                    response = {key: "Yes" for key in self.question.answer_keys}
+                else:
+                    response = f"answer:{request_id}"
+
+                data = {
+                    "generated_tokens": {
+                        "response_generated_tokens": runtime.generated_content.get(
+                            request_id,
+                            str(response),
                         )
                     },
+                    "comments_dict": {
+                        "response_comment": runtime.comments.get(request_id)
+                    },
+                    "raw_model_response": {
+                        "response_raw_model_response": runtime.raw_model_responses.get(
+                            request_id
+                        )
+                    },
+                    "prompt": {
+                        "response_user_prompt": FakePrompt(
+                            "EDSL user:"
+                            f"{interview.scenario[adapter_module._PROMPT_FIELD]}"
+                        ),
+                        "response_system_prompt": FakePrompt(
+                            self._system_prompt(interview.agent)
+                        ),
+                    },
+                }
+                result_items.append(
+                    FakeResult(
+                        scenario,
+                        {"response": response},
+                        data,
+                        interview.agent,
+                    )
                 )
-                for scenario in reversed(self.scenarios)
-                if scenario["request_id"] not in runtime.omitted_request_ids
+            return FakeResults(
+                result_items,
+                self.interviews,
+            )
+
+    class FakeJobs:
+        def __new__(
+            cls,
+            *,
+            survey: FakeSurvey,
+            agents: FakeAgentList,
+            scenarios: FakeScenarioList,
+            models: list[FakeModel],
+        ) -> FakeJob:
+            interviews = [
+                FakeInterview(
+                    agent=agent,
+                    survey=survey,
+                    scenario=scenarios[0],
+                    model=models[0],
+                )
+                for agent in agents
             ]
-            return FakeResults(result_items, list(self.scenarios))
+            job = FakeJob(interviews)
+            job.agents = agents
+            job.scenarios = scenarios
+            return job
+
+        @classmethod
+        def from_interviews(cls, interviews: list[FakeInterview]) -> FakeJob:
+            return FakeJob(interviews)
 
     class FakeQuestionFreeText:
         def __init__(self, *, question_name: str, question_text: str) -> None:
@@ -194,14 +295,36 @@ def fake_edsl(monkeypatch: pytest.MonkeyPatch) -> FakeEDSLRuntime:
             self.question_text = question_text
             runtime.questions.append(self)
 
-        def by(self, scenarios: FakeScenarioList) -> FakeJob:
-            return FakeJob(self, scenarios)
+    class FakeQuestionDict(FakeQuestionFreeText):
+        def __init__(
+            self,
+            *,
+            question_name: str,
+            question_text: str,
+            answer_keys: list[str],
+            value_types: list[str] | None,
+            value_descriptions: list[str],
+            include_comment: bool,
+        ) -> None:
+            super().__init__(
+                question_name=question_name,
+                question_text=question_text,
+            )
+            self.answer_keys = answer_keys
+            self.value_types = value_types
+            self.value_descriptions = value_descriptions
+            self.include_comment = include_comment
 
     monkeypatch.setattr(adapter_module, "Agent", FakeAgent)
+    monkeypatch.setattr(adapter_module, "AgentList", FakeAgentList)
+    monkeypatch.setattr(adapter_module, "Jobs", FakeJobs)
+    monkeypatch.setattr(adapter_module, "Interview", FakeInterview)
     monkeypatch.setattr(adapter_module, "Model", FakeModel)
     monkeypatch.setattr(adapter_module, "QuestionFreeText", FakeQuestionFreeText)
+    monkeypatch.setattr(adapter_module, "_RecoverableQuestionDict", FakeQuestionDict)
     monkeypatch.setattr(adapter_module, "Scenario", FakeScenario)
     monkeypatch.setattr(adapter_module, "ScenarioList", FakeScenarioList)
+    monkeypatch.setattr(adapter_module, "Survey", FakeSurvey)
     return runtime
 
 
@@ -226,8 +349,9 @@ def _requests() -> list[InferenceRequest]:
             request_id="request-1",
             prompt="First prompt",
             model_config_id="model-1",
-            system_prompt="persona-a",
+            system_prompt="instruction-a",
             metadata={"position": 1},
+            persona="persona-a",
         ),
         InferenceRequest(
             request_id="request-2",
@@ -239,14 +363,100 @@ def _requests() -> list[InferenceRequest]:
             request_id="request-3",
             prompt="Third prompt",
             model_config_id="model-1",
-            system_prompt="persona-a",
+            system_prompt="instruction-a",
             metadata={"position": 3},
+            persona="persona-c",
         ),
     ]
 
 
 def test_edsl_adapter_implements_the_generic_protocol() -> None:
     assert isinstance(EDSLAdapter(), InferenceAdapter)
+
+
+def test_real_edsl_job_has_one_interview_per_request() -> None:
+    requests = tuple(
+        InferenceRequest(
+            request_id=f"request-{index}",
+            prompt=f"Prompt {index}",
+            model_config_id="model",
+            system_prompt=f"Instruction {index}",
+            persona=f"Persona {index}",
+        )
+        for index in range(5)
+    )
+    group = AdapterJobGroup(
+        model_config=ModelConfig("model", "test", "test"),
+        response_format=None,
+        requests=requests,
+    )
+
+    job = adapter_module._build_job(group)
+
+    assert len(job.agents) == 5
+    assert len(job.scenarios) == 5
+    assert len(job.models) == 1
+    assert job.num_interviews == 5
+    assert len(job.prompts().to_dicts()) == 5
+
+
+def test_real_edsl_job_preserves_literal_request_ids_and_prompts() -> None:
+    request = InferenceRequest(
+        request_id="id:{{name}}",
+        prompt='Nested JSON: {"outer":{"inner":1}}',
+        model_config_id="model",
+        system_prompt="Keep the request literal.",
+    )
+    group = AdapterJobGroup(
+        model_config=ModelConfig("model", "test", "test"),
+        response_format=None,
+        requests=(request,),
+    )
+
+    job = adapter_module._build_job(group)
+    interview = job.interviews()[0]
+    prompt_row = job.prompts().to_dicts()[0]
+
+    assert interview.scenario[adapter_module._REQUEST_ID_FIELD] == request.request_id
+    assert interview.scenario[adapter_module._PROMPT_FIELD] == request.prompt
+    assert request.prompt in prompt_row["user_prompt"].text
+
+
+def test_recoverable_question_survives_edsl_serialization_and_validation() -> None:
+    from edsl.questions.question_base import QuestionBase
+
+    generated_content = """```json
+{
+  "Applicant 1": "Yes",
+  "Applicant 2": "No"
+}
+```
+Applicant 1 has more relevant experience."""
+    question = adapter_module._RecoverableQuestionDict(
+        question_name="response",
+        question_text="Choose applicants.",
+        answer_keys=["Applicant 1", "Applicant 2"],
+        value_types=None,
+        value_descriptions=["Yes or No", "Yes or No"],
+        include_comment=True,
+    )
+
+    restored = QuestionBase.from_dict(question.to_dict())
+    validated = restored._validate_answer(
+        {
+            "answer": "```json",
+            "comment": generated_content.split("\n", 1)[1],
+            "generated_tokens": generated_content,
+        }
+    )
+
+    assert isinstance(restored, adapter_module._RecoverableQuestionDict)
+    assert validated["answer"] == {
+        "Applicant 1": "Yes",
+        "Applicant 2": "No",
+    }
+    assert validated["comment"] == "Applicant 1 has more relevant experience."
+    assert validated["generated_tokens"] == generated_content
 
 
 def test_public_orchestrator_api_integrates_with_edsl_adapter(
@@ -299,9 +509,9 @@ def test_render_batch_uses_effective_edsl_prompts_without_inference(
         "EDSL user:Third prompt",
     ]
     assert [prompt.system_prompt for prompt in rendered] == [
-        "EDSL system:persona-a",
+        "EDSL system:instruction:instruction-a|persona:persona-a",
         "",
-        "EDSL system:persona-a",
+        "EDSL system:instruction:instruction-a|persona:persona-c",
     ]
     assert all(type(prompt.user_prompt) is str for prompt in rendered)
     assert all(type(prompt.system_prompt) is str for prompt in rendered)
@@ -311,7 +521,7 @@ def test_render_batch_uses_effective_edsl_prompts_without_inference(
     ]
 
 
-def test_job_construction_uses_standard_edsl_agent_model_and_scenarios(
+def test_job_construction_uses_one_paired_agent_and_scenario_per_request(
     fake_edsl: FakeEDSLRuntime,
 ) -> None:
     requests = _requests()
@@ -319,23 +529,41 @@ def test_job_construction_uses_standard_edsl_agent_model_and_scenarios(
     results = EDSLAdapter().execute_batch(requests, _models())
 
     assert len(fake_edsl.jobs) == 2
-    assert [scenario["request_id"] for scenario in fake_edsl.jobs[0].scenarios] == [
+    assert [scenario[adapter_module._REQUEST_ID_FIELD] for scenario in fake_edsl.jobs[0].scenarios] == [
         "request-1",
         "request-3",
     ]
+    assert [scenario[adapter_module._REQUEST_ID_FIELD] for scenario in fake_edsl.jobs[1].scenarios] == [
+        "request-2"
+    ]
+    assert [
+        interview.scenario[adapter_module._REQUEST_ID_FIELD]
+        for interview in fake_edsl.jobs[0].interviews
+    ] == ["request-1", "request-3"]
+    assert [
+        interview.scenario[adapter_module._PROMPT_FIELD]
+        for interview in fake_edsl.jobs[0].interviews
+    ] == ["First prompt", "Third prompt"]
     assert all(
-        set(scenario) == {"request_id", "prompt"}
-        for job in fake_edsl.jobs
-        for scenario in job.scenarios
+        adapter_module._REQUEST_ID_FIELD not in interview.agent.traits
+        and adapter_module._PROMPT_FIELD not in interview.agent.traits
+        for interview in fake_edsl.jobs[0].interviews
     )
-    assert fake_edsl.agents[0].traits == {"persona": "persona-a"}
-    assert fake_edsl.agents[0].kwargs == {}
-    assert fake_edsl.agents[1].traits is None
+    assert [
+        interview.agent.traits["persona"]
+        for interview in fake_edsl.jobs[0].interviews
+    ] == ["persona-a", "persona-c"]
+    assert fake_edsl.agents[0].kwargs == {"instruction": "instruction-a"}
+    assert fake_edsl.agents[1].kwargs == {"instruction": "instruction-a"}
+    assert "persona" not in fake_edsl.agents[2].traits
     assert fake_edsl.models[0].model_name == "first-model"
     assert fake_edsl.models[0].service_name == "provider-1"
     assert fake_edsl.models[0].parameters == {"temperature": 0.2}
     assert fake_edsl.questions[0].question_name == "response"
-    assert fake_edsl.questions[0].question_text == "{{ prompt }}"
+    assert (
+        fake_edsl.questions[0].question_text
+        == "{{ llm_auditkit_prompt }}"
+    )
     assert fake_edsl.events == [
         ("run", "first-model", {"print_exceptions": False}),
         ("run", "second-model", {"print_exceptions": False}),
@@ -347,6 +575,8 @@ def test_job_construction_uses_standard_edsl_agent_model_and_scenarios(
     ]
     assert results[0].metadata == requests[0].metadata
     assert results[0].metadata is not requests[0].metadata
+    assert results[0].rendered_prompt is not None
+    assert results[0].rendered_prompt.user_prompt == "EDSL user:First prompt"
 
 
 def test_async_execution_uses_only_sequential_run_async_calls(
@@ -504,7 +734,7 @@ def test_successful_response_ignores_a_prior_task_history_exception(
     assert result.error is None
 
 
-def test_none_and_empty_system_prompts_create_distinct_standard_agents(
+def test_none_and_empty_system_prompts_preserve_edsl_instruction_behavior(
     fake_edsl: FakeEDSLRuntime,
 ) -> None:
     requests = [
@@ -514,9 +744,14 @@ def test_none_and_empty_system_prompts_create_distinct_standard_agents(
 
     EDSLAdapter().execute_batch(requests, _models())
 
-    assert len(fake_edsl.jobs) == 2
-    assert fake_edsl.agents[0].traits is None
-    assert fake_edsl.agents[1].traits == {"persona": ""}
+    assert len(fake_edsl.jobs) == 1
+    assert fake_edsl.agents[0].traits[adapter_module._PAIRING_FIELD] == 0
+    assert fake_edsl.agents[0].kwargs == {}
+    assert fake_edsl.agents[1].traits[adapter_module._PAIRING_FIELD] == 1
+    assert fake_edsl.agents[1].kwargs == {"instruction": ""}
+    assert all(
+        agent.traits_presentation_template == "" for agent in fake_edsl.agents
+    )
 
 
 def test_non_string_edsl_response_is_a_systemic_failure(
@@ -526,6 +761,247 @@ def test_non_string_edsl_response_is_a_systemic_failure(
     fake_edsl.responses[request.request_id] = {"unexpected": "object"}
 
     with pytest.raises(InferenceBatchError, match="non-string"):
+        EDSLAdapter().execute_batch([request], _models())
+
+
+def test_dictionary_response_and_openai_logprobs_are_normalized(
+    fake_edsl: FakeEDSLRuntime,
+) -> None:
+    request = InferenceRequest(
+        request_id="structured-1",
+        prompt="Choose applicants.",
+        model_config_id="model-1",
+        system_prompt="evaluate applicants",
+        persona="hiring manager",
+        response_format=DictResponseFormat(
+            fields=[
+                ResponseField("Applicant 1", "string", "Yes or No"),
+                ResponseField("Applicant 2", "string", "Yes or No"),
+            ],
+            include_comment=True,
+        ),
+    )
+    fake_edsl.responses[request.request_id] = {
+        "Applicant 1": "Yes",
+        "Applicant 2": "No",
+    }
+    fake_edsl.generated_content[request.request_id] = (
+        '{"Applicant 1": "Yes", "Applicant 2": "No"}'
+    )
+    fake_edsl.comments[request.request_id] = "Applicant 1 is stronger."
+    fake_edsl.raw_model_responses[request.request_id] = {
+        "choices": [
+            {
+                "logprobs": {
+                    "content": [
+                        {"token": "Yes", "logprob": -0.1},
+                        {"token": "No", "logprob": -0.2},
+                    ]
+                }
+            }
+        ]
+    }
+
+    result = EDSLAdapter().execute_batch([request], _models())[0]
+
+    question = fake_edsl.questions[0]
+    assert question.answer_keys == ["Applicant 1", "Applicant 2"]
+    assert question.value_types == ["str", "str"]
+    assert question.value_descriptions == ["Yes or No", "Yes or No"]
+    assert question.include_comment is True
+    assert result.content == '{"Applicant 1": "Yes", "Applicant 2": "No"}'
+    assert result.structured_content == {
+        "Applicant 1": "Yes",
+        "Applicant 2": "No",
+    }
+    assert result.comment == "Applicant 1 is stronger."
+    assert result.token_logprobs == [
+        TokenLogprob("Yes", -0.1),
+        TokenLogprob("No", -0.2),
+    ]
+    assert result.rendered_prompt is not None
+    assert result.rendered_prompt.system_prompt == (
+        "EDSL system:instruction:evaluate applicants|persona:hiring manager"
+    )
+
+
+def test_dictionary_response_is_recovered_from_complete_generated_content(
+    fake_edsl: FakeEDSLRuntime,
+) -> None:
+    request = InferenceRequest(
+        request_id="structured-recovery",
+        prompt="Choose applicants.",
+        model_config_id="model-1",
+        response_format=DictResponseFormat(
+            fields=[
+                ResponseField("Applicant 1", "string", "Yes or No"),
+                ResponseField("Applicant 2", "string", "Yes or No"),
+            ],
+            include_comment=True,
+        ),
+    )
+    fake_edsl.responses[request.request_id] = None
+    fake_edsl.generated_content[request.request_id] = """```json
+{
+  "Applicant 2": "No",
+  "Applicant 1": "Yes because the note contains {relevant experience}"
+}
+```
+Applicant 1 is stronger overall."""
+    fake_edsl.comments[request.request_id] = "The response was not valid."
+    fake_edsl.exceptions[request.request_id] = ValueError(
+        "EDSL split the dictionary at its first newline"
+    )
+
+    result = EDSLAdapter().execute_batch([request], _models())[0]
+
+    assert result.error is None
+    assert result.content == fake_edsl.generated_content[request.request_id]
+    assert result.structured_content == {
+        "Applicant 1": "Yes because the note contains {relevant experience}",
+        "Applicant 2": "No",
+    }
+    assert result.comment == "Applicant 1 is stronger overall."
+
+
+def test_dictionary_recovery_rejects_content_that_does_not_match_schema(
+    fake_edsl: FakeEDSLRuntime,
+) -> None:
+    request = InferenceRequest(
+        request_id="structured-recovery-invalid",
+        prompt="Choose applicants.",
+        model_config_id="model-1",
+        response_format=DictResponseFormat(
+            fields=[
+                ResponseField("Applicant 1", "string", "Yes or No"),
+                ResponseField("Applicant 2", "string", "Yes or No"),
+            ]
+        ),
+    )
+    fake_edsl.responses[request.request_id] = None
+    fake_edsl.generated_content[request.request_id] = (
+        '{"Applicant 1": "Yes", "unexpected": "No"}'
+    )
+    fake_edsl.exceptions[request.request_id] = ValueError("EDSL validation failed")
+
+    result = EDSLAdapter().execute_batch([request], _models())[0]
+
+    assert result.content is None
+    assert result.structured_content is None
+    assert result.comment is None
+    assert result.error is not None
+    assert result.error.type == "ValueError"
+    assert result.error.message == "EDSL validation failed"
+
+
+def test_dictionary_recovery_rejects_conflicting_schema_matching_answers(
+    fake_edsl: FakeEDSLRuntime,
+) -> None:
+    request = InferenceRequest(
+        request_id="structured-recovery-conflict",
+        prompt="Choose applicants.",
+        model_config_id="model-1",
+        response_format=DictResponseFormat(
+            fields=[
+                ResponseField("Applicant 1", "string", "Yes or No"),
+                ResponseField("Applicant 2", "string", "Yes or No"),
+            ]
+        ),
+    )
+    fake_edsl.responses[request.request_id] = None
+    fake_edsl.generated_content[request.request_id] = (
+        '{"Applicant 1":"Yes","Applicant 2":"No"}\n'
+        'Correction: {"Applicant 1":"No","Applicant 2":"Yes"}'
+    )
+    fake_edsl.exceptions[request.request_id] = ValueError("ambiguous response")
+
+    result = EDSLAdapter().execute_batch([request], _models())[0]
+
+    assert result.content is None
+    assert result.structured_content is None
+    assert result.error is not None
+    assert result.error.message == "ambiguous response"
+
+
+def test_dictionary_response_value_types_are_mapped_to_edsl(
+    fake_edsl: FakeEDSLRuntime,
+) -> None:
+    request = InferenceRequest(
+        request_id="structured-types",
+        prompt="Return typed values.",
+        model_config_id="model-1",
+        response_format=DictResponseFormat(
+            fields=[
+                ResponseField("text", "string", "Text"),
+                ResponseField("count", "integer", "Count"),
+                ResponseField("score", "number", "Score"),
+                ResponseField("selected", "boolean", "Selected"),
+            ]
+        ),
+    )
+
+    EDSLAdapter().render_batch([request], _models())
+
+    assert fake_edsl.questions[0].value_types == ["str", "int", "float", "bool"]
+
+
+def test_dictionary_response_can_omit_edsl_type_hints(
+    fake_edsl: FakeEDSLRuntime,
+) -> None:
+    request = InferenceRequest(
+        request_id="structured-without-type-hints",
+        prompt="Return a decision.",
+        model_config_id="model-1",
+        response_format=DictResponseFormat(
+            fields=[ResponseField("decision", "string", "Yes or No")],
+            include_type_hints=False,
+        ),
+    )
+
+    EDSLAdapter().render_batch([request], _models())
+
+    assert fake_edsl.questions[0].value_types is None
+
+
+def test_parallel_token_logprobs_are_normalized(
+    fake_edsl: FakeEDSLRuntime,
+) -> None:
+    request = _requests()[0]
+    fake_edsl.raw_model_responses[request.request_id] = {
+        "choices": [
+            {
+                "logprobs": {
+                    "tokens": [" answer", " Yes"],
+                    "token_logprobs": [-0.4, -0.05],
+                }
+            }
+        ]
+    }
+
+    result = EDSLAdapter().execute_batch([request], _models())[0]
+
+    assert result.token_logprobs == [
+        TokenLogprob(" answer", -0.4),
+        TokenLogprob(" Yes", -0.05),
+    ]
+
+
+def test_malformed_parallel_token_logprobs_are_a_systemic_failure(
+    fake_edsl: FakeEDSLRuntime,
+) -> None:
+    request = _requests()[0]
+    fake_edsl.raw_model_responses[request.request_id] = {
+        "choices": [
+            {
+                "logprobs": {
+                    "tokens": ["Yes", "No"],
+                    "token_logprobs": [-0.1],
+                }
+            }
+        ]
+    }
+
+    with pytest.raises(InferenceBatchError, match="cardinality"):
         EDSLAdapter().execute_batch([request], _models())
 
 

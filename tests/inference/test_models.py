@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from llm_auditkit.inference import (
+    DictResponseFormat,
     InferenceBatchPreview,
     InferenceBatchResult,
     InferenceConfig,
@@ -11,6 +12,8 @@ from llm_auditkit.inference import (
     InferenceResult,
     ModelConfig,
     RenderedPrompt,
+    ResponseField,
+    TokenLogprob,
 )
 
 
@@ -58,6 +61,10 @@ def test_generic_models_represent_preview_and_terminal_outcomes() -> None:
         model_config_id="model-1",
         content="response",
         metadata={"row_id": "row-1"},
+        structured_content={"decision": "Yes"},
+        comment="Strong match",
+        token_logprobs=[TokenLogprob(token="Yes", logprob=-0.1)],
+        rendered_prompt=rendered,
     )
     failure = InferenceResult(
         request_id="request-2",
@@ -76,3 +83,35 @@ def test_generic_models_represent_preview_and_terminal_outcomes() -> None:
     assert config.models == [model]
     assert preview.prompts == [rendered]
     assert batch.results == [success, failure]
+
+
+def test_dictionary_response_models_preserve_ordered_fields() -> None:
+    response_format = DictResponseFormat(
+        fields=[
+            ResponseField(
+                name="Applicant 1",
+                value_type="string",
+                description="Yes or No",
+            ),
+            ResponseField(
+                name="Applicant 2",
+                value_type="string",
+                description="Yes or No",
+            ),
+        ],
+        include_comment=True,
+        include_type_hints=False,
+    )
+    request = InferenceRequest(
+        request_id="request-1",
+        prompt="Choose applicants.",
+        model_config_id="model-1",
+        response_format=response_format,
+    )
+
+    assert request.response_format is not None
+    assert [field.name for field in request.response_format.fields] == [
+        "Applicant 1",
+        "Applicant 2",
+    ]
+    assert request.response_format.include_type_hints is False

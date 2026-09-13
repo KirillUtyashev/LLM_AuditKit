@@ -1,8 +1,9 @@
 # Using Shared Inference
 
-This guide shows how to send prompts through LLM AuditKit's implemented shared
-inference package. The dataset, template, experiment, and regression pipeline stages
-are not implemented yet; today, users construct generic inference requests directly.
+This guide shows how to send prompts through LLM AuditKit's shared inference package.
+Use it when constructing generic inference requests directly. The implemented
+experiment execution stage provides a higher-level YAML-configured DataFrame workflow
+on top of this API.
 
 For internal contracts and design rationale, see the
 [shared inference component documentation](../components/inference.md).
@@ -101,8 +102,8 @@ provider calls.
 
 ## Build Requests
 
-Each request contains one user prompt, an optional system prompt, a target model
-configuration ID, and caller-owned metadata:
+Each request contains one user prompt, an optional system instruction, an optional
+persona, a target model configuration ID, and caller-owned metadata:
 
 ```python
 from llm_auditkit.inference import InferenceRequest
@@ -111,7 +112,8 @@ requests = [
     InferenceRequest(
         request_id="candidate-001:openai-screening-v1",
         prompt="Evaluate this synthetic candidate profile.",
-        system_prompt="You are a hiring manager.",
+        system_prompt="Evaluate the candidate using the supplied evidence.",
+        persona="You are a hiring manager.",
         model_config_id="openai-screening-v1",
         metadata={"candidate_id": "candidate-001"},
     )
@@ -122,8 +124,10 @@ Use durable request IDs derived from domain identifiers. Do not use a DataFrame 
 number, list position, or random value if results will later be resumed. Request IDs
 must be unique within a run.
 
-Requests can use different models and system prompts. LLM AuditKit groups compatible
-requests for EDSL without changing their input or output order.
+`system_prompt` maps to EDSL's agent instruction, while `persona` maps to its standard
+`persona` trait. EDSL combines them into the effective rendered system prompt. Requests
+can use different models, instructions, and personas; the adapter represents each
+request as one agent inside a compatible EDSL job and preserves input and output order.
 
 ## Use Metadata to Handle Results
 
@@ -152,7 +156,7 @@ for batch in inference.run_batches(requests, config):
 
 For direct shared-inference use, choose the metadata fields that make downstream
 processing convenient and keep their values serialization-friendly. Domain pipeline
-stages such as experiment execution will define a consistent metadata schema rather
+stages such as experiment execution define a consistent metadata schema rather
 than asking users to assemble it manually. `request_id` remains the authoritative
 request identity; metadata is convenience context and should not replace it.
 

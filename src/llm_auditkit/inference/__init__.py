@@ -10,6 +10,7 @@ from .exceptions import (
 )
 from .edsl_adapter import EDSLAdapter
 from .models import (
+    DictResponseFormat,
     InferenceBatchPreview,
     InferenceBatchResult,
     InferenceConfig,
@@ -20,10 +21,14 @@ from .models import (
     JSONValue,
     ModelConfig,
     RenderedPrompt,
+    ResponseField,
+    ResponseValueType,
+    TokenLogprob,
 )
 from .orchestrator import InferenceOrchestrator
 
 __all__ = [
+    "DictResponseFormat",
     "EDSLAdapter",
     "InferenceAdapter",
     "InferenceBatchError",
@@ -42,4 +47,7 @@ __all__ = [
     "JSONValue",
     "ModelConfig",
     "RenderedPrompt",
+    "ResponseField",
+    "ResponseValueType",
+    "TokenLogprob",
 ]

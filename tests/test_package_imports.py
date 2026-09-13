@@ -11,6 +11,7 @@ PACKAGE_MODULES = (
     "llm_auditkit",
     "llm_auditkit.config",
     "llm_auditkit.data",
+    "llm_auditkit.experiments",
     "llm_auditkit.inference",
     "llm_auditkit.results",
     "llm_auditkit.scenarios",

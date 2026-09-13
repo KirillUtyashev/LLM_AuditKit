@@ -3,16 +3,39 @@ config:
   theme: mc
 ---
 classDiagram
-    class ExperimentConfig {
+    class ExperimentRunConfig {
+        <<YAML-backed>>
         +dataset_path: Path
+        +output_path: Path
+        +mode: sync | async
+        +experiment_config: ExperimentConfig
+    }
+    class ExperimentConfig {
+        +experiment_id: str
+        +dataset_schema: ExperimentDatasetSchema
+        +prompt_template: str
         +personas: List~Persona~
         +inference: InferenceConfig
-        +save_after_each_result: bool
+        +save_after_each_batch: bool
+    }
+    class ExperimentDatasetSchema {
+        +job_posting_column: str
+        +resume_columns: List~str~
+        +context_columns: Dict~str, str~
     }
     class Persona {
         +id: str
         +name: str
-        +description: str
+        +trait_template: str
+        +instruction: str
+    }
+    class PersonaTraitRenderer {
+        <<internal>>
+        +render(row: Mapping, schema: ExperimentDatasetSchema, persona: Persona) str
+    }
+    class QuestionPromptRenderer {
+        <<internal>>
+        +render(row: Mapping, schema: ExperimentDatasetSchema, template: str) str
     }
     class InferenceConfig {
         <<shared inference>>
@@ -34,9 +57,33 @@ classDiagram
         <<shared inference>>
     }
     class ExperimentJobKey {
+        +experiment_id: str
         +scenario_id: str
         +persona_id: str
         +model_config_id: str
+    }
+    class ScenarioIdentity {
+        <<internal>>
+        +derive(source_row: Mapping) str
+    }
+    class ExperimentOutcome {
+        +picks: List~int~
+        +logprobs: List~float~
+        +generated_response: str
+        +comment: Optional~str~
+    }
+    class ExperimentOutputRecord {
+        +key: ExperimentJobKey
+        +request_id: str
+        +persona_name: str
+        +model: str
+        +provider: str
+        +persona_instruction: str
+        +user_prompt: Optional~str~
+        +system_prompt: Optional~str~
+        +outcome: Optional~ExperimentOutcome~
+        +error_type: Optional~str~
+        +error_message: Optional~str~
     }
     class ExperimentRunner {
         -inference_orchestrator: InferenceOrchestrator
@@ -44,29 +91,47 @@ classDiagram
         +preview(dataset: DataFrame, config: ExperimentConfig, batch_number: int) InferenceBatchPreview
         +run(dataset: DataFrame, config: ExperimentConfig) DataFrame
         +run_async(dataset: DataFrame, config: ExperimentConfig) DataFrame
-        -build_requests(dataset: DataFrame, config: ExperimentConfig) List~InferenceRequest~
+        -prepare_run(dataset: DataFrame, config: ExperimentConfig) Tuple
+        -process_batch(output_dataset: DataFrame, dataset: DataFrame, config: ExperimentConfig, batch: InferenceBatchResult) DataFrame
     }
     class ExperimentResultStore {
         -output_path: Path
-        +initialize(dataset: DataFrame) DataFrame
-        +save_result(output_dataset: DataFrame, key: ExperimentJobKey, result: InferenceResult) void
-        +save_error(output_dataset: DataFrame, key: ExperimentJobKey, error: str) void
-        +is_complete(output_dataset: DataFrame, key: ExperimentJobKey) bool
+        +initialize(dataset: DataFrame, config: ExperimentConfig) DataFrame
+        +apply_batch(output_dataset: DataFrame, dataset: DataFrame, config: ExperimentConfig, records: List~ExperimentOutputRecord~) DataFrame
+        +save(output_dataset: DataFrame) void
+        +save_batch(output_dataset: DataFrame, dataset: DataFrame, config: ExperimentConfig, records: List~ExperimentOutputRecord~) DataFrame
+        +completed_keys(output_dataset: DataFrame, dataset: DataFrame, config: ExperimentConfig) Set~ExperimentJobKey~
+        +is_complete(output_dataset: DataFrame, key: ExperimentJobKey, config: ExperimentConfig) bool
     }
     class DataFrame {
         <<pandas>>
     }
+    class ExperimentCommand {
+        +main(config_path: Path) int
+    }
+    ExperimentRunConfig --> ExperimentConfig
+    ExperimentCommand --> ExperimentRunConfig : loads YAML
+    ExperimentCommand --> DataFrame : loads CSV once
+    ExperimentCommand --> ExperimentRunner : selects sync or async
+    ExperimentCommand --> ExperimentResultStore : supplies output path
     ExperimentConfig --> Persona
+    ExperimentConfig --> ExperimentDatasetSchema
     ExperimentConfig --> InferenceConfig
     ExperimentRunner --> ExperimentConfig
+    ExperimentRunner --> ScenarioIdentity : derives or preserves
     ExperimentRunner --> ExperimentJobKey : derives request identity
+    ExperimentRunner --> QuestionPromptRenderer : renders each scenario
+    ExperimentRunner --> PersonaTraitRenderer : renders each scenario
     ExperimentRunner --> InferenceRequest : builds pending requests
     ExperimentRunner --> InferenceBatchPreview : previews
     ExperimentRunner --> InferenceOrchestrator : consumes batches
     InferenceOrchestrator --> InferenceBatchResult : yields sequentially
     InferenceBatchResult --> InferenceResult
-    ExperimentRunner --> ExperimentResultStore : checkpoints results
+    ExperimentRunner --> ExperimentOutcome : parses
+    ExperimentRunner --> ExperimentOutputRecord : builds
+    ExperimentRunner --> ExperimentResultStore : checkpoints completed batches
     ExperimentRunner --> DataFrame : processes
+    ExperimentResultStore --> ScenarioIdentity : validates checkpoints against
     ExperimentResultStore --> ExperimentJobKey : indexes by
-    ExperimentResultStore --> InferenceResult : stores
+    ExperimentResultStore --> ExperimentOutputRecord : stores
     ExperimentResultStore --> DataFrame : updates and persists

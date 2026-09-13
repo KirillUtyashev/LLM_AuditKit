@@ -1,0 +1,15 @@
+Job posting:
+{job_posting}
+
+Context:
+city: {city}
+
+Here are 2 additional applicant materials received this week:
+
+Applicant 1:
+{resume_1}
+
+Applicant 2:
+{resume_2}
+
+Based on the job posting, context, and information available in the applicant materials, select each applicant whom you would like to invite for an interview, if any. There is no need to select any applicant if none should be interviewed. Interviews are costly, so consider each selection carefully.
