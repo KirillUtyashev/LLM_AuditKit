@@ -1,8 +1,9 @@
 # Regression Analysis Integration Handoff
 
-This handoff records what regression-analysis subissue #24 verified and what
-must be rechecked when experiment execution (#13) and repository CI (#5) are
-implemented. The detailed, authoritative schemas remain in the
+This handoff records what regression-analysis subissue #24 verified, what must
+be reconciled against the implemented experiment-execution stage (#13), and
+what repository CI (#5) must eventually run. The detailed, authoritative
+schemas remain in the
 [regression-analysis component contract](../components/regression_analysis.md).
 
 ## Verified Public Workflow
@@ -184,26 +185,34 @@ fit; its estimates are not research evidence.
 
 ## Later Integration Touchpoints
 
-### Experiment execution (#13)
+### Experiment-execution boundary (#13 and follow-up integration)
 
-The public workflow verifies the downstream consumer, not the unfinished
-production writer. Issue #13 must:
+Issue #13 is implemented, but its checkpoint writer and the regression
+preparer currently expose different contracts. The writer can aggregate
+personas and model configurations; emits `pick1` through `pickN`, `logprob1`
+through `logprobN`, and error fields; and does not persist `result_status`,
+`candidate_count`, durable candidate identities, or the preparer's dynamic
+candidate-family names. Its `experiment_id` identifies the logical experiment
+definition; whether that is also sufficient run-level audit provenance remains
+unresolved.
 
-- emit the exact envelope, status, dynamic candidate-family, ranking, and
-  emitted-answer probability semantics described above;
-- preserve durable scenario and candidate IDs and detect duplicate job keys
-  across shards;
-- either emit audit-partitioned CSVs or provide an explicit validated adapter
-  for aggregate multi-persona/model output;
-- preserve a distinguishable run/batch identity or partition guarantee, which
-  is not currently part of `ExperimentJobKey`;
+A follow-up integration change must:
+
+- define an explicit, validated mapping between the implemented checkpoint and
+  the preparation input rather than relying on an ad hoc transform;
+- validate researcher-created single-audit inputs without adding automatic
+  persona/model selectors, and define unsuccessful-row status semantics;
+- preserve durable scenario and candidate identities, candidate-to-slot
+  mapping, candidate count, ranking fields, and distinguishable run provenance;
+- map only researcher-supplied substantive covariates, without inferring race,
+  experience, or interaction definitions from resume text or position;
 - prove that shared scenarios and candidate assignments align across audits;
   and
-- rerun the public boundary tests with finalized writer output.
+- rerun the public boundary tests with the resulting production interface.
 
 The temporary private-sample adapter is not the production adapter decision.
-`audit_id` remains researcher-assigned and must not be inferred by #13 or by
-preparation.
+`audit_id` remains researcher-assigned and must not be inferred by experiment
+execution or by preparation.
 
 ### Repository CI (#5)
 
@@ -220,8 +229,9 @@ checks.
 
 ## Remaining Limitations
 
-- Production experiment-output compatibility remains unverified until #13 is
-  implemented.
+- Production experiment-output compatibility remains unverified until the
+  explicit mapping between the implemented writer and preparer is implemented
+  and tested.
 - No global registry prevents reuse of one `audit_id` for different
   persona/model/run combinations.
 - The current raw schema cannot itself prove run/batch identity.

@@ -4,19 +4,74 @@ LLM AuditKit audits large language model behavior in hiring experiments. The
 main pipeline is a Python package, while statistical analysis is implemented
 as reproducible R entry points alongside it.
 
-The project is under active development. Most Python components remain
-architecture-first; the regression stage currently includes its locked R
-environment, a complete YAML-driven raw-to-regression-ready preparation
-runner, and a separate fixed-effects estimation runner that writes plot-ready
-numerical results. The estimator also returns the same tidy results as an R
-object for interactive analysis. An independent paper-style renderer recreates
-figures from in-memory result tables or saved CSVs without rerunning a
-regression. A public two-audit walkthrough verifies those three entry points
-together from raw CSV shards through a combined coefficient figure.
+The shared inference package is implemented with validated deterministic batching,
+synchronous and asynchronous execution, prompt preview, normalized outcomes, and an
+Expected Parrot EDSL adapter. Experiment execution currently includes its configuration,
+DataFrame schema validation, deterministic job/request planning and preview, normalized
+outcome parsing, synchronous and asynchronous execution, and atomic CSV
+checkpoint/resume storage. User-facing experiment runs are defined in strict YAML and
+launched through one command. The other domain pipeline stages remain documented for
+incremental implementation.
+
+## Quickstart
+
+The current user-facing functionality includes shared inference and experiment
+execution. The following commands install the package from this repository and make
+one real OpenAI request:
+
+```bash
+python -m venv .venv
+source .venv/bin/activate
+python -m pip install -e .
+cp -n .env.example .env
+```
+
+Add your key to `.env`:
+
+```dotenv
+OPENAI_API_KEY=your-key-here
+```
+
+Then run the synchronous example:
+
+```bash
+python examples/shared_inference_sync.py
+```
+
+The example previews the EDSL-rendered prompt, executes it with `gpt-4.1-nano`, and
+prints the normalized result. It makes a paid provider call. An asynchronous example
+is also available:
+
+```bash
+python examples/shared_inference_async.py
+```
+
+Read [Using Shared Inference](docs/guides/shared_inference.md) for configuration,
+request identity, prompt preview, batching, sync and async execution, results,
+failures, and checkpoint integration.
+
+For the higher-level YAML workflow, read
+[Running Hiring Experiments](docs/guides/experiment_execution.md). The guide covers
+dataset and output paths, schema mapping, explicit question and persona templates,
+stable IDs, log probabilities, prompt preview, synchronous and asynchronous execution,
+atomic CSV checkpoints, and resume behavior. A runnable paid OpenAI configuration is available at
+[`synthetic_experiment.yaml`](configs/experiments/synthetic_experiment.yaml).
+
+The R regression stage independently includes a locked environment, separate
+preparation and fixed-effects estimation runners, tidy result export, and
+in-memory or PNG rendering. A public two-audit synthetic walkthrough verifies
+those R entry points together. The implemented experiment-execution CSV and the
+current regression-preparation schema are not yet directly compatible; their
+mapping and validation of researcher-created audit partitions remain explicit
+follow-up integration work.
 
 ## Documentation
 
-See the [package architecture](docs/architecture.md) for the planned hiring pipeline, shared inference layer, and detailed component documentation.
+The [package architecture](docs/architecture.md) describes the planned hiring pipeline.
+The [shared inference component contract](docs/components/inference.md) documents its
+detailed behavior and boundaries. The
+[experiment execution component contract](docs/components/experiment_execution.md)
+documents the implemented hiring-experiment stage.
 
 Contributors should also follow the [engineering workflow](docs/development_workflow.md) for issues, branches, pull requests, and review.
 
@@ -26,30 +81,12 @@ The [regression integration handoff](docs/integration/regression_analysis.md)
 records the verified public workflow, the private legacy-sample compatibility
 smoke test, and the remaining experiment-writer and CI touchpoints.
 
-## Getting Started
+To consult the optional pinned implementation used for the earlier paper, run
+`python scripts/sync_reference_repo.py`. It requires authorized GitHub SSH
+access and checks the code out under the ignored `.references/` directory.
+Read the [paper reference guide](docs/paper_reference.md) before using it.
 
-1. Create and activate a virtual environment. For example, using Python's built-in `venv` on macOS or Linux:
-
-   ```bash
-   python -m venv .venv
-   source .venv/bin/activate
-   ```
-
-2. Install the package in editable mode from the repository root:
-
-   ```bash
-   python -m pip install -e .
-   ```
-
-3. Sync the pinned, code-only implementation used for the earlier paper:
-
-   ```bash
-   python scripts/sync_reference_repo.py
-   ```
-
-   This private reference requires GitHub SSH access and is checked out under the ignored `.references/` directory. Read the [paper reference guide](docs/paper_reference.md) before using it.
-
-4. Read the [package architecture](docs/architecture.md), [engineering workflow](docs/development_workflow.md), and `AGENTS.md` before beginning development.
+## Regression analysis
 
 For regression-analysis development, restore the repository-local R
 environment and run its tests from the repository root:
@@ -78,11 +115,15 @@ four city-year estimates per audit, and one two-panel PNG. It is a mechanical
 example, not a research result. See the [regression examples](examples/regression/README.md)
 for the inspection checks and expected artifacts.
 
-Prepare raw experiment CSVs with:
+Prepare CSVs that satisfy the current regression-preparation schema with:
 
 ```bash
 Rscript scripts/prepare_regression_data.R --config path/to/preparation.yaml
 ```
+
+The implemented experiment checkpoint cannot yet be passed directly to this
+command; the explicit production mapping and validation work is documented in
+the regression integration handoff.
 
 The researcher assigns one stable `audit_id` in each preparation config. The
 software never generates or infers it from filenames, model metadata, or other
@@ -107,9 +148,9 @@ explanatory variable receives its own estimate, standard error, p-value, and
 
 The regression YAML contract and tidy result schema are documented in the
 [regression analysis guide](docs/components/regression_analysis.md#2-fixed-effects-estimation).
-The completed [regression integration handoff](docs/integration/regression_analysis.md)
-records the walkthrough evidence and the upstream revalidation checklist to
-repeat after experiment execution finalizes its raw CSV schema.
+The [regression integration handoff](docs/integration/regression_analysis.md)
+records the walkthrough evidence and the assumptions that must now be revised
+and revalidated against the implemented experiment writer.
 
 For an interactive estimate-and-plot workflow, start R from the repository and
 load the public R interface once:

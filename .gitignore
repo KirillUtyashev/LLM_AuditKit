@@ -15,6 +15,11 @@ venv/
 env/
 ENV/
 
+# Local credentials
+.env
+.env.*
+!.env.example
+
 # Test and coverage artifacts
 .pytest_cache/
 .coverage
@@ -38,3 +43,6 @@ htmlcov/
 
 # Generated research datasets, regression results, and figures
 /outputs/
+
+# Generated example outputs
+/examples/output/

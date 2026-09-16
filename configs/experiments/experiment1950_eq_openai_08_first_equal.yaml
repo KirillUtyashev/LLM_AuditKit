@@ -1,0 +1,41 @@
+experiment_id: equal-experiment-1950-openai-08-first-equal-gpt4o-2024-08-06-v1
+
+dataset:
+  path: ../../examples/experiment_execution/data/equal_experiment_1950_openai_08_first_equal.csv
+  job_posting_column: job_posting
+  resume_columns:
+    - resume_1
+    - resume_2
+    - resume_3
+    - resume_4
+  context_columns:
+    city: city
+    year: year
+    month: month
+    day: day
+
+prompt:
+  template_path: ../../examples/experiment_execution/prompts/1950_first_person_question.txt
+
+output:
+  path: ../../examples/output/experiment1950_eq_openai_08_first_equal_auditkit_results.csv
+
+execution:
+  mode: async
+  batch_size: 5
+  save_after_each_batch: true
+
+personas:
+  - id: hiring-manager-application-review-v1
+    name: Hiring manager
+    trait_template_path: ../../examples/experiment_execution/prompts/historical_hiring_manager_trait.txt
+    instruction_path: ../../examples/experiment_execution/prompts/application_review_instruction.txt
+
+inference:
+  models:
+    - config_id: openai-gpt-4o-2024-08-06-v1
+      provider: openai
+      model: gpt-4o-2024-08-06
+      parameters:
+        temperature: 0
+        logprobs: true

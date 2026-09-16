@@ -5,15 +5,13 @@ This file contains repository-wide guidance for human contributors and coding ag
 ## Project Status and Scope
 
 LLM AuditKit audits LLM behavior in hiring experiments through a Python
-pipeline and an accompanying R regression stage. The repository remains
-architecture-first overall: the Python package is largely a scaffold, while
-the regression stage has a locked R environment plus a complete
-raw-to-regression-ready preparation runner and a separate fixed-effects
-estimation runner that returns plot-ready numerical results and can write them
-as CSV. The independent paper-style renderer reads those results and atomically
-writes a PNG; the same plot builder also accepts tidy results in an interactive
-R session. A checked-in two-audit workflow verifies the public raw-preparation,
-grouped-estimation, and multi-panel-rendering boundary end to end.
+pipeline and an accompanying R regression stage. Shared inference and
+experiment execution are implemented in Python. The regression stage has a
+locked R environment, separate preparation and fixed-effects estimation
+runners, tidy numerical result export, and independent in-memory or PNG
+rendering. Its synthetic workflow is complete, but its preparation input does
+not yet consume the implemented experiment-execution CSV directly. That boundary
+must be reconciled explicitly before the stages are described as integrated.
 
 - Do not assume documented components are already implemented.
 - Do not add functionality, dependencies, interfaces, or placeholder modules outside the scope of the current task.
@@ -44,13 +42,22 @@ When an architectural contract represented in a Mermaid diagram changes, update 
 - The hiring workflow has five pipeline stages: dataset loading, template generation, template population, experiment execution, and regression analysis.
 - Template generation and experiment execution must use the shared inference layer in `src/llm_auditkit/inference/`.
 - Keep Expected Parrot EDSL-specific types and behavior behind the inference adapter. Domain packages must use generic inference requests, results, and configuration rather than importing EDSL concepts directly.
-- The shared inference layer owns model configuration, concurrency, retries, execution, and normalized outcomes. Calling stages own domain prompts, response parsing, checkpoint policy, and output storage.
+- Dataset loading is the single path-to-DataFrame boundary. Downstream Python stages accept and return `pandas.DataFrame` objects rather than loading input paths from stage configuration.
+- The shared inference layer owns generic model and response-format configuration, deterministic request batching, EDSL execution, and normalized outcomes, including structured content and token log probabilities when requested. It delegates parallel interview execution, provider rate limiting, caching, and retries within each batch to EDSL rather than implementing a second worker pool or retry loop. Calling stages own domain prompts, response parsing, checkpoint policy, and output storage.
+- Shared inference batch size is measured in logical inference requests, not DataFrame rows. Batches are submitted sequentially so calling stages can validate and checkpoint one completed batch before another spends tokens.
+- Shared inference must provide behaviorally equivalent synchronous and asynchronous batch APIs backed by EDSL's matching synchronous and asynchronous execution methods. Do not implement the synchronous API by driving an event loop or the asynchronous API by hiding blocking execution in a worker thread.
 - Template counts are configurable as `N`; do not hard-code four resumes or templates.
-- Resume and completion behavior must use stable scenario, persona, model-configuration, job, and candidate/resume identifiers. Never use a DataFrame row index or candidate position as durable identity.
-- Keep `save_after_each_result` stage-specific and configurable. Incremental file writes must use an atomic replacement strategy.
+- Experiment resume and completion behavior must use stable experiment,
+  scenario, persona, model-configuration, request, and job identifiers.
+  Regression preparation additionally requires stable candidate/resume
+  identity. Never use a DataFrame row index, EDSL-generated position, or
+  candidate position as durable identity.
+- Keep checkpoint policies stage-specific and configurable. Template generation uses `save_after_each_result`; experiment execution uses `save_after_each_batch` and writes at most once per completed logical batch. Incremental file writes must use an atomic replacement strategy.
 - The Python-to-R boundary uses raw experiment CSVs. Separate YAML-configured `Rscript` entry points prepare a regression-ready CSV, estimate one inspected dataset into plot-ready numerical results, and render figures independently from those results. Within R, estimation returns the same tidy table that the CLI can persist as CSV; plotting accepts that object, a list of compatible result tables, or equivalent result CSV paths.
+- The implemented experiment writer and current regression preparation loader use different CSV schemas. Do not claim direct compatibility or hide an ad hoc transformation; the mapping, candidate identity, and unsuccessful-job policies remain explicit integration work.
+- Researchers define substantive numeric indicators and interaction terms outside the package. Preparation may validate and map configured source fields, but it must not infer domain-specific race, experience, or interaction definitions.
 - Plot configuration must explicitly select both `outcome_variable` (the dependent variable) and `term` (the coefficient shown), unless a complete outcome-by-panel map replaces the scalar outcome. Estimation groups create separate fits; covariance clusters only control inference within each fit.
-- Preparation stamps one researcher-assigned stable `audit_id` onto every regression-ready row; never generate or infer it from paths or other metadata. One audit is one `model_config_id` (LLM product/version and parameters) × one `persona_id` × one distinguishable execution run or batch; city/year files may be shards of that audit. Current preparation inputs must already be partitioned to that scope because there is no row selector. The verified public walkthrough uses audit-partitioned inputs; experiment issue #13 must retain that writer behavior or provide a validated partition adapter with explicit run/batch provenance. `dataset_id` identifies an inspected analysis slice and `model_id` identifies a regression specification. Rendering preserves `(audit_id, dataset_id, model_id)` source provenance, while the configured `panel_variable` alone chooses panels; each panel contains one source triple, and selections must not silently remove a source or panel value. Audit comparisons must use the same right-hand-side formula, fixed effects, clustering, covariance type, estimation grouping, and inference contract; only an explicit outcome-by-panel map may vary the dependent variable.
+- Preparation stamps one researcher-assigned stable `audit_id` onto every regression-ready row; never generate or infer it from paths or model metadata. Researchers must supply input already scoped to one model configuration, one persona, and one distinguishable run or batch. Preparation validates singleton persona/model scope; researchers remain responsible for run/batch scope because the current input lacks that identity. Do not add automatic persona/model partitioning or selectors. `dataset_id` identifies an inspected analysis slice and `model_id` identifies a regression specification. Rendering preserves `(audit_id, dataset_id, model_id)` source provenance, while the configured `panel_variable` alone chooses panels. Audit comparisons must use the same right-hand-side formula, fixed effects, clustering, covariance type, estimation grouping, and inference contract; only an explicit outcome-by-panel map may vary the dependent variable.
 
 ## Repository Layout
 
@@ -217,6 +224,8 @@ Flag changes that:
 - use row positions as persistent identifiers;
 - hard-code template cardinality;
 - make checkpointing unconditional or perform non-atomic incremental writes;
+- add a caller-side request worker pool or retry loop around EDSL-managed batch execution;
+- make synchronous and asynchronous inference paths differ in validation, batching, result normalization, failure semantics, or checkpoint boundaries;
 - change architecture represented in Mermaid without updating both its prose and diagram;
 - introduce live network calls into unit tests;
 - commit secrets, private data, or generated result artifacts other than explicitly reviewed synthetic test fixtures.

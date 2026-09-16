@@ -197,9 +197,9 @@ The software can enforce the persona and model-configuration parts only within
 each preparation or estimation input. No global registry prevents two separate
 artifacts from reusing an `audit_id`, and the current raw schema has no
 run/batch identifier from which to verify that part automatically. Researchers
-must therefore maintain that mapping outside the CSVs until the experiment
+must therefore maintain that mapping outside the CSVs until the cross-stage
 handoff is finalized. The integration handoff records this limitation and the
-production revalidation owned by experiment execution.
+follow-up integration revalidation.
 
 The #21 function `prepare_regression_data()` performs those candidate-level
 transformations in memory from the configured CSV paths.
@@ -221,9 +221,12 @@ Every row from every configured input path is in audit scope. Preparation has
 no persona/model row selector, so an aggregate experiment CSV containing
 several personas or model configurations cannot be passed unchanged to
 separate preparation calls. The verified public workflow starts with
-audit-partitioned shards. Experiment issue #13 must retain that writer boundary
-or provide an explicit validated splitter/adapter with run/batch provenance
-before production integration.
+audit-partitioned shards. The implemented experiment writer instead permits an
+aggregate multi-persona/model checkpoint and uses a different candidate-field
+schema. A follow-up integration change must provide an explicit validated
+mapping and validate the researcher-provided audit scope and run/batch
+provenance before production use. It must not partition personas or models
+automatically.
 
 Across all configured experiment-result rows, `load_experiment_results()`
 requires exactly one nonempty `persona_id` and exactly one nonempty
@@ -884,7 +887,7 @@ compatibility smoke test, and records the integration handoff without adding a
 production legacy adapter.
 Existing Python checks continue to run with `python -m pytest`.
 
-## Verified Multi-Audit Walkthrough and Upstream Revalidation
+## Verified Multi-Audit Walkthrough and Boundary Revalidation
 
 Subissue #24 verifies the multi-audit mechanics with public synthetic data: raw
 experiment CSVs go through separate audit preparation calls, an explicit
@@ -893,19 +896,22 @@ sources, explicit audit panels, and a final figure. The
 [integration handoff](../integration/regression_analysis.md) records the exact
 evidence, private compatibility smoke, upstream assumptions, and regression
 files, contracts, and tests that may need revisiting. This does not replace a
-production-data rerun after experiment execution is implemented.
+production-data rerun after the explicit writer-to-preparer mapping is
+implemented.
 
-When the experiment-execution issue finalizes its raw writer, repeat this
-revalidation checklist before declaring cross-issue integration complete:
+When the explicit production mapping from the implemented experiment writer to
+the regression preparer is added, repeat this revalidation checklist before
+declaring cross-issue integration complete:
 
-1. Compare the finalized headers, status values, candidate-family naming, and
-   probability semantics with the raw experiment CSV contract above.
+1. Compare the implemented headers, error representation, candidate-family
+   naming, and probability semantics with the raw experiment CSV contract
+   above.
 2. Confirm stable job and candidate identities, duplicate detection across
    shards, and the mapping of one model configuration, one persona, and one
    distinguishable run/batch to each researcher-assigned `audit_id`.
-3. Decide and test whether the experiment writer emits audit-partitioned raw
-   CSVs or a validated handoff adapter splits aggregate multi-persona/model
-   output; preserve an explicit run/batch identity or partition guarantee.
+3. Validate and reject mixed researcher-created inputs. Do not add automatic
+   persona/model partitioning or selectors; preserve an explicit run/batch
+   identity or researcher-maintained partition guarantee.
 4. Verify that city/year shards for one audit combine without changing ranking
    groups, while another persona, model configuration, or distinguishable rerun
    is prepared under another audit ID.
@@ -919,10 +925,9 @@ revalidation checklist before declaring cross-issue integration complete:
    panel value survive term, confidence-level, and any explicit
    outcome-by-panel selection, then render the combined audit panels under one
    globally comparable specification.
-8. Update the selected experiment-writer or handoff-adapter boundary, fixtures,
-   contracts, and integration handoff together if the finalized upstream format
-   differs. Prefer regenerating prepared and result artifacts over manually
-   migrating them.
+8. Update the explicit writer-to-preparer mapping, fixtures, contracts, and
+   integration handoff together if either interface changes. Prefer
+   regenerating prepared and result artifacts over manually migrating them.
 
 ## Artifact Example
 
