@@ -306,22 +306,89 @@ PREPARATION_OUTPUT_CORE_COLUMNS <- c(
 
 .preparation_status_report <- function(raw) {
   statuses <- sort(unique(raw$result_status), method = "radix")
-  counts <- vapply(
+  job_counts <- vapply(
     statuses,
     function(status) sum(raw$result_status == status),
     integer(1)
   )
-  names(counts) <- statuses
-  completed_jobs <- unname(counts["completed"])
+  names(job_counts) <- statuses
+  candidate_counts <- as.integer(raw$candidate_count)
+  candidate_observation_counts <- vapply(
+    statuses,
+    function(status) {
+      as.integer(sum(candidate_counts[raw$result_status == status]))
+    },
+    integer(1)
+  )
+  names(candidate_observation_counts) <- statuses
+
+  completed_jobs <- unname(job_counts["completed"])
   if (length(completed_jobs) == 0L || is.na(completed_jobs)) {
     completed_jobs <- 0L
   }
-  excluded <- counts[names(counts) != "completed"]
+  excluded_jobs <- job_counts[names(job_counts) != "completed"]
+  excluded_candidate_observations <- candidate_observation_counts[
+    names(candidate_observation_counts) != "completed"
+  ]
   list(
     total_jobs = nrow(raw),
     completed_jobs = as.integer(completed_jobs),
-    excluded_jobs = as.integer(sum(excluded)),
-    excluded_by_status = excluded
+    excluded_jobs = as.integer(sum(excluded_jobs)),
+    excluded_candidate_observations = as.integer(
+      sum(excluded_candidate_observations)
+    ),
+    excluded_by_status = excluded_jobs,
+    excluded_candidate_observations_by_status =
+      excluded_candidate_observations
+  )
+}
+
+.preparation_exclusion_summary <- function(report) {
+  excluded_detail <- if (length(report$excluded_by_status) == 0L) {
+    "none"
+  } else {
+    paste(
+      sprintf(
+        "%s=%d job(s)/%d candidate observation(s)",
+        names(report$excluded_by_status),
+        report$excluded_by_status,
+        report$excluded_candidate_observations_by_status
+      ),
+      collapse = ", "
+    )
+  }
+  sprintf(
+    paste0(
+      "excluded %d non-completed input job(s), representing %d candidate ",
+      "observation(s) (%s)"
+    ),
+    report$excluded_jobs,
+    report$excluded_candidate_observations,
+    excluded_detail
+  )
+}
+
+.preparation_report_message <- function(report, candidate_rows, audit_id) {
+  exclusion_policy <- if (report$excluded_jobs == 0L) {
+    ""
+  } else {
+    paste0(
+      " Excluded jobs contribute no candidate observations to the ",
+      "regression-ready dataset."
+    )
+  }
+  paste0(
+    sprintf(
+      paste0(
+        "Prepared %d candidate row(s) for researcher-assigned audit_id %s ",
+        "from %d completed input job(s); %s."
+      ),
+      candidate_rows,
+      encodeString(audit_id, quote = "'"),
+      report$completed_jobs,
+      .preparation_exclusion_summary(report)
+    ),
+    exclusion_policy
   )
 }
 
@@ -515,7 +582,10 @@ PREPARATION_OUTPUT_CORE_COLUMNS <- c(
   output
 }
 
-prepare_regression_data <- function(config) {
+.preparation_prepare_regression_data <- function(
+  config,
+  warn_on_exclusions
+) {
   config <- .experiment_results_as_config(config)
   frames <- .experiment_results_load_frames(config)
   for (frame in frames) {
@@ -533,8 +603,8 @@ prepare_regression_data <- function(config) {
   if (report$completed_jobs == 0L) {
     stop(
       sprintf(
-        "No completed experiment jobs remain; excluded %d non-completed job(s).",
-        report$excluded_jobs
+        "No completed experiment jobs remain; %s.",
+        .preparation_exclusion_summary(report)
       ),
       call. = FALSE
     )
@@ -544,5 +614,19 @@ prepare_regression_data <- function(config) {
   completed <- long[completed, , drop = FALSE]
   completed <- .preparation_validate_completed_values(completed)
   completed <- .preparation_construct_outcomes(completed, config)
-  .preparation_finalize_output(completed, config, report)
+  output <- .preparation_finalize_output(completed, config, report)
+  if (isTRUE(warn_on_exclusions) && report$excluded_jobs > 0L) {
+    warning(
+      .preparation_report_message(report, nrow(output), config$audit_id),
+      call. = FALSE
+    )
+  }
+  output
+}
+
+prepare_regression_data <- function(config) {
+  .preparation_prepare_regression_data(
+    config,
+    warn_on_exclusions = TRUE
+  )
 }

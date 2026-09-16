@@ -70,7 +70,7 @@ and the preparation consumer requires these columns:
 | `scenario_id` | string | Stable scenario/job-posting identity. |
 | `persona_id` | string | Stable persona identity. |
 | `model_config_id` | string | Stable provider/model/parameter identity. |
-| `result_status` | string | `completed` for rows eligible for preparation; other terminal or incomplete states are reported and excluded. |
+| `result_status` | string | `completed` for rows eligible for preparation; every other status is excluded with a warning that counts input jobs and their candidate observations by status. |
 | `candidate_count` | integer | Positive `N` for this scenario. |
 | `city` | string | Default top-share ranking field. |
 | `year` | integer | Default top-share ranking field. |
@@ -202,11 +202,13 @@ handoff is finalized. The integration handoff records this limitation and the
 follow-up integration revalidation.
 
 The #21 function `prepare_regression_data()` performs those candidate-level
-transformations in memory from the configured CSV paths.
-`run_regression_preparation()` additionally echoes the researcher-assigned
-`audit_id`, reports completed and excluded job counts, and atomically writes
-the configured regression-ready CSV. Neither function accepts an in-session
-data frame as a substitute for the canonical CSV boundary.
+transformations in memory from the configured CSV paths. Both the in-memory
+function and `run_regression_preparation()` issue one warning when input jobs
+are excluded, reporting the number of input jobs and corresponding candidate
+observations by `result_status`. The runner additionally echoes the
+researcher-assigned `audit_id` and atomically writes the configured
+regression-ready CSV. Neither function accepts an in-session data frame as a
+substitute for the canonical CSV boundary.
 
 Configured inputs are combined deterministically. `source_file` stores the
 lexically normalized path string from `input_paths`, using `/` separators and
@@ -215,7 +217,11 @@ compatible candidate families. Every prepared row is stamped with the scalar
 `audit_id`; multiple input paths in one preparation config are therefore
 treated as shards of one audit, not as separate audits. Separate audits use
 separate preparation calls. Rows whose `result_status` is not `completed`
-are excluded with a reported count; zero remaining rows is an error.
+contribute no candidate observations to the regression-ready dataset. Their
+input-job and candidate-observation counts remain available in the attached
+`preparation_report`; zero remaining completed jobs is an error. This
+job-status exclusion occurs during preparation and is distinct from the later
+estimator's complete-case removals recorded in `n_missing_dropped`.
 
 Every row from every configured input path is in audit scope. Preparation has
 no persona/model row selector, so an aggregate experiment CSV containing
@@ -223,10 +229,10 @@ several personas or model configurations cannot be passed unchanged to
 separate preparation calls. The verified public workflow starts with
 audit-partitioned shards. The implemented experiment writer instead permits an
 aggregate multi-persona/model checkpoint and uses a different candidate-field
-schema. A follow-up integration change must provide an explicit validated
-mapping and validate the researcher-provided audit scope and run/batch
-provenance before production use. It must not partition personas or models
-automatically.
+schema. A follow-up integration pass must reconcile the boundary through a
+validated production interface and validate the researcher-provided audit
+scope and run/batch provenance before production use. It must not partition
+personas or models automatically.
 
 Across all configured experiment-result rows, `load_experiment_results()`
 requires exactly one nonempty `persona_id` and exactly one nonempty

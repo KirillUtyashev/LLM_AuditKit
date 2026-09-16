@@ -67,6 +67,10 @@ use separate preparation calls.
 candidate, `pick` is binary and `log_probability` is the natural-log
 probability of the emitted binary answer: `log(P(Yes))` for a positive pick and
 `log(P(No))` for a negative pick. A positive pick must have a probability.
+Every non-`completed` input job contributes zero candidate observations to the
+regression-ready dataset. Preparation emits one warning that reports excluded
+input-job and corresponding candidate-observation counts by status; it errors
+when no completed jobs remain.
 
 ### Preparation assumptions
 
@@ -231,9 +235,13 @@ Researchers remain responsible for splitting aggregate outputs into
 single-audit inputs and for creating substantive numerical predictors,
 indicators, and interactions. The writer currently retains failed jobs as
 identity/error rows with empty result fields, while preparation currently
-excludes rows whose mapped `result_status` is not `completed`. Recording that
-existing behavior does not establish a new rejection rule, exclusion option,
-or unsuccessful-row policy; any policy change requires a separate decision.
+excludes rows whose mapped `result_status` is not `completed`. The selected R
+preparation policy is that those input jobs contribute no candidate
+observations to the regression-ready dataset, with one warning that reports
+input-job and candidate-observation counts by status. This decision does not
+resolve how Python writer error fields will be translated into the R status
+contract; that cross-stage translation remains part of the holistic
+integration pass.
 
 ### Repository CI (#5)
 

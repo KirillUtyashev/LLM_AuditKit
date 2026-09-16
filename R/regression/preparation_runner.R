@@ -84,38 +84,23 @@
   invisible(output_path)
 }
 
-.preparation_report_message <- function(report, candidate_rows, audit_id) {
-  excluded_detail <- if (length(report$excluded_by_status) == 0L) {
-    "none"
-  } else {
-    paste(
-      sprintf(
-        "%s=%d",
-        names(report$excluded_by_status),
-        report$excluded_by_status
-      ),
-      collapse = ", "
-    )
-  }
-  sprintf(
-    paste0(
-      "Prepared %d candidate row(s) for researcher-assigned audit_id %s ",
-      "from %d completed job(s); ",
-      "excluded %d non-completed job(s) (%s)."
-    ),
-    candidate_rows,
-    encodeString(audit_id, quote = "'"),
-    report$completed_jobs,
-    report$excluded_jobs,
-    excluded_detail
-  )
-}
-
 run_regression_preparation <- function(config) {
   config <- .experiment_results_as_config(config)
-  prepared <- prepare_regression_data(config)
+  prepared <- .preparation_prepare_regression_data(
+    config,
+    warn_on_exclusions = FALSE
+  )
   report <- attr(prepared, "preparation_report", exact = TRUE)
   .preparation_write_csv_atomic(prepared, config$resolved_output_path)
-  message(.preparation_report_message(report, nrow(prepared), config$audit_id))
+  report_message <- .preparation_report_message(
+    report,
+    nrow(prepared),
+    config$audit_id
+  )
+  if (report$excluded_jobs > 0L) {
+    warning(report_message, call. = FALSE)
+  } else {
+    message(report_message)
+  }
   invisible(prepared)
 }

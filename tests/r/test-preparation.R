@@ -81,9 +81,34 @@ mutated_multi_config <- function(
   )
 }
 
+prepare_with_expected_exclusion_warning <- function(config) {
+  testthat::expect_warning(
+    prepare_regression_data(config),
+    paste0(
+      "excluded [1-9][0-9]* non-completed input job.*",
+      "Excluded jobs contribute no candidate observations"
+    )
+  )
+}
+
 testthat::test_that("preparation reshapes dynamic N and applies exact defaults", {
-  data <- prepare_regression_data(
-    regression_fixture("preparation_multi.yaml")
+  warning_messages <- character()
+  data <- withCallingHandlers(
+    prepare_regression_data(regression_fixture("preparation_multi.yaml")),
+    warning = function(warning) {
+      warning_messages <<- c(warning_messages, conditionMessage(warning))
+      invokeRestart("muffleWarning")
+    }
+  )
+  testthat::expect_length(warning_messages, 1L)
+  testthat::expect_match(
+    warning_messages[[1L]],
+    paste0(
+      "excluded 1 non-completed input job.*",
+      "representing 2 candidate observation.*",
+      "failed=1 job.*2 candidate observation.*",
+      "contribute no candidate observations"
+    )
   )
 
   testthat::expect_equal(nrow(data), 22L)
@@ -155,7 +180,109 @@ testthat::test_that("preparation reshapes dynamic N and applies exact defaults",
   testthat::expect_identical(report$total_jobs, 7L)
   testthat::expect_identical(report$completed_jobs, 6L)
   testthat::expect_identical(report$excluded_jobs, 1L)
+  testthat::expect_identical(report$excluded_candidate_observations, 2L)
   testthat::expect_identical(report$excluded_by_status, c(failed = 1L))
+  testthat::expect_identical(
+    report$excluded_candidate_observations_by_status,
+    c(failed = 2L)
+  )
+})
+
+testthat::test_that("preparation reports multiple exclusion reasons and counts", {
+  config <- mutated_multi_config(
+    mutate_second = function(data) {
+      data$result_status[data$scenario_id == "job-006"] <- "cancelled"
+      data
+    }
+  )
+  warning_messages <- character()
+  prepared <- withCallingHandlers(
+    prepare_regression_data(config),
+    warning = function(warning) {
+      warning_messages <<- c(warning_messages, conditionMessage(warning))
+      invokeRestart("muffleWarning")
+    }
+  )
+
+  testthat::expect_length(warning_messages, 1L)
+  testthat::expect_match(
+    warning_messages[[1L]],
+    paste0(
+      "excluded 2 non-completed input job.*",
+      "representing 3 candidate observation.*",
+      "cancelled=1 job.*1 candidate observation.*",
+      "failed=1 job.*2 candidate observation"
+    )
+  )
+  testthat::expect_equal(nrow(prepared), 21L)
+  testthat::expect_false(any(
+    prepared$scenario_id %in% c("job-005", "job-006")
+  ))
+  report <- attr(prepared, "preparation_report", exact = TRUE)
+  testthat::expect_identical(report$excluded_jobs, 2L)
+  testthat::expect_identical(report$excluded_candidate_observations, 3L)
+  testthat::expect_identical(
+    report$excluded_by_status,
+    c(cancelled = 1L, failed = 1L)
+  )
+  testthat::expect_identical(
+    report$excluded_candidate_observations_by_status,
+    c(cancelled = 1L, failed = 2L)
+  )
+})
+
+testthat::test_that("all-success preparation emits no warning", {
+  output <- file.path(tempfile("all-success-output-"), "ready.csv")
+  config <- mutated_multi_config(
+    mutate_second = function(data) {
+      row <- data$scenario_id == "job-005"
+      data$result_status[row] <- "completed"
+      data$candidate_1_pick[row] <- "1"
+      data$candidate_1_log_probability[row] <- "-0.01"
+      data$candidate_2_pick[row] <- "0"
+      data$candidate_2_log_probability[row] <- "-0.02"
+      data
+    },
+    output = output
+  )
+
+  testthat::expect_warning(
+    prepared <- prepare_regression_data(config),
+    NA
+  )
+  testthat::expect_equal(nrow(prepared), 24L)
+  report <- attr(prepared, "preparation_report", exact = TRUE)
+  testthat::expect_identical(report$excluded_jobs, 0L)
+  testthat::expect_identical(report$excluded_candidate_observations, 0L)
+  testthat::expect_length(report$excluded_by_status, 0L)
+  testthat::expect_length(
+    report$excluded_candidate_observations_by_status,
+    0L
+  )
+
+  warning_messages <- character()
+  message_messages <- character()
+  withCallingHandlers(
+    run_regression_preparation(config),
+    warning = function(warning) {
+      warning_messages <<- c(warning_messages, conditionMessage(warning))
+      invokeRestart("muffleWarning")
+    },
+    message = function(message) {
+      message_messages <<- c(message_messages, conditionMessage(message))
+      invokeRestart("muffleMessage")
+    }
+  )
+  testthat::expect_length(warning_messages, 0L)
+  testthat::expect_length(message_messages, 1L)
+  testthat::expect_match(
+    message_messages[[1L]],
+    paste0(
+      "Prepared 24 candidate row.*",
+      "excluded 0 non-completed input job.*",
+      "representing 0 candidate observation"
+    )
+  )
 })
 
 testthat::test_that("preparation rejects raw rows outside the configured audit", {
@@ -185,7 +312,7 @@ testthat::test_that("preparation honors ranking and threshold overrides", {
     )
   )
 
-  data <- prepare_regression_data(config)
+  data <- prepare_with_expected_exclusion_warning(config)
   keys <- preparation_candidate_key(data)
 
   testthat::expect_equal(sum(data$pick_top), 6L)
@@ -222,7 +349,9 @@ testthat::test_that("preparation honors ranking and threshold overrides", {
       "  - candidate_count"
     )
   )
-  candidate_count_data <- prepare_regression_data(candidate_count_config)
+  candidate_count_data <- prepare_with_expected_exclusion_warning(
+    candidate_count_config
+  )
   testthat::expect_equal(sum(candidate_count_data$pick_top), 4L)
   testthat::expect_true(
     all(
@@ -292,8 +421,8 @@ testthat::test_that("preparation is invariant to file and source-row order", {
     reverse_files = TRUE
   )
 
-  normal <- prepare_regression_data(normal_config)
-  shuffled <- prepare_regression_data(shuffled_config)
+  normal <- prepare_with_expected_exclusion_warning(normal_config)
+  shuffled <- prepare_with_expected_exclusion_warning(shuffled_config)
 
   testthat::expect_identical(shuffled, normal)
 })
@@ -307,7 +436,7 @@ testthat::test_that("preparation normalizes signed integer year text", {
     }
   )
 
-  prepared <- prepare_regression_data(equivalent_years)
+  prepared <- prepare_with_expected_exclusion_warning(equivalent_years)
 
   testthat::expect_true(all(prepared$year == as.integer(prepared$year)))
   testthat::expect_true(all(
@@ -479,7 +608,7 @@ testthat::test_that("preparation validates completed picks and probabilities", {
     }
   )
   testthat::expect_equal(
-    nrow(prepare_regression_data(ignored_failed_values)),
+    nrow(prepare_with_expected_exclusion_warning(ignored_failed_values)),
     22L
   )
 })
@@ -515,7 +644,12 @@ testthat::test_that("preparation errors when no completed jobs remain", {
   )
   testthat::expect_error(
     prepare_regression_data(no_completed),
-    "No completed experiment jobs remain; excluded 7"
+    paste0(
+      "No completed experiment jobs remain; excluded 7.*",
+      "representing 24 candidate observation.*",
+      "cancelled=4 job.*16 candidate observation.*",
+      "failed=3 job.*8 candidate observation"
+    )
   )
 })
 
@@ -523,21 +657,41 @@ testthat::test_that("runner writes repeatable CSV and preserves output on failur
   output <- file.path(tempfile("prepared-output-"), "nested", "ready.csv")
   config <- mutated_multi_config(output = output)
 
-  testthat::expect_message(
+  warning_messages <- character()
+  prepared <- withCallingHandlers(
     run_regression_preparation(config),
+    warning = function(warning) {
+      warning_messages <<- c(warning_messages, conditionMessage(warning))
+      invokeRestart("muffleWarning")
+    }
+  )
+  testthat::expect_equal(nrow(prepared), 22L)
+  testthat::expect_length(warning_messages, 1L)
+  testthat::expect_match(
+    warning_messages[[1L]],
     paste0(
       "Prepared 22 candidate row.*researcher-assigned audit_id ",
-      "'multi_fixture_audit'.*6 completed job.*",
-      "excluded 1 non-completed job.*failed=1"
+      "'multi_fixture_audit'.*6 completed input job.*",
+      "excluded 1 non-completed input job.*",
+      "representing 2 candidate observation.*",
+      "failed=1 job.*2 candidate observation"
     )
   )
   testthat::expect_true(file.exists(output))
   first_bytes <- readBin(output, "raw", n = file.info(output)$size)
 
-  testthat::expect_message(
+  repeated_warnings <- character()
+  withCallingHandlers(
     run_regression_preparation(config),
-    "Prepared 22 candidate row"
+    warning = function(warning) {
+      repeated_warnings <<- c(
+        repeated_warnings,
+        conditionMessage(warning)
+      )
+      invokeRestart("muffleWarning")
+    }
   )
+  testthat::expect_length(repeated_warnings, 1L)
   second_bytes <- readBin(output, "raw", n = file.info(output)$size)
   testthat::expect_identical(second_bytes, first_bytes)
 
@@ -551,6 +705,26 @@ testthat::test_that("runner writes repeatable CSV and preserves output on failur
   testthat::expect_error(
     run_regression_preparation(invalid_config),
     "Raw-positive candidate 'cand-003-01' is missing"
+  )
+  testthat::expect_identical(
+    readBin(output, "raw", n = file.info(output)$size),
+    first_bytes
+  )
+
+  no_completed <- mutated_multi_config(
+    mutate_first = function(data) {
+      data$result_status <- "failed"
+      data
+    },
+    mutate_second = function(data) {
+      data$result_status <- "cancelled"
+      data
+    },
+    output = output
+  )
+  testthat::expect_error(
+    run_regression_preparation(no_completed),
+    "No completed experiment jobs remain"
   )
   testthat::expect_identical(
     readBin(output, "raw", n = file.info(output)$size),
@@ -598,6 +772,18 @@ testthat::test_that("preparation CLI accepts exactly --config path", {
   testthat::expect_identical(success_status, 0L)
   testthat::expect_true(file.exists(output))
   testthat::expect_match(paste(success, collapse = "\n"), "Prepared 22")
+  testthat::expect_match(
+    paste(success, collapse = "\n"),
+    paste0(
+      "excluded 1 non-completed input job.*",
+      "representing 2 candidate observation.*",
+      "failed=1 job.*2 candidate observation"
+    )
+  )
+  testthat::expect_identical(
+    sum(grepl("Warning message:", success, fixed = TRUE)),
+    1L
+  )
   testthat::expect_match(
     paste(success, collapse = "\n"),
     "researcher-assigned audit_id 'multi_fixture_audit'",

@@ -161,9 +161,17 @@ testthat::test_that(
       )
       testthat::expect_match(
         diagnostic,
-        "from 16 completed job(s); excluded 0 non-completed job(s)",
+        paste0(
+          "from 16 completed input job(s); excluded 0 non-completed ",
+          "input job(s), representing 0 candidate observation(s) (none)"
+        ),
         fixed = TRUE
       )
+      testthat::expect_false(grepl(
+        "Warning message:",
+        diagnostic,
+        fixed = TRUE
+      ))
     }
 
     prepared <- lapply(
