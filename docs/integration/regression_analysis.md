@@ -185,7 +185,7 @@ fit; its estimates are not research evidence.
 
 ## Later Integration Touchpoints
 
-### Experiment-execution boundary (#13 and follow-up integration)
+### Experiment-execution boundary (#13 and holistic integration pass)
 
 Issue #13 is implemented, but its checkpoint writer and the regression
 preparer currently expose different contracts. The writer can aggregate
@@ -196,16 +196,29 @@ candidate-family names. Its `experiment_id` identifies the logical experiment
 definition; whether that is also sufficient run-level audit provenance remains
 unresolved.
 
-A follow-up integration change must:
+Even successful native Python checkpoint rows are not accepted directly by the
+current R preparation command. The R preparation stage is implemented and
+tested against its own documented schema; its public end-to-end test begins
+with audit-partitioned fixtures in that schema rather than output produced by
+the Python writer. This is a known temporary cross-component integration gap.
 
-- define an explicit, validated mapping between the implemented checkpoint and
-  the preparation input rather than relying on an ad hoc transform;
+After all baseline pipeline components are implemented, this boundary will be
+reconciled during the repository-wide holistic integration pass. The solution
+design remains open; this handoff does not prescribe a writer change, adapter,
+or other mechanism. This scheduling note records the regression workstream's
+scope decision, does not represent collaborator or reviewer approval, and does
+not resolve any open pull-request review concern. That integration pass must:
+
+- reconcile the writer and preparation schemas, including candidate identity
+  and slot mapping, candidate count, ranking fields, run provenance, and
+  translation of writer error rows into the preparation status contract;
+- exercise an actual native-writer-to-preparer cross-stage path, in addition to
+  the existing R-schema fixture tests;
 - validate researcher-created single-audit inputs without adding automatic
-  persona/model selectors, and define unsuccessful-row status semantics;
-- preserve durable scenario and candidate identities, candidate-to-slot
-  mapping, candidate count, ranking fields, and distinguishable run provenance;
-- map only researcher-supplied substantive covariates, without inferring race,
-  experience, or interaction definitions from resume text or position;
+  audit, persona, or model partitioning or selectors;
+- preserve researcher-supplied numerical predictors, indicators, and
+  interactions without inferring substantive variables from resume text or
+  candidate position;
 - prove that shared scenarios and candidate assignments align across audits;
   and
 - rerun the public boundary tests with the resulting production interface.
@@ -213,6 +226,14 @@ A follow-up integration change must:
 The temporary private-sample adapter is not the production adapter decision.
 `audit_id` remains researcher-assigned and must not be inferred by experiment
 execution or by preparation.
+
+Researchers remain responsible for splitting aggregate outputs into
+single-audit inputs and for creating substantive numerical predictors,
+indicators, and interactions. The writer currently retains failed jobs as
+identity/error rows with empty result fields, while preparation currently
+excludes rows whose mapped `result_status` is not `completed`. Recording that
+existing behavior does not establish a new rejection rule, exclusion option,
+or unsuccessful-row policy; any policy change requires a separate decision.
 
 ### Repository CI (#5)
 
@@ -229,9 +250,10 @@ checks.
 
 ## Remaining Limitations
 
-- Production experiment-output compatibility remains unverified until the
-  explicit mapping between the implemented writer and preparer is implemented
-  and tested.
+- Direct native-writer-to-preparer compatibility is deferred until the
+  holistic integration pass after all baseline pipeline components are
+  implemented; that pass must reconcile the boundary and include an actual
+  cross-stage check.
 - No global registry prevents reuse of one `audit_id` for different
   persona/model/run combinations.
 - The current raw schema cannot itself prove run/batch identity.

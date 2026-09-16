@@ -149,8 +149,9 @@ explanatory variable receives its own estimate, standard error, p-value, and
 The regression YAML contract and tidy result schema are documented in the
 [regression analysis guide](docs/components/regression_analysis.md#2-fixed-effects-estimation).
 The [regression integration handoff](docs/integration/regression_analysis.md)
-records the walkthrough evidence and the assumptions that must now be revised
-and revalidated against the implemented experiment writer.
+records the walkthrough evidence and the assumptions that will be reconciled
+and revalidated against the implemented experiment writer during the holistic
+integration pass after all baseline pipeline components are implemented.
 
 For an interactive estimate-and-plot workflow, start R from the repository and
 load the public R interface once:
