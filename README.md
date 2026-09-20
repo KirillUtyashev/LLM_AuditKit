@@ -4,18 +4,17 @@ LLM AuditKit is a Python package for auditing large language model behavior in h
 
 The shared inference package is implemented with validated deterministic batching,
 synchronous and asynchronous execution, prompt preview, normalized outcomes, and an
-Expected Parrot EDSL adapter. Experiment execution currently includes its configuration,
-DataFrame schema validation, deterministic job/request planning and preview, normalized
-outcome parsing, synchronous and asynchronous execution, and atomic CSV
-checkpoint/resume storage. User-facing experiment runs are defined in strict YAML and
-launched through one command. The other domain pipeline stages remain documented for
-incremental implementation.
+Expected Parrot EDSL adapter. Template generation and experiment execution use that
+layer for deterministic planning, preview, normalized parsing, synchronous and
+asynchronous execution, and atomic CSV checkpoint/resume storage. User-facing
+experiment runs are defined in strict YAML and launched through one command. The
+remaining domain pipeline stages are documented for incremental implementation.
 
 ## Quickstart
 
-The current user-facing functionality includes shared inference and experiment
-execution. The following commands install the package from this repository and make
-one real OpenAI request:
+The current user-facing functionality includes shared inference, template generation,
+and experiment execution. The following commands install the package from this
+repository and make one real OpenAI request:
 
 ```bash
 python -m venv .venv
@@ -48,6 +47,10 @@ Read [Using Shared Inference](docs/guides/shared_inference.md) for configuration
 request identity, prompt preview, batching, sync and async execution, results,
 failures, and checkpoint integration.
 
+Read [Generating Resume Templates](docs/guides/template_generation.md) for the
+DataFrame schema, prompt and placeholder contracts, configurable template counts,
+preview, sync and async generation, checkpoints, and resume behavior.
+
 For the higher-level YAML workflow, read
 [Running Hiring Experiments](docs/guides/experiment_execution.md). The guide covers
 dataset and output paths, schema mapping, explicit question and persona templates,
@@ -62,6 +65,8 @@ The [shared inference component contract](docs/components/inference.md) document
 detailed behavior and boundaries. The
 [experiment execution component contract](docs/components/experiment_execution.md)
 documents the implemented hiring-experiment stage.
+The [template generation component contract](docs/components/template_generation.md)
+documents the implemented resume-template stage.
 
 Contributors should follow the
 [engineering workflow](docs/development_workflow.md). The optional private
