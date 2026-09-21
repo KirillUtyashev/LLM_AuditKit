@@ -1,0 +1,11 @@
+# Public synthetic audit A; paths resolve relative to this YAML file.
+input_paths:
+  - ../../../tests/r/fixtures/regression/end_to_end/audit_a_montreal.csv
+  - ../../../tests/r/fixtures/regression/end_to_end/audit_a_toronto.csv
+output_path: ../../../outputs/regression/end_to_end/audit_a/regression_ready.csv
+audit_id: synthetic_historian_model_a_run_001
+top_share: 0.08
+probability_threshold: 0.99
+ranking_group_variables: [city, year]
+scenario_covariates: []
+candidate_covariates: [black, high]

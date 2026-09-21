@@ -4,7 +4,14 @@ This file contains repository-wide guidance for human contributors and coding ag
 
 ## Project Status and Scope
 
-LLM AuditKit is a Python package for auditing LLM behavior in hiring experiments. The repository is currently architecture-first: its documentation describes planned behavior, while the Python package remains a scaffold unless a task explicitly requests implementation.
+LLM AuditKit audits LLM behavior in hiring experiments through a Python
+pipeline and an accompanying R regression stage. Shared inference and
+experiment execution are implemented in Python. The regression stage has a
+locked R environment, separate preparation and fixed-effects estimation
+runners, tidy numerical result export, and independent in-memory or PNG
+rendering. Its synthetic workflow is complete, but its preparation input does
+not yet consume the implemented experiment-execution CSV directly. That boundary
+must be reconciled explicitly before the stages are described as integrated.
 
 - Do not assume documented components are already implemented.
 - Do not add functionality, dependencies, interfaces, or placeholder modules outside the scope of the current task.
@@ -25,6 +32,8 @@ Follow [`docs/development_workflow.md`](docs/development_workflow.md) for issue 
 Read [`docs/paper_reference.md`](docs/paper_reference.md) before consulting the earlier paper implementation.
 
 Matching Mermaid diagrams live in `docs/architecture/`.
+Cross-issue regression assumptions and revalidation ownership are recorded in
+[`docs/integration/regression_analysis.md`](docs/integration/regression_analysis.md).
 
 When an architectural contract represented in a Mermaid diagram changes, update the relevant Markdown page and diagram in the same change. Keep the README summary and package metadata consistent with the detailed documentation.
 
@@ -38,20 +47,30 @@ When an architectural contract represented in a Mermaid diagram changes, update 
 - Shared inference batch size is measured in logical inference requests, not DataFrame rows. Batches are submitted sequentially so calling stages can validate and checkpoint one completed batch before another spends tokens.
 - Shared inference must provide behaviorally equivalent synchronous and asynchronous batch APIs backed by EDSL's matching synchronous and asynchronous execution methods. Do not implement the synchronous API by driving an event loop or the asynchronous API by hiding blocking execution in a worker thread.
 - Template counts are configurable as `N`; do not hard-code four resumes or templates.
-- Experiment resume and completion behavior must use stable experiment, scenario, persona, model-configuration, request, and job identifiers. Never use a DataFrame row index or EDSL-generated position as durable identity.
-- Keep checkpoint policies stage-specific and configurable. Template generation uses
-  `save_after_each_result`; experiment execution uses `save_after_each_batch` and
-  writes at most once per completed logical batch. Incremental file writes must use an
-  atomic replacement strategy.
-- The Python-to-R boundary uses CSV experiment outputs and YAML regression configuration. R analysis is invoked through an `Rscript` command-line entry point.
+- Experiment resume and completion behavior must use stable experiment,
+  scenario, persona, model-configuration, request, and job identifiers.
+  Regression preparation additionally requires stable candidate/resume
+  identity. Never use a DataFrame row index, EDSL-generated position, or
+  candidate position as durable identity.
+- Keep checkpoint policies stage-specific and configurable. Template generation uses `save_after_each_result`; experiment execution uses `save_after_each_batch` and writes at most once per completed logical batch. Incremental file writes must use an atomic replacement strategy.
+- The Python-to-R boundary uses raw experiment CSVs. Separate YAML-configured `Rscript` entry points prepare a regression-ready CSV, estimate one inspected dataset into plot-ready numerical results, and render figures independently from those results. Within R, estimation returns the same tidy table that the CLI can persist as CSV; plotting accepts that object, a list of compatible result tables, or equivalent result CSV paths.
+- The implemented experiment writer and current regression preparation loader use different CSV schemas. Do not claim direct compatibility or hide an ad hoc transformation; the mapping, candidate identity, and unsuccessful-job policies remain explicit integration work.
+- Researchers define substantive numeric indicators and interaction terms outside the package. Preparation may validate and map configured source fields, but it must not infer domain-specific race, experience, or interaction definitions.
+- Plot configuration must explicitly select both `outcome_variable` (the dependent variable) and `term` (the coefficient shown), unless a complete outcome-by-panel map replaces the scalar outcome. Estimation groups create separate fits; covariance clusters only control inference within each fit.
+- Preparation stamps one researcher-assigned stable `audit_id` onto every regression-ready row; never generate or infer it from paths or model metadata. Researchers must supply input already scoped to one model configuration, one persona, and one distinguishable run or batch. Preparation validates singleton persona/model scope; researchers remain responsible for run/batch scope because the current input lacks that identity. Do not add automatic persona/model partitioning or selectors. `dataset_id` identifies an inspected analysis slice and `model_id` identifies a regression specification. Rendering preserves `(audit_id, dataset_id, model_id)` source provenance, while the configured `panel_variable` alone chooses panels. Audit comparisons must use the same right-hand-side formula, fixed effects, clustering, covariance type, estimation grouping, and inference contract; only an explicit outcome-by-panel map may vary the dependent variable.
 
 ## Repository Layout
 
 ```text
 src/llm_auditkit/   Python package
+R/regression/       R regression modules
+scripts/            Python utilities and thin Rscript entry points
 tests/              Automated tests
+tests/r/            R testthat suite and public synthetic fixtures
 examples/           User-facing examples
 docs/               Architecture and behavior documentation
+docs/integration/   Cross-issue handoff and revalidation records
+renv.lock            Authoritative R package environment
 ```
 
 Place code according to responsibility. Avoid catch-all utility modules and avoid exposing internal implementation details from package `__init__.py` files without an intentional public API decision.
@@ -60,7 +79,7 @@ Place code according to responsibility. Avoid catch-all utility modules and avoi
 
 The sanitized, code-only implementation used for the earlier paper is an optional historical reference. It is not part of this package and is not an architectural authority.
 
-- As an initial setup step, run `python scripts/sync_reference_repo.py` to clone or update the pinned revision under `.references/job-parsing-code/`.
+- As an initial setup step, run `python scripts/sync_reference_repo.py` to clone or update the pinned revision under `.references/job_parsing-code/`.
 - Treat the checkout as read-only. Do not edit it or commit it to this repository.
 - Use the current architecture documentation to decide public behavior, interfaces, and package boundaries. Do not copy legacy secrets, data paths, generated outputs, or implementation defects.
 - When a design or implementation decision is materially based on the reference, record the reference repository revision and relevant file path in the issue or pull request.
@@ -103,6 +122,69 @@ Run the complete test suite:
 
 ```bash
 python -m pytest
+```
+
+Restore and verify the locked R environment:
+
+```bash
+Rscript -e 'renv::restore(prompt = FALSE)'
+Rscript -e 'status <- renv::status(); if (!isTRUE(status$synchronized)) quit(status = 1)'
+```
+
+Run the complete or focused R test suite:
+
+```bash
+Rscript tests/r/run_tests.R
+Rscript -e 'testthat::test_file("tests/r/test-preparation-config.R", reporter = "summary")'
+Rscript -e 'testthat::test_file("tests/r/test-experiment-results.R", reporter = "summary")'
+Rscript -e 'testthat::test_file("tests/r/test-preparation.R", reporter = "summary")'
+Rscript -e 'testthat::test_file("tests/r/test-regression-config.R", reporter = "summary")'
+Rscript -e 'testthat::test_file("tests/r/test-regression.R", reporter = "summary")'
+Rscript -e 'testthat::test_file("tests/r/test-render-config.R", reporter = "summary")'
+Rscript -e 'testthat::test_file("tests/r/test-render-data.R", reporter = "summary")'
+Rscript -e 'testthat::test_file("tests/r/test-plot-api.R", reporter = "summary")'
+Rscript -e 'testthat::test_file("tests/r/test-paper-plot.R", reporter = "summary")'
+Rscript -e 'testthat::test_file("tests/r/test-render-runner.R", reporter = "summary")'
+Rscript -e 'testthat::test_file("tests/r/test-regression-end-to-end.R", reporter = "summary")'
+```
+
+Prepare configured raw experiment results:
+
+```bash
+Rscript scripts/prepare_regression_data.R --config path/to/preparation.yaml
+```
+
+Estimate one inspected regression-ready dataset:
+
+```bash
+Rscript scripts/run_regression.R --config path/to/regression.yaml
+```
+
+Render saved results, or run the public synthetic example:
+
+```bash
+Rscript scripts/render_regression_plot.R --config path/to/render.yaml
+Rscript scripts/render_regression_plot.R --config examples/regression/render_synthetic.yaml
+```
+
+Run the complete public two-audit walkthrough, pausing to inspect the prepared
+CSVs before estimation:
+
+```bash
+Rscript scripts/prepare_regression_data.R --config examples/regression/end_to_end/prepare_audit_a.yaml
+Rscript scripts/prepare_regression_data.R --config examples/regression/end_to_end/prepare_audit_b.yaml
+Rscript scripts/run_regression.R --config examples/regression/end_to_end/regress_audit_a.yaml
+Rscript scripts/run_regression.R --config examples/regression/end_to_end/regress_audit_b.yaml
+Rscript scripts/render_regression_plot.R --config examples/regression/end_to_end/render_audits.yaml
+```
+
+The command sequence assumes the required human inspection between preparation
+and estimation; do not hide that boundary in a production orchestrator.
+
+Load the locked interactive R API from a clean R session:
+
+```r
+source("R/regression/load.R")
 ```
 
 Sync the optional paper reference implementation:
