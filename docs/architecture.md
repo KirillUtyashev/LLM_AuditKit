@@ -39,7 +39,7 @@ Template Generation ─┐
 Experiment Execution ┘
 ```
 
-The inference layer owns generic model and response-format configuration, deterministic request batching, compatible EDSL job grouping through its adapter, and normalized batch results including structured content and token log probabilities when requested. A logical batch is grouped by model configuration and response format. Within each EDSL job, the adapter represents every request as one explicitly paired agent, scenario, and interview. The scenario retains the literal prompt and request ID while the agent supplies the persona and system instruction. EDSL owns parallel interview execution, provider rate limiting, caching, and retries within each submitted job. Pipeline stages own domain-specific configured prompt templates, rendering, response parsing, checkpointing, and output storage.
+The inference layer owns generic model and response-format configuration, deterministic request batching, compatible EDSL job grouping through its adapter, and normalized batch results including structured content and token log probabilities when requested. A logical batch is grouped by model configuration, response format, system prompt, and persona. Within each EDSL job, one shared agent supplies the group persona and system instruction while one scenario per request retains its literal prompt and request ID. EDSL owns parallel interview execution, provider rate limiting, caching, and retries within each submitted job. Pipeline stages own domain-specific configured prompt templates, rendering, response parsing, checkpointing, and output storage.
 
 Batches are submitted sequentially. A calling stage validates and checkpoints the current completed batch before requesting the next one, which bounds uncheckpointed work and prevents a systemic prompt or integration error from consuming tokens across the remaining dataset. Template generation validates a complete logical batch and, when `save_after_each_result` is enabled, performs one atomic CSV replacement for each handled scenario result. Experiment execution applies all outcomes from a completed logical batch and performs one atomic CSV replacement before advancing when `save_after_each_batch` is enabled.
 
@@ -51,7 +51,7 @@ A repository-wide logging contract is still to be designed before the pipeline i
 
 The design must decide how progress, batch timing, checkpoint activity, terminal request failures, and systemic failures are exposed; how library logging relates to any command-line progress display; and which events belong to LLM AuditKit versus EDSL. Prompts, system prompts, model responses, credentials, private dataset values, and provider parameters must not be logged by default. Until that contract is defined, documented progress fields are data available to callers and do not imply a particular logger, callback, or terminal interface.
 
-User-facing experiment runs are configured in YAML and produce CSV checkpoints.
-Experiment results cross the Python-to-R boundary as CSV files. Regression
-configuration is also provided as YAML, and the R analysis produces both raw
-regression results and plots.
+User-facing template-generation and experiment runs are configured in YAML and
+produce CSV checkpoints. Experiment results cross the Python-to-R boundary as CSV
+files. Regression configuration is also provided as YAML, and the R analysis produces
+both raw regression results and plots.

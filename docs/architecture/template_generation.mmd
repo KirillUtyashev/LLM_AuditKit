@@ -3,6 +3,12 @@ config:
   theme: mc
 ---
 classDiagram
+    class TemplateGenerationRunConfig {
+        +dataset_path: Path
+        +output_path: Path
+        +mode: sync|async
+        +generation_config: TemplateGenerationConfig
+    }
     class TemplateDatasetSchema {
         +job_posting_column: str
         +context_columns: Dict~str, str~
@@ -69,6 +75,7 @@ classDiagram
     class DataFrame {
         <<pandas>>
     }
+    TemplateGenerationRunConfig --> TemplateGenerationConfig : YAML-backed
     TemplateGenerationConfig --> TemplateDatasetSchema
     TemplateGenerationConfig --> InferenceConfig
     TemplateGenerator --> TemplateGenerationConfig : validates and uses

@@ -9,7 +9,11 @@ from llm_auditkit.inference import InferenceResult
 from .exceptions import TemplateResponseParseError, TemplateResultAssociationError
 from .identity import build_generation_fingerprint, build_template_request_id
 from .models import TemplateGenerationConfig, TemplateOutputRecord
-from .prompts import extract_placeholder_names, has_valid_placeholder_syntax
+from .prompts import (
+    canonicalize_placeholders,
+    extract_placeholder_names,
+    has_valid_placeholder_syntax,
+)
 
 
 def parse_template_batch(
@@ -135,7 +139,7 @@ def parse_template_contents(
             raise TemplateResponseParseError(
                 f"template result field {field!r} must be a non-empty string"
             )
-        templates.append(value.strip())
+        templates.append(canonicalize_placeholders(value.strip()))
     validate_template_contents(templates, config.required_placeholders)
     return templates
 

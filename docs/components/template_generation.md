@@ -13,7 +13,8 @@ comparable quality and relevance across the candidate set.
 The stage accepts and returns `pandas.DataFrame` objects. It does not load an input
 path; dataset loading remains the single path-to-DataFrame boundary. Persistence is
 provided by a caller-supplied `TemplateStore` whose output path is separate from the
-domain configuration.
+domain configuration. A strict YAML composition format records the dataset and output
+paths alongside the domain configuration without moving path loading into this stage.
 
 ## Input and Dataset Schema
 
@@ -53,12 +54,34 @@ The selected model configuration ID must reference exactly one model in the shar
 inference configuration. Other configured models remain available to other callers but
 are not used by this generation run.
 
+## YAML Run Configuration
+
+`load_template_generation_run_config` loads a complete user-facing run definition from
+YAML and returns `TemplateGenerationRunConfig`. The run configuration contains:
+
+- the dataset path to hand to the dataset-loading stage;
+- the output CSV path used to construct `TemplateStore`;
+- an explicit `sync` or `async` execution mode; and
+- the validated `TemplateGenerationConfig` consumed by this stage.
+
+The YAML separates dataset schema, prompt files, output, generation behavior,
+execution policy, and inference models. Relative dataset, prompt, and output paths are
+resolved from the YAML file's directory. User and optional system prompts must be
+UTF-8 `.txt` files. Unknown fields, duplicate YAML keys, missing required fields,
+invalid modes, colliding dataset/output paths, and non-CSV output paths are rejected
+before inference.
+
+The YAML loader reads configuration and prompt text only. It does not load the dataset;
+the configured path crosses into a DataFrame through dataset loading, after which
+`TemplateGenerator` retains its DataFrame-only contract. A loadable configuration
+example is available at
+[`configs/template_generation/synthetic_template_generation.yaml`](../../configs/template_generation/synthetic_template_generation.yaml).
+
 Skill sections, work-history counts, education layouts, and era-specific resume or
 application structures belong in versioned prompt files rather than hard-coded Python
 configuration classes. This supports materially different historical formats without
-changing runtime code. A composition layer may read those UTF-8 `.txt` files and pass
-their contents into `TemplateGenerationConfig`; the DataFrame API itself remains
-path-independent.
+changing runtime code. The YAML loader reads those files into
+`TemplateGenerationConfig`; the DataFrame API itself remains path-independent.
 
 ## Prompt Rendering
 

@@ -1,5 +1,6 @@
 """Public interfaces for configurable resume-template generation."""
 
+from .configuration import load_template_generation_run_config
 from .exceptions import (
     TemplateGenerationConfigurationError,
     TemplateGenerationDatasetError,
@@ -15,6 +16,7 @@ from .identity import build_template_request_id
 from .models import (
     TemplateDatasetSchema,
     TemplateGenerationConfig,
+    TemplateGenerationRunConfig,
     TemplateOutputRecord,
 )
 from .store import TemplateStore
@@ -31,6 +33,7 @@ __all__ = [
     "TemplateGenerationDatasetError",
     "TemplateGenerationException",
     "TemplateGenerationIdentityError",
+    "TemplateGenerationRunConfig",
     "TemplateGenerationValidationError",
     "TemplateGenerator",
     "TemplateOutputRecord",
@@ -39,6 +42,7 @@ __all__ = [
     "TemplateStore",
     "TemplateStoreError",
     "build_template_request_id",
+    "load_template_generation_run_config",
     "validate_template_generation_config",
     "validate_template_generation_dataset",
     "validate_template_generation_inputs",

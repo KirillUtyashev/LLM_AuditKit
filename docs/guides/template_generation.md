@@ -2,8 +2,8 @@
 
 Template generation takes an existing `pandas.DataFrame` and produces a configurable
 number of resume templates for each job-posting scenario. It uses shared inference for
-EDSL execution and stores a resumable CSV checkpoint. It does not load a dataset path;
-dataset loading remains a separate pipeline stage.
+EDSL execution and stores a resumable CSV checkpoint. A strict YAML file defines a
+complete run, while dataset loading remains the separate path-to-DataFrame stage.
 
 For the complete validation and persistence contract, see the
 [template generation component documentation](../components/template_generation.md).
@@ -34,9 +34,69 @@ tokens such as `{{name}}` and `{{address}}`; these tokens are later filled by te
 population. Template generation rejects outputs that omit a required token or invent
 an unknown one.
 
-## Configure the DataFrame Run
+## Configure a YAML Run
 
-Applications that already have a DataFrame can construct the stage directly:
+The recommended user-facing configuration records paths, schema mappings, prompts,
+generation settings, execution mode, and inference models together:
+
+```yaml
+dataset:
+  path: ../../examples/template_generation/data/synthetic_job_postings.csv
+  job_posting_column: job_posting
+  context_columns:
+    city: city
+    category: category
+
+prompt:
+  template_path: ../../examples/template_generation/prompts/resume_templates.txt
+  system_template_path: ../../examples/template_generation/prompts/resume_system.txt
+
+output:
+  path: ../../examples/output/synthetic_template_generation.csv
+
+generation:
+  templates_per_scenario: 2
+  required_placeholders: [name, address]
+  model_config_id: openai-template-v1
+
+execution:
+  mode: async
+  batch_size: 2
+  save_after_each_result: true
+
+inference:
+  models:
+    - config_id: openai-template-v1
+      provider: openai
+      model: gpt-4.1-nano
+      parameters:
+        temperature: 0
+        max_tokens: 3000
+```
+
+Load and validate it with:
+
+```python
+from llm_auditkit.templates import load_template_generation_run_config
+
+run_config = load_template_generation_run_config(
+    "configs/template_generation/synthetic_template_generation.yaml"
+)
+```
+
+Paths are resolved relative to the YAML file. The loader reads the prompt files and
+constructs `run_config.generation_config`; it leaves `run_config.dataset_path` for the
+dataset-loading stage and exposes `run_config.output_path` for `TemplateStore`.
+`run_config.mode` is exactly `sync` or `async` and selects the matching generator
+method in the application composition layer.
+
+The checked-in loadable definition is
+[`synthetic_template_generation.yaml`](../../configs/template_generation/synthetic_template_generation.yaml).
+
+## Configure Directly from Python
+
+Applications that construct configuration dynamically can use the lower-level
+DataFrame API directly:
 
 ```python
 from pathlib import Path

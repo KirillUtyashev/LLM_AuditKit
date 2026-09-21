@@ -3,8 +3,13 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from pathlib import Path
+from typing import Literal, TypeAlias
 
 from llm_auditkit.inference import InferenceConfig
+
+
+TemplateExecutionMode: TypeAlias = Literal["sync", "async"]
 
 
 @dataclass(slots=True)
@@ -27,6 +32,16 @@ class TemplateGenerationConfig:
     model_config_id: str
     system_prompt_template: str | None = None
     save_after_each_result: bool = True
+
+
+@dataclass(slots=True)
+class TemplateGenerationRunConfig:
+    """YAML-backed operational configuration for one template-generation run."""
+
+    dataset_path: Path
+    output_path: Path
+    mode: TemplateExecutionMode
+    generation_config: TemplateGenerationConfig
 
 
 @dataclass(slots=True)

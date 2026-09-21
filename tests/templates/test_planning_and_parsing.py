@@ -126,6 +126,26 @@ def test_successful_result_is_parsed_and_trimmed() -> None:
     ]
 
 
+def test_edsl_spaced_placeholders_are_stored_canonically() -> None:
+    generation = config()
+    result = _result(
+        "scenario-1",
+        generation=generation,
+        structured_content={
+            "template_1": "First {{ name }} at {{\taddress }}",
+            "template_2": "Second {{name\t}} at {{ address}}",
+        },
+    )
+
+    record = parse_template_result(result, "scenario-1", generation)
+
+    assert record.is_successful
+    assert record.templates == [
+        "First {{name}} at {{address}}",
+        "Second {{name}} at {{address}}",
+    ]
+
+
 @pytest.mark.parametrize(
     ("content", "message"),
     [

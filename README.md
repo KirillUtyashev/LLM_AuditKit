@@ -6,9 +6,10 @@ The shared inference package is implemented with validated deterministic batchin
 synchronous and asynchronous execution, prompt preview, normalized outcomes, and an
 Expected Parrot EDSL adapter. Template generation and experiment execution use that
 layer for deterministic planning, preview, normalized parsing, synchronous and
-asynchronous execution, and atomic CSV checkpoint/resume storage. User-facing
-experiment runs are defined in strict YAML and launched through one command. The
-remaining domain pipeline stages are documented for incremental implementation.
+asynchronous execution, and atomic CSV checkpoint/resume storage. User-facing template
+generation and experiment runs are defined in strict YAML. Experiment execution is
+also launched through one command. The remaining domain pipeline stages are documented
+for incremental implementation.
 
 ## Quickstart
 
@@ -48,8 +49,10 @@ request identity, prompt preview, batching, sync and async execution, results,
 failures, and checkpoint integration.
 
 Read [Generating Resume Templates](docs/guides/template_generation.md) for the
-DataFrame schema, prompt and placeholder contracts, configurable template counts,
-preview, sync and async generation, checkpoints, and resume behavior.
+YAML run format, DataFrame schema, prompt and placeholder contracts, configurable
+template counts, preview, sync and async generation, checkpoints, and resume behavior.
+A complete paid OpenAI configuration example is available at
+[`synthetic_template_generation.yaml`](configs/template_generation/synthetic_template_generation.yaml).
 
 For the higher-level YAML workflow, read
 [Running Hiring Experiments](docs/guides/experiment_execution.md). The guide covers

@@ -13,7 +13,9 @@ from .models import TemplateGenerationConfig
 
 
 _FIELD = re.compile(r"(?<!\{)\{([A-Za-z][A-Za-z0-9_]*)\}(?!\})")
-_PLACEHOLDER = re.compile(r"\{\{([A-Za-z][A-Za-z0-9_]*)\}\}")
+_PLACEHOLDER = re.compile(
+    r"\{\{[ \t]*([A-Za-z][A-Za-z0-9_]*)[ \t]*\}\}"
+)
 
 
 def placeholder_token(name: str) -> str:
@@ -118,13 +120,22 @@ def _render(
 
 
 def extract_placeholder_names(template: str) -> list[str]:
-    """Return canonical placeholder names in occurrence order."""
+    """Return placeholder names in occurrence order."""
 
     return _PLACEHOLDER.findall(template)
 
 
+def canonicalize_placeholders(template: str) -> str:
+    """Remove EDSL/Jinja-added inner whitespace from placeholder tokens."""
+
+    return _PLACEHOLDER.sub(
+        lambda match: placeholder_token(match.group(1)),
+        template,
+    )
+
+
 def has_valid_placeholder_syntax(template: str) -> bool:
-    """Whether every double-brace marker is one complete canonical token."""
+    """Whether every double-brace marker is one complete supported token."""
 
     position = 0
     while True:

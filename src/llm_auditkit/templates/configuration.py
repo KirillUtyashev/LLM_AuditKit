@@ -1,0 +1,319 @@
+"""Strict YAML loading for user-facing template-generation runs."""
+
+from __future__ import annotations
+
+from collections.abc import Mapping
+from pathlib import Path
+
+import yaml
+from yaml.constructor import ConstructorError
+from yaml.nodes import MappingNode
+from yaml.resolver import BaseResolver
+
+from llm_auditkit.inference import InferenceConfig, ModelConfig
+
+from .exceptions import TemplateGenerationConfigurationError
+from .models import (
+    TemplateDatasetSchema,
+    TemplateGenerationConfig,
+    TemplateGenerationRunConfig,
+)
+from .validation import validate_template_generation_config
+
+
+_TOP_LEVEL_KEYS = {
+    "dataset",
+    "prompt",
+    "output",
+    "generation",
+    "execution",
+    "inference",
+}
+_DATASET_KEYS = {"path", "job_posting_column", "context_columns"}
+_PROMPT_KEYS = {"template_path", "system_template_path"}
+_OUTPUT_KEYS = {"path"}
+_GENERATION_KEYS = {
+    "templates_per_scenario",
+    "required_placeholders",
+    "model_config_id",
+}
+_EXECUTION_KEYS = {"mode", "batch_size", "save_after_each_result"}
+_INFERENCE_KEYS = {"models"}
+_MODEL_KEYS = {"config_id", "provider", "model", "parameters"}
+
+
+def load_template_generation_run_config(
+    path: str | Path,
+) -> TemplateGenerationRunConfig:
+    """Load and validate a complete template-generation run from YAML."""
+
+    config_path = _config_path(path)
+    root = _mapping(
+        _load_yaml(config_path),
+        "configuration",
+        allowed=_TOP_LEVEL_KEYS,
+        required=_TOP_LEVEL_KEYS,
+    )
+    dataset = _mapping(
+        root["dataset"],
+        "dataset",
+        allowed=_DATASET_KEYS,
+        required=_DATASET_KEYS - {"context_columns"},
+    )
+    prompt = _mapping(
+        root["prompt"],
+        "prompt",
+        allowed=_PROMPT_KEYS,
+        required={"template_path"},
+    )
+    output = _mapping(
+        root["output"],
+        "output",
+        allowed=_OUTPUT_KEYS,
+        required=_OUTPUT_KEYS,
+    )
+    generation = _mapping(
+        root["generation"],
+        "generation",
+        allowed=_GENERATION_KEYS,
+        required=_GENERATION_KEYS,
+    )
+    execution = _mapping(
+        root["execution"],
+        "execution",
+        allowed=_EXECUTION_KEYS,
+        required=_EXECUTION_KEYS,
+    )
+    inference = _mapping(
+        root["inference"],
+        "inference",
+        allowed=_INFERENCE_KEYS,
+        required=_INFERENCE_KEYS,
+    )
+
+    dataset_path = _resolve_config_path(
+        dataset["path"],
+        config_path,
+        "dataset.path",
+    )
+    output_path = _resolve_config_path(
+        output["path"],
+        config_path,
+        "output.path",
+    )
+    if output_path.suffix.lower() != ".csv":
+        raise TemplateGenerationConfigurationError(
+            "output.path must reference a .csv file"
+        )
+    if output_path == dataset_path:
+        raise TemplateGenerationConfigurationError(
+            "dataset.path and output.path must resolve to different files"
+        )
+    if output_path == config_path:
+        raise TemplateGenerationConfigurationError(
+            "output.path must not overwrite the template-generation YAML file"
+        )
+
+    mode = execution["mode"]
+    if not isinstance(mode, str) or mode not in {"sync", "async"}:
+        raise TemplateGenerationConfigurationError(
+            "execution.mode must be exactly 'sync' or 'async'"
+        )
+
+    system_template_path = prompt.get("system_template_path")
+    generation_config = TemplateGenerationConfig(
+        templates_per_scenario=generation["templates_per_scenario"],
+        dataset_schema=TemplateDatasetSchema(
+            job_posting_column=dataset["job_posting_column"],
+            context_columns=dataset.get("context_columns", {}),
+        ),
+        prompt_template=_read_text_file(
+            prompt["template_path"],
+            config_path,
+            "prompt.template_path",
+        ),
+        system_prompt_template=(
+            _read_text_file(
+                system_template_path,
+                config_path,
+                "prompt.system_template_path",
+            )
+            if system_template_path is not None
+            else None
+        ),
+        required_placeholders=generation["required_placeholders"],
+        inference=InferenceConfig(
+            models=_models(inference["models"]),
+            batch_size=execution["batch_size"],
+        ),
+        model_config_id=generation["model_config_id"],
+        save_after_each_result=execution["save_after_each_result"],
+    )
+    validate_template_generation_config(generation_config)
+    return TemplateGenerationRunConfig(
+        dataset_path=dataset_path,
+        output_path=output_path,
+        mode=mode,
+        generation_config=generation_config,
+    )
+
+
+def _config_path(path: str | Path) -> Path:
+    if not isinstance(path, (str, Path)) or not str(path).strip():
+        raise TemplateGenerationConfigurationError(
+            "template-generation configuration path must be a non-empty string or Path"
+        )
+    config_path = Path(path).expanduser().resolve()
+    if config_path.suffix.lower() not in {".yaml", ".yml"}:
+        raise TemplateGenerationConfigurationError(
+            "template-generation configuration path must end in .yaml or .yml"
+        )
+    if not config_path.is_file():
+        raise TemplateGenerationConfigurationError(
+            f"template-generation configuration file does not exist: {config_path}"
+        )
+    return config_path
+
+
+def _load_yaml(config_path: Path) -> object:
+    try:
+        with config_path.open(encoding="utf-8") as config_file:
+            return yaml.load(config_file, Loader=_UniqueKeySafeLoader)
+    except (OSError, yaml.YAMLError) as error:
+        raise TemplateGenerationConfigurationError(
+            f"could not load template-generation YAML: "
+            f"{type(error).__name__}: {error}"
+        ) from error
+
+
+def _resolve_config_path(
+    value: object,
+    config_path: Path,
+    field_name: str,
+) -> Path:
+    if not isinstance(value, str) or not value.strip():
+        raise TemplateGenerationConfigurationError(
+            f"{field_name} must be a non-empty path string"
+        )
+    resolved = Path(value).expanduser()
+    if not resolved.is_absolute():
+        resolved = config_path.parent / resolved
+    return resolved.resolve()
+
+
+def _read_text_file(value: object, config_path: Path, field_name: str) -> str:
+    resolved = _resolve_config_path(value, config_path, field_name)
+    if resolved.suffix.lower() != ".txt":
+        raise TemplateGenerationConfigurationError(
+            f"{field_name} must reference a .txt file"
+        )
+    if not resolved.is_file():
+        raise TemplateGenerationConfigurationError(
+            f"{field_name} file does not exist: {resolved}"
+        )
+    try:
+        return resolved.read_text(encoding="utf-8").strip()
+    except OSError as error:
+        raise TemplateGenerationConfigurationError(
+            f"could not read {field_name}: {type(error).__name__}: {error}"
+        ) from error
+
+
+def _models(value: object) -> list[ModelConfig]:
+    if not isinstance(value, list):
+        raise TemplateGenerationConfigurationError(
+            "inference.models must be a YAML sequence"
+        )
+    models: list[ModelConfig] = []
+    for position, raw_model in enumerate(value):
+        model = _mapping(
+            raw_model,
+            f"inference.models[{position}]",
+            allowed=_MODEL_KEYS,
+            required=_MODEL_KEYS - {"parameters"},
+        )
+        parameters = model.get("parameters", {})
+        if not isinstance(parameters, dict):
+            raise TemplateGenerationConfigurationError(
+                f"inference.models[{position}].parameters must be a mapping"
+            )
+        models.append(
+            ModelConfig(
+                config_id=model["config_id"],
+                provider=model["provider"],
+                model=model["model"],
+                parameters=parameters,
+            )
+        )
+    return models
+
+
+def _mapping(
+    value: object,
+    field_name: str,
+    *,
+    allowed: set[str],
+    required: set[str],
+) -> dict[str, object]:
+    if not isinstance(value, Mapping):
+        raise TemplateGenerationConfigurationError(
+            f"{field_name} must be a YAML mapping"
+        )
+    if not all(isinstance(key, str) for key in value):
+        raise TemplateGenerationConfigurationError(
+            f"{field_name} keys must all be strings"
+        )
+
+    mapping = dict(value)
+    unknown = set(mapping).difference(allowed)
+    if unknown:
+        names = ", ".join(repr(name) for name in sorted(unknown))
+        raise TemplateGenerationConfigurationError(
+            f"{field_name} contains unknown fields: {names}"
+        )
+    missing = required.difference(mapping)
+    if missing:
+        names = ", ".join(repr(name) for name in sorted(missing))
+        raise TemplateGenerationConfigurationError(
+            f"{field_name} is missing required fields: {names}"
+        )
+    return mapping
+
+
+class _UniqueKeySafeLoader(yaml.SafeLoader):
+    """Safe YAML loader that rejects duplicate mapping keys."""
+
+
+def _construct_unique_mapping(
+    loader: _UniqueKeySafeLoader,
+    node: MappingNode,
+    deep: bool = False,
+) -> dict[object, object]:
+    loader.flatten_mapping(node)
+    mapping: dict[object, object] = {}
+    for key_node, value_node in node.value:
+        key = loader.construct_object(key_node, deep=deep)
+        try:
+            duplicate = key in mapping
+        except TypeError as error:
+            raise ConstructorError(
+                "while constructing a mapping",
+                node.start_mark,
+                "found an unhashable mapping key",
+                key_node.start_mark,
+            ) from error
+        if duplicate:
+            raise ConstructorError(
+                "while constructing a mapping",
+                node.start_mark,
+                f"found duplicate key {key!r}",
+                key_node.start_mark,
+            )
+        mapping[key] = loader.construct_object(value_node, deep=deep)
+    return mapping
+
+
+_UniqueKeySafeLoader.add_constructor(
+    BaseResolver.DEFAULT_MAPPING_TAG,
+    _construct_unique_mapping,
+)

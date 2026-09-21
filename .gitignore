@@ -43,3 +43,4 @@ htmlcov/
 
 # Generated example outputs
 /examples/output/
+/output/

@@ -20,7 +20,6 @@ from edsl import (
     Survey,
 )
 from edsl.inference_services.registry import GLOBAL_REGISTRY
-from edsl.interviews import Interview
 from edsl.questions.question_dict import DictResponseValidator
 
 from .batching import AdapterJobGroup, group_requests_by_compatibility
@@ -38,7 +37,7 @@ from .models import (
 _QUESTION_NAME = "response"
 _REQUEST_ID_FIELD = "request_id"
 _PROMPT_FIELD = "llm_auditkit_prompt"
-_PAIRING_FIELD = "_llm_auditkit_pair_index"
+_AGENT_MARKER_FIELD = "_llm_auditkit_agent"
 _QUESTION_PROMPT_TEMPLATE = f"{{{{ {_PROMPT_FIELD} }}}}"
 _LOGGER = logging.getLogger(__name__)
 _VALUE_TYPE_MAP = {
@@ -175,6 +174,19 @@ async def _close_edsl_async_clients(
 
 
 def _build_job(group: AdapterJobGroup) -> object:
+    if not group.requests:
+        raise InferenceBatchError("cannot build an EDSL job for an empty request group")
+
+    shared_request = group.requests[0]
+    if any(
+        request.system_prompt != shared_request.system_prompt
+        or request.persona != shared_request.persona
+        for request in group.requests[1:]
+    ):
+        raise InferenceBatchError(
+            "EDSL job group contains incompatible system prompts or personas"
+        )
+
     question = _build_question(group)
     survey = Survey([question])
     model = Model(
@@ -182,10 +194,7 @@ def _build_job(group: AdapterJobGroup) -> object:
         service_name=group.model_config.provider,
         **group.model_config.parameters,
     )
-    agents = [
-        _build_agent(request, pair_index)
-        for pair_index, request in enumerate(group.requests)
-    ]
+    agent = _build_agent(shared_request)
     scenarios = [
         Scenario(
             {
@@ -195,25 +204,19 @@ def _build_job(group: AdapterJobGroup) -> object:
         )
         for request in group.requests
     ]
-    interviews = [
-        Interview(
-            agent=agent,
-            survey=survey,
-            scenario=scenario,
-            model=model,
-        )
-        for agent, scenario in zip(agents, scenarios, strict=True)
-    ]
-    job = Jobs.from_interviews(interviews)
-    # EDSL 1.0.8's prompt preview builds index lookups from these collections even
-    # when a job was created from explicit interviews.
-    job.agents = AgentList(agents)
-    job.scenarios = ScenarioList(scenarios)
-    return job
+    return Jobs(
+        survey=survey,
+        agents=AgentList([agent]),
+        models=[model],
+        scenarios=ScenarioList(scenarios),
+    )
 
 
-def _build_agent(request: InferenceRequest, pair_index: int) -> object:
-    traits: dict[str, object] = {_PAIRING_FIELD: pair_index}
+def _build_agent(request: InferenceRequest) -> object:
+    # EDSL 1.0.8 omits the instruction when an Agent has no traits. Keep one
+    # adapter-internal trait hidden by the explicit presentation template so a
+    # persona-free request still renders its normal Agent instruction.
+    traits: dict[str, object] = {_AGENT_MARKER_FIELD: True}
     traits_presentation_template = ""
     if request.persona is not None:
         traits["persona"] = request.persona
@@ -274,30 +277,31 @@ def _normalize_rendered_prompts(
         if not isinstance(row, Mapping):
             raise InferenceBatchError("EDSL rendered prompt row must be a mapping")
 
-        agent_index = row.get("agent_index")
+        scenario_index = row.get("scenario_index")
         if (
-            isinstance(agent_index, bool)
-            or not isinstance(agent_index, int)
-            or agent_index < 0
-            or agent_index >= len(group.requests)
+            isinstance(scenario_index, bool)
+            or not isinstance(scenario_index, int)
+            or scenario_index < 0
+            or scenario_index >= len(group.requests)
         ):
             raise InferenceBatchError(
-                "EDSL rendered prompt row has an invalid agent index"
+                "EDSL rendered prompt row has an invalid scenario index"
             )
-        if agent_index in prompts_by_index:
+        if scenario_index in prompts_by_index:
             raise InferenceBatchError(
-                f"EDSL rendered duplicate prompts for agent index {agent_index}"
+                "EDSL rendered duplicate prompts for scenario index "
+                f"{scenario_index}"
             )
 
-        request = group.requests[agent_index]
-        prompts_by_index[agent_index] = RenderedPrompt(
+        request = group.requests[scenario_index]
+        prompts_by_index[scenario_index] = RenderedPrompt(
             request_id=request.request_id,
             user_prompt=_extract_prompt_text(row.get("user_prompt"), "user"),
             system_prompt=_extract_prompt_text(row.get("system_prompt"), "system"),
         )
 
     if len(prompts_by_index) != len(group.requests):
-        raise InferenceBatchError("EDSL rendered prompts are missing an agent index")
+        raise InferenceBatchError("EDSL rendered prompts are missing a scenario index")
     return [prompts_by_index[index] for index in range(len(group.requests))]
 
 
@@ -370,7 +374,7 @@ def _result_request_id(result: object) -> str:
         request_id = _request_id_from_mapping(getattr(agent, "traits", None))
     if not isinstance(request_id, str) or not request_id:
         raise InferenceBatchError(
-            "EDSL result agent is missing its non-empty request ID"
+            "EDSL result is missing its non-empty request ID"
         )
     return request_id
 
