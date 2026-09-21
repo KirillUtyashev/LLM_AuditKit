@@ -11,6 +11,12 @@ The template population stage deterministically replaces placeholders in generat
 - Output of the template generation stage.
 - `TemplatePopulationConfig`.
 
+Generated placeholders use the canonical syntax `{{placeholder_name}}`, with names
+matching `[A-Za-z][A-Za-z0-9_]*`. Template generation guarantees that every successful
+template contains its configured required placeholders and no unknown double-brace
+placeholder tokens. Population configuration uses placeholder names without the
+surrounding braces, for example `name` for `{{name}}`.
+
 ## Output
 
 A populated `pandas.DataFrame` containing the same configurable number `N` of fully instantiated resume templates per scenario, ready for experiment execution.
@@ -35,7 +41,8 @@ For each template:
 1. Identify placeholders.
 2. Determine replacement values using the configured population strategy.
 3. Replace placeholders deterministically.
-4. Store the populated template in the output dataset.
+4. Reject unresolved or unknown canonical placeholders.
+5. Store the populated template in the output dataset.
 
 ## Notes
 

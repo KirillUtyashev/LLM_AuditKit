@@ -39,9 +39,9 @@ Template Generation ─┐
 Experiment Execution ┘
 ```
 
-The inference layer owns generic model and response-format configuration, deterministic request batching, compatible EDSL job grouping through its adapter, and normalized batch results including structured content and token log probabilities when requested. A logical batch is grouped by model configuration and response format. Within each EDSL job, the adapter represents every request as one explicitly paired agent, scenario, and interview. The scenario retains the literal prompt and request ID while the agent supplies the persona and system instruction. EDSL owns parallel interview execution, provider rate limiting, caching, and retries within each submitted job. Pipeline stages own domain-specific configured prompt templates, rendering, response parsing, checkpointing, and output storage.
+The inference layer owns generic model and response-format configuration, deterministic request batching, compatible EDSL job grouping through its adapter, and normalized batch results including structured content and token log probabilities when requested. A logical batch is grouped by model configuration, response format, system prompt, and persona. Within each EDSL job, one shared agent supplies the group persona and system instruction while one scenario per request retains its literal prompt and request ID. EDSL owns parallel interview execution, provider rate limiting, caching, and retries within each submitted job. Pipeline stages own domain-specific configured prompt templates, rendering, response parsing, checkpointing, and output storage.
 
-Batches are submitted sequentially. A calling stage validates and checkpoints the current completed batch before requesting the next one, which bounds uncheckpointed work and prevents a systemic prompt or integration error from consuming tokens across the remaining dataset. Experiment execution applies all outcomes from a completed logical batch and performs one atomic CSV replacement before advancing when `save_after_each_batch` is enabled.
+Batches are submitted sequentially. A calling stage validates and checkpoints the current completed batch before requesting the next one, which bounds uncheckpointed work and prevents a systemic prompt or integration error from consuming tokens across the remaining dataset. Template generation validates a complete logical batch and, when `save_after_each_result` is enabled, performs one atomic CSV replacement for each handled scenario result. Experiment execution applies all outcomes from a completed logical batch and performs one atomic CSV replacement before advancing when `save_after_each_batch` is enabled.
 
 The shared inference layer provides equivalent synchronous and asynchronous batch APIs. Each delegates to the corresponding EDSL execution method while preserving the same validation, batching, normalization, and failure contract.
 
@@ -53,8 +53,8 @@ The design must decide how progress, batch timing, checkpoint activity, terminal
 
 ## Python-to-R Regression Boundary
 
-User-facing experiment runs are configured in YAML and produce CSV
-checkpoints. CSV is the intended Python-to-R boundary; no in-memory
+User-facing template-generation and experiment runs are configured in YAML and produce
+CSV checkpoints. CSV is the intended Python-to-R boundary; no in-memory
 Python-to-R object exchange is required. The implemented experiment checkpoint
 is not yet a direct input to the current regression-data preparation command.
 It can aggregate multiple personas and model configurations, writes `pick1`

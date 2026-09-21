@@ -80,6 +80,7 @@ def test_job_groups_preserve_first_seen_group_and_request_order() -> None:
         _request("request-3", system_prompt="instruction-b", persona="persona-b"),
         _request("request-4"),
         _request("request-5", system_prompt=""),
+        _request("request-6", system_prompt="instruction-a", persona="persona-a"),
     ]
 
     groups = group_requests_by_compatibility(requests, _models())
@@ -87,12 +88,19 @@ def test_job_groups_preserve_first_seen_group_and_request_order() -> None:
     assert [group.model_config.config_id for group in groups] == [
         "model-1",
         "model-2",
+        "model-1",
+        "model-1",
+        "model-1",
     ]
     assert [request.request_id for request in groups[0].requests] == [
         "request-1",
-        "request-3",
-        "request-4",
-        "request-5",
+        "request-6",
+    ]
+    assert [[request.request_id for request in group.requests] for group in groups[1:]] == [
+        ["request-2"],
+        ["request-3"],
+        ["request-4"],
+        ["request-5"],
     ]
     assert sum(len(group.requests) for group in groups) == len(requests)
 
