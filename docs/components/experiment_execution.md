@@ -292,8 +292,9 @@ A systemic batch failure, such as missing or duplicate request identities, unexp
 ## Output
 
 The output preserves every source scenario column without EDSL prefixes and adds one
-record per `ExperimentJobKey`. It is persisted as CSV and provides the input contract
-for regression analysis.
+record per `ExperimentJobKey`. It is persisted as CSV. This is the implemented
+experiment checkpoint and the intended upstream artifact for regression analysis, but
+it does not yet satisfy the current regression-preparation input contract directly.
 
 Each record contains:
 
@@ -315,3 +316,34 @@ Successful rows have all `N` picks and log probabilities and no error. Failed ro
 their identity and error information, leave result fields empty, and remain incomplete
 for resume purposes. The output does not persist provider raw responses or unstable EDSL
 bookkeeping such as scenario indices, agent indices, or generated agent names.
+
+### Regression Handoff Status
+
+Current [regression-data preparation](regression_analysis.md#1-regression-data-preparation)
+requires each configured CSV set to represent one persona, one model
+configuration, and one distinguishable run or batch before the researcher
+assigns its `audit_id`. Its raw schema requires `result_status`,
+`candidate_count`, `city`, `year`, durable `candidate_<i>_id` values,
+`candidate_<i>_pick`, `candidate_<i>_log_probability`, and any explicitly
+configured scalar candidate covariates.
+
+The implemented experiment checkpoint can contain multiple persona/model
+combinations, has no `result_status` or persisted `candidate_count`, names
+decisions `pick1` through `pickN` and `logprob1` through `logprobN`, and does
+not create durable candidate IDs or declare how caller-owned candidate
+covariates correspond to resume positions. Preserving source columns does not
+by itself establish that mapping. `experiment_id` identifies the logical
+experiment definition; whether it also supplies the distinguishable execution
+provenance required by an audit remains unresolved. No production adapter or
+writer transformation currently bridges these differences.
+
+A later integration change must validate the researcher-created audit
+partition and define unsuccessful-row/status translation, candidate identity
+and slot mapping, candidate count, ranking fields, and run provenance. It must
+not add automatic persona/model partitioning. It may map explicitly supplied
+researcher covariates, but must not infer race, experience, interactions, or
+other substantive indicators from resumes or candidate position. The
+[regression integration handoff](../integration/regression_analysis.md)
+verifies the downstream workflow with audit-partitioned public fixtures and
+records only a compatibility smoke test for the legacy private sample; that
+temporary mapping is not a production adapter.

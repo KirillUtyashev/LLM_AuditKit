@@ -1,0 +1,11 @@
+# Run only after inspecting audit B's regression-ready CSV.
+data_path: ../../../outputs/regression/end_to_end/audit_b/regression_ready.csv
+dataset_id: synthetic_historian_model_b_full
+model_id: black_high_by_city_year_fe
+outcome_variable: pick_threshold
+explanatory_variables: [black, high]
+control_variables: []
+fixed_effects: [scenario_id]
+cluster_variables: [scenario_id]
+estimation_group_variables: [city, year]
+output_directory: ../../../outputs/regression/end_to_end/audit_b

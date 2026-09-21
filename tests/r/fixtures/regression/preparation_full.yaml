@@ -1,0 +1,15 @@
+input_paths:
+  - raw_jobs_a.csv
+  - raw_jobs_b.csv
+output_path: output/regression_ready.csv
+audit_id: fixture_audit
+top_share: 0.2
+probability_threshold: 0.95
+ranking_group_variables:
+  - city
+  - year
+  - model_config_id
+scenario_covariates:
+  - job_category
+candidate_covariates:
+  - black

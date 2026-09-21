@@ -109,6 +109,31 @@ classDiagram
     class ExperimentCommand {
         +main(config_path: Path) int
     }
+    class ExperimentOutputCSV {
+        <<implemented checkpoint>>
+        +row_grain: ExperimentJobKey
+        +experiment_id: str
+        +scenario_id: str
+        +persona_id: str
+        +model_config_id: str
+        +request_id: str
+        +pick1 through pickN
+        +logprob1 through logprobN
+        +error fields
+    }
+    class RegressionPreparationInput {
+        <<required downstream CSV>>
+        +result_status: str
+        +candidate_count: int
+        +durable candidate IDs
+        +candidate_i_pick and probability
+        +configured scalar covariates
+    }
+    note for RegressionPreparationInput "Researcher supplies one audit scope; this is not a CSV column."
+    class RegressionDataPreparation {
+        <<R>>
+        +role: downstream_preparation_consumer
+    }
     ExperimentRunConfig --> ExperimentConfig
     ExperimentCommand --> ExperimentRunConfig : loads YAML
     ExperimentCommand --> DataFrame : loads CSV once
@@ -135,3 +160,6 @@ classDiagram
     ExperimentResultStore --> ExperimentJobKey : indexes by
     ExperimentResultStore --> ExperimentOutputRecord : stores
     ExperimentResultStore --> DataFrame : updates and persists
+    ExperimentResultStore --> ExperimentOutputCSV : writes atomically
+    ExperimentOutputCSV ..> RegressionPreparationInput : production mapping unresolved
+    RegressionPreparationInput ..> RegressionDataPreparation : consumes
