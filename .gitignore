@@ -41,5 +41,8 @@ htmlcov/
 # Local checkouts of private reference repositories
 .references/
 
+# Generated research datasets, regression results, and figures
+/outputs/
+
 # Generated example outputs
 /examples/output/

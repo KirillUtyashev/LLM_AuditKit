@@ -3,33 +3,151 @@ config:
   theme: mc
 ---
 classDiagram
+    class PreparationConfig {
+        <<YAML>>
+        +input_paths: List~Path~
+        +output_path: Path
+        +audit_id: str
+        +top_share: float = 0.08
+        +probability_threshold: float = 0.99
+        +ranking_group_variables: List~str~
+        +scenario_covariates: List~str~
+        +candidate_covariates: List~str~
+    }
     class RegressionConfig {
         <<YAML>>
         +data_path: Path
+        +dataset_id: str
+        +model_id: str
         +outcome_variable: str
-        +explanatory_variable: str
+        +explanatory_variables: List~str~
         +control_variables: List~str~
         +fixed_effects: List~str~
         +cluster_variables: List~str~
-        +years: List~int~
+        +estimation_group_variables: List~str~ = []
         +output_directory: Path
     }
-    class RegressionRunner {
-        <<R>>
-        +run(config: RegressionConfig) void
+    class RegressionPlotConfig {
+        <<R object>>
+        +term: str
+        +outcome_variable: Optional~str~
+        +confidence_level: float
+        +period_variable: str
+        +series_variable: Optional~str~
+        +panel_variable: Optional~str~
+        +outcome_by_panel: Map
+        +period_order: List
+        +series_order: List
+        +panel_order: List
+        +panel_labels: Map
+        +x_label: str
+        +y_label: str
+        +y_limits: List~float~
+        +y_break_interval: float
+        +significance_level: float
+        +panel_columns: int
+    }
+    class RenderConfig {
+        <<YAML / R object>>
+        +results_paths: List~Path~
+        +output_path: Path
+        +width: float
+        +height: float
+        +dpi: int
+    }
+    class PreparationCLI {
+        <<Rscript>>
+        +run(config_path: Path) void
     }
     class RegressionCLI {
         <<Rscript>>
         +run(config_path: Path) void
     }
-    class ExperimentResults {
+    class RenderCLI {
+        <<Rscript>>
+        +run(config_path: Path) void
+    }
+    class InteractiveLoader {
+        <<R source>>
+        +activate_locked_environment() void
+        +load_regression_api() void
+    }
+    class RegressionDataPreparation {
+        <<R>>
+        +prepare(config: PreparationConfig) RegressionReadyData
+    }
+    class FixedEffectsEstimator {
+        <<R>>
+        +estimate(config: RegressionConfig) RegressionResults
+        +write(results: RegressionResults, path: Path) CSV
+    }
+    class PaperStyleRenderer {
+        <<R>>
+        +renderer_packages: ggplot2_patchwork
+        +plot(results: RegressionResults, config: RegressionPlotConfig) PaperPlot
+        +render(config: RenderConfig) PaperPlot
+    }
+    class RawExperimentResults {
         <<CSV>>
+        +row_grain: experiment_job_key
+        +configured_input_scope: one_audit
+        +persona_id: str
+        +model_config_id: str
+        +candidate_fields: stable
+        +probability_semantics: emitted_answer
     }
-    class RegressionOutputs {
-        +regression_results: CSV
-        +plots: List~PNG~
+    class RegressionReadyData {
+        <<CSV>>
+        +row_grain: candidate
+        +audit_id: str
+        +persona_id: str = one_per_audit
+        +model_config_id: str = one_per_audit
+        +pick: int
+        +pick_top: int
+        +pick_threshold: int
+        +preparation_settings: repeated
     }
-    RegressionCLI --> RegressionRunner : invokes
-    RegressionRunner --> RegressionConfig
-    RegressionRunner --> ExperimentResults : reads
-    RegressionRunner --> RegressionOutputs : produces
+    class RegressionResults {
+        <<R data.frame / CSV>>
+        +row_grain: coefficient_interval
+        +audit_id: str
+        +dataset_id: str
+        +model_id: str
+        +estimator: fixest_feols
+        +inference_contract_id: str
+        +outcome_variable: str
+        +term: str
+        +estimate: float
+        +std_error: float
+        +n_input: int
+        +n_complete: int
+        +n_used: int
+        +n_missing_dropped: int
+        +n_estimator_dropped: int
+        +confidence_level: float
+        +conf_low: float
+        +conf_high: float
+        +preparation_provenance: repeated
+    }
+    class PaperPlot {
+        <<patchwork / PNG>>
+    }
+
+    PreparationCLI --> PreparationConfig : loads
+    PreparationCLI --> RegressionDataPreparation : invokes
+    RegressionDataPreparation --> RawExperimentResults : reads
+    RegressionDataPreparation --> RegressionReadyData : writes
+
+    RegressionCLI --> RegressionConfig : loads
+    RegressionCLI --> FixedEffectsEstimator : invokes
+    FixedEffectsEstimator --> RegressionReadyData : reads exactly one
+    FixedEffectsEstimator --> RegressionResults : returns; optionally writes
+
+    RegressionPlotConfig <|-- RenderConfig
+    RenderCLI --> RenderConfig : loads
+    RenderCLI --> PaperStyleRenderer : invokes
+    InteractiveLoader --> FixedEffectsEstimator : exposes
+    InteractiveLoader --> PaperStyleRenderer : exposes
+    PaperStyleRenderer --> RegressionPlotConfig : uses
+    PaperStyleRenderer --> RegressionResults : validates one or more
+    PaperStyleRenderer --> PaperPlot : returns or writes
