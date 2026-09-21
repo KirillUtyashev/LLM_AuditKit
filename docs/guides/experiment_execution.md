@@ -1,9 +1,10 @@
 # Running Hiring Experiments
 
 This guide shows how to turn a populated hiring-scenario CSV and an experiment YAML
-file into durable model decisions. The command loads the CSV into a DataFrame once,
-constructs prompts, uses shared inference, parses applicant decisions and token log
-probabilities, and checkpoints a canonical output CSV that can be resumed safely.
+file into durable model decisions. The command uses the shared dataset-loading stage
+to load and identify the CSV once, constructs prompts, uses shared inference, parses
+applicant decisions and token log probabilities, and checkpoints a canonical output
+CSV that can be resumed safely.
 
 For the internal contract and design rationale, see the
 [experiment execution component documentation](../components/experiment_execution.md).
@@ -39,12 +40,13 @@ job_posting,resume_1,resume_2,city
 Hire a careful research assistant.,Candidate A has research experience.,Candidate B has retail experience.,Toronto
 ```
 
-The command-line entrypoint currently accepts CSV input. AuditKit derives each
-`scenario_id` from the complete source row and stores it in experiment output. Reordering
-columns or changing the DataFrame index does not change the ID, while changing any
-source value does. Exact duplicate rows must include an ordinary stable replicate
-column if they should run as distinct scenarios. A canonical `scenario_id` column from
-an upstream stage is optional and, when present, is preserved as strings.
+The command-line entrypoint currently accepts CSV input. The shared dataset loader
+derives each `scenario_id` from the complete normalized source row before experiment
+execution, and the experiment stores it in output. Reordering columns or changing the
+DataFrame index does not change the ID, while changing any source value does. Exact
+duplicate rows must include an ordinary stable replicate column if they should run as
+distinct scenarios. A canonical `scenario_id` column from an upstream stage is
+optional and, when present, is preserved as strings.
 
 ## Create the Experiment YAML
 

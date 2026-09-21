@@ -4,11 +4,12 @@ config:
 ---
 classDiagram
     class DatasetSource {
-        <<interface>>
+        <<protocol>>
         +load() DataFrame
     }
     class LocalDatasetSource {
         -path: Path
+        -file_format: Optional~str~
         +load() DataFrame
     }
     class RemoteDatasetSource {
@@ -18,13 +19,28 @@ classDiagram
     class RemoteConfig {
         +backend: str
         +url: str
-        +credential_ref: str
+        +file_format: Optional~str~
+        +credential_env: Optional~str~
+        +timeout_seconds: float
+        +max_bytes: int
+    }
+    class DatasetSchema {
+        +required_columns: List~str~
+        +nonempty_columns: List~str~
+        +optional_columns: Dict~str, str~
+    }
+    class DatasetLoader {
+        -schema: DatasetSchema
+        -validator: DatasetValidator
+        +load(source: DatasetSource) DataFrame
     }
     class DatasetValidator {
-        +validate(df: DataFrame) bool
+        -schema: DatasetSchema
+        +validate(dataset: DataFrame) void
     }
-    class TemplateGenerationValidator {
-        +validate(df: DataFrame) List~str~
+    class ScenarioIdentity {
+        +build_scenario_id(row: Mapping) str
+        +derive_scenario_ids(dataset: DataFrame) List~str~
     }
     class DataFrame {
         <<pandas>>
@@ -32,6 +48,10 @@ classDiagram
     DatasetSource <|.. LocalDatasetSource
     DatasetSource <|.. RemoteDatasetSource
     RemoteDatasetSource --> RemoteConfig
-    DatasetSource --> DataFrame : loads
-    DatasetValidator --> DataFrame : validates core schema
-    TemplateGenerationValidator --> DataFrame : validates optional fields
+    LocalDatasetSource --> DataFrame : reads raw table
+    RemoteDatasetSource --> DataFrame : reads raw table
+    DatasetLoader --> DatasetSource : loads
+    DatasetLoader --> ScenarioIdentity : establishes IDs
+    DatasetLoader --> DatasetValidator : validates
+    DatasetValidator --> DatasetSchema
+    DatasetLoader --> DataFrame : returns normalized

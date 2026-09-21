@@ -27,7 +27,10 @@ The package uses `pandas.DataFrame` as the common tabular representation passed 
 Python pipeline stages. Dataset loading is the single path-to-DataFrame boundary;
 downstream stage APIs accept DataFrames. A user-facing pipeline run configuration may
 contain source and destination paths so a composition entrypoint can load once and then
-invoke those DataFrame APIs.
+invoke those DataFrame APIs. Dataset loading supports local CSV, TSV, record-oriented
+JSON, and JSON Lines files, deterministic same-schema directories, and bounded HTTP(S)
+downloads. It normalizes scalar cells, validates a caller-configured schema, and
+preserves or derives canonical `scenario_id` values before downstream processing.
 
 ## Shared Inference Layer
 

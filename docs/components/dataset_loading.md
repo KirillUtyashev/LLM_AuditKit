@@ -4,71 +4,149 @@
 
 ## Overview
 
-The dataset loading stage loads local or remote tabular data into a common `pandas.DataFrame` representation.
+Dataset loading is the single path-or-URL-to-DataFrame boundary in the Python
+pipeline. It reads a configured local or remote tabular source, normalizes it into a
+common `pandas.DataFrame`, validates the caller's minimum schema, and establishes
+stable `scenario_id` values before handing the DataFrame to downstream stages.
 
-## Input Sources
+Template generation and experiment execution accept DataFrames and do not implement
+their own source readers. A command-line or composition layer may construct a dataset
+source and invoke `DatasetLoader`; downstream domain APIs remain path-independent.
 
-The package supports two source types:
+## Public Model
 
-- `LocalDatasetSource`
-- `RemoteDatasetSource`
+The stage consists of:
 
-### Local Sources
+- `DatasetSource`, a protocol whose `load()` method returns one raw DataFrame;
+- `LocalDatasetSource`, for one local file or a local directory;
+- `RemoteDatasetSource`, for a configured HTTP(S) resource;
+- `DatasetSchema`, which defines required, nonempty, and optional fields;
+- `DatasetValidator`, which applies that schema to a normalized DataFrame; and
+- `DatasetLoader`, which coordinates source loading, normalization, stable identity,
+  and validation.
 
-Users provide a path to either:
+The standard entry point is:
 
-- a supported file; or
-- a directory containing supported files.
+```python
+dataset = DatasetLoader(schema).load(source)
+```
 
-For a single file, the format is inferred from the extension.
+Custom sources may implement `DatasetSource`. `DatasetLoader` still performs the same
+normalization, identity, and validation steps for their returned DataFrames.
 
-For a directory, all supported files are loaded and concatenated into one DataFrame.
+## Validation Schema
 
-### Remote Sources
+`DatasetSchema` contains:
 
-Remote datasets are configured through `RemoteConfig`, which specifies:
+- `required_columns`: ordered source columns that must exist;
+- `nonempty_columns`: required columns whose value in every row must be a nonempty
+  string; and
+- `optional_columns`: a mapping from an optional column name to a concise explanation
+  of how its absence changes downstream behavior.
 
-- backend;
-- URL or remote location;
-- the environment variable or secret reference used for authentication.
+`required_columns` is configurable rather than fixed to a repository-wide column such
+as `Text`. For example, one source may call the job-posting column `Text`, while
+another may use `job_posting`. A composition layer can construct the loading schema
+from the domain-stage schema it intends to call.
 
-## Output
+Schema column names must be unique nonempty strings. Nonempty columns must also be
+required, required and optional columns cannot overlap, and `scenario_id` is reserved
+for the loader's identity contract.
 
-All dataset sources return a `pandas.DataFrame`.
+Missing required columns and empty values in configured nonempty columns raise
+`DatasetValidationError`. Each missing optional column emits one
+`MissingOptionalColumnWarning` containing both its name and configured impact. Optional
+warnings do not stop loading. Additional source columns are preserved.
 
-Downstream pipeline stages do not need to know where the dataset originated.
+## Local Sources
 
-Resumable downstream inference stages must establish stable row identity without using
-a DataFrame index. An identifier supplied by the source can be preserved. When an
-experiment-execution input has no canonical `scenario_id`, that stage derives one from
-the complete source row and persists it in experiment output and checkpoints. Other
-stages define their identity boundary in their own component contracts.
+`LocalDatasetSource` accepts a file or directory path and an optional explicit
+`file_format`. When no format is supplied, the source infers it from the lowercase
+file extension.
 
-## Core Validation
+The supported formats are:
 
-`DatasetValidator` checks the minimum schema required by the package.
+| Format | Extensions | Input shape |
+| --- | --- | --- |
+| CSV | `.csv` | UTF-8 header and records |
+| TSV | `.tsv` | UTF-8 tab-separated header and records |
+| JSON | `.json` | an array of record objects |
+| JSON Lines | `.jsonl`, `.ndjson` | one record object per nonempty line |
 
-Currently, the dataset must contain:
+An explicit format is useful when a single remote resource or local file has no
+meaningful extension. Compressed files, spreadsheets, and Parquet are not supported by
+the initial implementation because they require additional format and dependency
+contracts.
 
-- `Text`
+For a directory, the source loads only immediate files with supported extensions,
+ordered deterministically by filename. Unsupported entries and subdirectories are
+ignored. At least one supported file must exist. Every loaded file must contain the
+same column set; files whose columns are merely ordered differently are reordered to
+the first file before concatenation. Source row order is preserved within each file.
+An explicit `file_format` is not accepted for directory sources because each file is
+inferred independently.
 
-A missing required field prevents the dataset from entering the pipeline.
+## Remote Sources
 
-## Pipeline-Specific Validation
+`RemoteConfig` contains:
 
-Later stages may check for additional optional fields.
+- `backend`, initially the single value `http`;
+- `url`, whose scheme must be `http` or `https`;
+- optional `file_format`, otherwise inferred from the URL path;
+- optional `credential_env`, naming an environment variable that contains a bearer
+  token;
+- positive `timeout_seconds`; and
+- positive `max_bytes`, which bounds the response read into memory.
 
-For example, template generation may use:
+`RemoteDatasetSource` uses the standard-library HTTP client, follows its normal
+redirect behavior, and parses the downloaded bytes with the same format readers as a
+local file. When `credential_env` is configured, the source reads it at request time
+and sends `Authorization: Bearer <value>`. Configuration stores only the environment
+variable name. Missing credentials fail before the request, and credential values are
+never included in errors.
 
-- `Year`
-- `Month`
-- `Day`
-- `Category`
+Responses larger than `max_bytes`, unsupported URL schemes, download failures, and
+unrecognized formats raise `DatasetSourceError`. Other remote backends can be added
+behind the source protocol without changing `DatasetLoader` or downstream stages.
 
-Missing optional fields should produce a warning describing how the behavior of that stage will change.
+## Normalized DataFrame Contract
 
-## Design Principles
+After a source returns, `DatasetLoader`:
 
-- Loading and validation are separate responsibilities.
-- Source implementations normalize data into the same DataFrame format.
-- Optional fields are checked only by pipeline stages that use them.
+1. requires a DataFrame with unique string column names;
+2. rejects nested container values because downstream stages require scalar cells;
+3. converts every nonmissing scalar cell to pandas' string dtype;
+4. preserves native missing values as `pd.NA` and preserves explicit CSV/TSV empty
+   strings as empty strings;
+5. resets the DataFrame index, which is never durable identity;
+6. preserves and validates a supplied `scenario_id`, or appends a derived one; and
+7. runs `DatasetValidator` against the normalized result.
+
+The returned DataFrame contains the source columns in their source order plus a
+canonical `scenario_id` when one was not already present. Loading never mutates a
+DataFrame returned by a custom source.
+
+## Stable Scenario Identity
+
+If the source contains `scenario_id`, normalized values must be unique nonempty
+strings and are preserved. Otherwise the loader hashes the complete normalized source
+row as sorted column/value pairs and prefixes the digest with `scenario:`. Column order
+and the original DataFrame index therefore do not affect identity.
+
+Exact duplicate source rows derive the same ID and are rejected. Callers that intend
+to retain repeated scenarios must include an ordinary stable replicate column or
+provide unique canonical IDs. Source file position, directory enumeration position,
+and DataFrame row number are never used as durable identity.
+
+The identity functions live in the data package and are shared with downstream stages
+so direct DataFrame use and loader-produced DataFrames follow the same algorithm.
+
+## Failure Contract
+
+Configuration, source, normalization, identity, and schema failures use distinct
+dataset-loading exception types. Reader and transport exceptions are wrapped with the
+source operation and exception type while retaining the original exception as the
+cause. Remote credentials and response contents are not copied into error messages.
+
+Loading and validation perform no LLM calls, retries, or checkpoint writes. A failure
+returns no partial DataFrame.
