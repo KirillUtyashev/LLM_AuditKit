@@ -14,8 +14,9 @@ Each dataset row represents one complete scenario containing:
 
 All Python pipeline stages exchange `pandas.DataFrame` objects. `ExperimentRunner`
 therefore accepts a DataFrame rather than a path. The user-facing command is a
-composition boundary: it reads dataset and output paths from YAML, loads the CSV once,
-then constructs the runner and result store.
+composition boundary: it reads dataset and output paths from YAML, uses the shared
+dataset-loading stage to load and identify the CSV once, then constructs the runner and
+result store.
 
 ## Configuration
 

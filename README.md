@@ -4,20 +4,19 @@ LLM AuditKit audits large language model behavior in hiring experiments. The
 main pipeline is a Python package, while statistical analysis is implemented
 as reproducible R entry points alongside it.
 
-The shared inference package is implemented with validated deterministic batching,
-synchronous and asynchronous execution, prompt preview, normalized outcomes, and an
-Expected Parrot EDSL adapter. Experiment execution currently includes its configuration,
-DataFrame schema validation, deterministic job/request planning and preview, normalized
-outcome parsing, synchronous and asynchronous execution, and atomic CSV
-checkpoint/resume storage. User-facing experiment runs are defined in strict YAML and
-launched through one command. The other domain pipeline stages remain documented for
-incremental implementation.
+Dataset loading is implemented for normalized local and HTTP(S) tabular sources with
+configurable validation and stable scenario IDs. The shared inference package provides
+validated deterministic batching, synchronous and asynchronous execution, prompt
+preview, normalized outcomes, and an Expected Parrot EDSL adapter. Experiment execution
+includes deterministic planning, parsing, execution, and atomic CSV checkpoint/resume
+storage. The other domain pipeline stages remain documented for incremental
+implementation.
 
 ## Quickstart
 
-The current user-facing functionality includes shared inference and experiment
-execution. The following commands install the package from this repository and make
-one real OpenAI request:
+The current user-facing functionality includes dataset loading, shared inference, and
+experiment execution. The following commands install the package from this repository
+and make one real OpenAI request:
 
 ```bash
 python -m venv .venv
@@ -50,6 +49,10 @@ Read [Using Shared Inference](docs/guides/shared_inference.md) for configuration
 request identity, prompt preview, batching, sync and async execution, results,
 failures, and checkpoint integration.
 
+Read [Loading Pipeline Datasets](docs/guides/dataset_loading.md) for local and remote
+sources, supported formats, configurable validation, optional-field warnings, and
+stable scenario IDs.
+
 For the higher-level YAML workflow, read
 [Running Hiring Experiments](docs/guides/experiment_execution.md). The guide covers
 dataset and output paths, schema mapping, explicit question and persona templates,
@@ -68,7 +71,8 @@ follow-up integration work.
 ## Documentation
 
 The [package architecture](docs/architecture.md) describes the planned hiring pipeline.
-The [shared inference component contract](docs/components/inference.md) documents its
+The [dataset loading component contract](docs/components/dataset_loading.md) and
+[shared inference component contract](docs/components/inference.md) document their
 detailed behavior and boundaries. The
 [experiment execution component contract](docs/components/experiment_execution.md)
 documents the implemented hiring-experiment stage.
