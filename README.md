@@ -10,23 +10,38 @@ Expected Parrot EDSL adapter. Experiment execution currently includes its config
 DataFrame schema validation, deterministic job/request planning and preview, normalized
 outcome parsing, synchronous and asynchronous execution, and atomic CSV
 checkpoint/resume storage. User-facing experiment runs are defined in strict YAML and
-launched through one command. The other domain pipeline stages remain documented for
-incremental implementation.
+launched through one command. [Template population](docs/components/template_population.md)
+fills named placeholders with researcher-supplied values and passes its
+result directly to experiment execution. The
+[handoff guide](docs/guides/template_population.md#pass-the-populated-table-to-experiment-execution)
+shows how to keep each applicant aligned with the displayed resume and the
+resulting decision, and how the adapter preserves
+[literal text and reviewer pairings](docs/guides/template_population.md#native-edsl-literal-text-and-interview-counts)
+in native execution.
+Dataset loading and template generation remain documented for incremental implementation.
 
 ## Quickstart
 
-The current user-facing functionality includes shared inference and experiment
-execution. The following commands install the package from this repository and make
-one real OpenAI request:
+Install the package from the repository root:
 
 ```bash
 python -m venv .venv
 source .venv/bin/activate
 python -m pip install -e .
-cp -n .env.example .env
 ```
 
-Add your key to `.env`:
+To inspect applicant order without credentials or a model call, run the
+[population preview](examples/template_population/preview.py):
+
+```bash
+python examples/template_population/preview.py
+```
+
+It fills two synthetic job scenarios and prints their candidate IDs,
+names, and experiment questions in presentation order.
+
+To make a real OpenAI request using the shared-inference example, copy
+`.env.example` to `.env` and add your key:
 
 ```dotenv
 OPENAI_API_KEY=your-key-here

@@ -17,6 +17,7 @@ from llm_auditkit.inference import (
     InferenceOrchestrator,
 )
 
+from ._csv import read_text_csv
 from .configuration import load_experiment_run_config
 from .exceptions import (
     ExperimentConfigurationError,
@@ -95,11 +96,7 @@ def _load_experiment_dataset(run_config: ExperimentRunConfig) -> pd.DataFrame:
             f"experiment dataset file does not exist: {dataset_path}"
         )
     try:
-        return pd.read_csv(
-            dataset_path,
-            dtype="string",
-            keep_default_na=False,
-        )
+        return read_text_csv(dataset_path)
     except Exception as error:
         raise ExperimentDatasetError(
             f"could not load experiment CSV: {type(error).__name__}: {error}"

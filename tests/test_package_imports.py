@@ -16,6 +16,7 @@ PACKAGE_MODULES = (
     "llm_auditkit.results",
     "llm_auditkit.scenarios",
     "llm_auditkit.templates",
+    "llm_auditkit.templates.population",
 )
 
 

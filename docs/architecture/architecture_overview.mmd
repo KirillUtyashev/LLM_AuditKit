@@ -6,7 +6,9 @@ flowchart LR
     A[Dataset Loading] --> B[Template Generation]
     B --> C[Template Population]
     C --> D[Experiment Execution]
-    D --> E[Regression Analysis]
+    P["Researcher populates templates in EDSL"] -->|Finished text in a DataFrame| D
+    C -->|Populated DataFrame| R["Researcher runs an EDSL experiment"]
+    D -.->|CSV mapping pending| E[Regression Analysis]
     B -.-> I[Shared Inference Batching]
     D -.-> I
     I --> F[Expected Parrot Sync or Async Jobs<br/>Parallelism, Rate Limits, Caching, Retries]

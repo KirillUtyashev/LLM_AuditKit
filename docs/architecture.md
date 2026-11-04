@@ -9,7 +9,9 @@ LLM AuditKit is organized around six primary components: five sequential pipelin
 5. [Experiment execution](components/experiment_execution.md)
 6. [Regression analysis](components/regression_analysis.md)
 
-Each component has a separate detailed Mermaid diagram under [`docs/architecture/`](architecture/). The five pipeline stages run in this sequence:
+The [overview diagram](architecture/architecture_overview.mmd) shows where
+researchers can enter or leave the workflow. The five stages have this intended
+sequence when used together:
 
 ```text
 Dataset Loading
@@ -29,6 +31,14 @@ downstream stage APIs accept DataFrames. A user-facing pipeline run configuratio
 contain source and destination paths so a composition entrypoint can load once and then
 invoke those DataFrame APIs.
 
+Template population fills researcher-supplied values and keeps one row per
+scenario. Experiment execution consumes that DataFrame directly. Configure
+the resume columns and the question's applicant labels in the same numeric
+order to keep each decision with its intended candidate. Researchers can
+also supply a DataFrame they populated in EDSL to the experiment runner, or
+use AuditKit's population output in their own EDSL experiment. See the
+[population-to-experiment walkthrough](guides/template_population.md#pass-the-populated-table-to-experiment-execution).
+
 ## Shared Inference Layer
 
 [Template generation](components/template_generation.md) and [experiment execution](components/experiment_execution.md) both use the shared [inference layer](components/inference.md) for LLM calls:
@@ -39,7 +49,7 @@ Template Generation ─┐
 Experiment Execution ┘
 ```
 
-The inference layer owns generic model and response-format configuration, deterministic request batching, compatible EDSL job grouping through its adapter, and normalized batch results including structured content and token log probabilities when requested. A logical batch is grouped by model configuration and response format. Within each EDSL job, the adapter represents every request as one explicitly paired agent, scenario, and interview. The scenario retains the literal prompt and request ID while the agent supplies the persona and system instruction. EDSL owns parallel interview execution, provider rate limiting, caching, and retries within each submitted job. Pipeline stages own domain-specific configured prompt templates, rendering, response parsing, checkpointing, and output storage.
+The inference layer owns model and response-format configuration, deterministic request batching, and normalized results, including structured content and token log probabilities when requested. Within each logical batch, the adapter groups requests by model configuration, response format, persona, and system instruction. Each EDSL job uses one model and one shared agent. Each request contributes a scenario with its prompt and request ID, so EDSL runs one interview per request. EDSL manages parallel execution, provider rate limiting, caching, and retries within each job. Pipeline stages own domain-specific prompt templates, rendering, response parsing, checkpointing, and output storage.
 
 Batches are submitted sequentially. A calling stage validates and checkpoints the current completed batch before requesting the next one, which bounds uncheckpointed work and prevents a systemic prompt or integration error from consuming tokens across the remaining dataset. Experiment execution applies all outcomes from a completed logical batch and performs one atomic CSV replacement before advancing when `save_after_each_batch` is enabled.
 

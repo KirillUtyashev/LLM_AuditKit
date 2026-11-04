@@ -124,10 +124,18 @@ Use durable request IDs derived from domain identifiers. Do not use a DataFrame 
 number, list position, or random value if results will later be resumed. Request IDs
 must be unique within a run.
 
-`system_prompt` maps to EDSL's agent instruction, while `persona` maps to its standard
-`persona` trait. EDSL combines them into the effective rendered system prompt. Requests
-can use different models, instructions, and personas; the adapter represents each
-request as one agent inside a compatible EDSL job and preserves input and output order.
+`system_prompt` maps to EDSL's agent instruction, while `persona` supplies the
+persona component. EDSL combines them into the effective rendered system prompt. Within
+a logical batch, requests that share a model configuration, response format, persona,
+and system instruction run together in one native EDSL job. That job uses one model
+and one agent, with a separate scenario for each request. If two requests specify
+different reviewers, the adapter submits separate jobs and returns their results by
+request ID in the original order. Your code still receives the whole logical batch.
+
+Prompt and persona text may contain template syntax meant to be shown to
+the model. Supply that text as written. See the
+[local renderer and whole-job offload boundary](../components/inference.md#edsl-boundary)
+for the supported EDSL versions and hosting behavior.
 
 ## Use Metadata to Handle Results
 

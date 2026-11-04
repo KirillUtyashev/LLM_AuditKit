@@ -182,6 +182,22 @@ def test_command_csv_loader_preserves_all_literal_strings(tmp_path: Path) -> Non
     }
 
 
+def test_command_csv_loader_preserves_long_multiline_resume_with_nul(tmp_path: Path) -> None:
+    run_config = _run_config(tmp_path, "sync")
+    resume = "Work samples\r\n" + ("x" * 150_000) + '\0 {{notes}}\r"quoted", café\n'
+    table = pd.DataFrame({
+        "scenario_id": ["001"],
+        "job_posting": ["Hiring"],
+        "resume_1": [resume],
+        "note\0id": ["0002"],
+    }, dtype="string")
+    table.to_csv(run_config.dataset_path, index=False, lineterminator="\r\n")
+
+    dataset = cli._load_experiment_dataset(run_config)
+
+    pd.testing.assert_frame_equal(dataset, table)
+
+
 def test_command_csv_loader_does_not_require_scenario_ids(tmp_path: Path) -> None:
     run_config = _run_config(tmp_path, "sync")
     run_config.dataset_path.write_text(
