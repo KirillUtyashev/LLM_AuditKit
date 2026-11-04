@@ -235,6 +235,67 @@ def test_checkpoint_resume_preserves_literal_source_and_configuration_strings(
     assert resumed.loc[0, "model"] == "00011"
 
 
+def test_checkpoint_round_trips_literal_prompts_and_verifies_text_after_nul(tmp_path: Path) -> None:
+    dataset = _dataset(scenario_ids=["id\0one", "id\0two"])
+    text = '"Skills", π\rline\r\n<AuditKit-NUL>\0<AuditKit-NUL_>' + "a" * 140_000 + "\n"
+    dataset.loc[0, "resume_1"] = text
+    dataset.loc[0, "resume_2"] = "one\rtwo"
+    dataset["source\0metadata"] = ["first\0suffix", "second"]
+    config = _config()
+    store = ExperimentResultStore(tmp_path / "results.csv")
+    key = build_experiment_job_keys(dataset, config)[0]
+    record = _record(key)
+    record.user_prompt = "Applicant 1: " + text
+    store.save_batch(store.initialize(dataset, config), dataset, config, [record])
+
+    restored = ExperimentResultStore(store.output_path).initialize(dataset, config)
+    assert store.completed_keys(restored, dataset, config) == {key}
+    assert restored.loc[0, "resume_1"] == text
+    assert restored.loc[0, "resume_2"] == "one\rtwo"
+    assert restored.loc[0, "user_prompt"] == record.user_prompt
+    assert restored.loc[0, "source\0metadata"] == "first\0suffix"
+
+    dataset.loc[0, "source\0metadata"] = "first\0changed"
+    with pytest.raises(ExperimentResultStoreError, match="source values"):
+        store.initialize(dataset, config)
+
+
+def test_checkpoint_reads_existing_lf_delimited_csv(tmp_path: Path) -> None:
+    dataset = _dataset()
+    config = _config()
+    store = ExperimentResultStore(tmp_path / "results.csv")
+    key = build_experiment_job_keys(dataset, config)[0]
+    record = _record(key)
+    record.user_prompt = 'Previous run\n"Applicant 1"\n'
+    old_output = store.apply_batch(store.initialize(dataset, config), dataset, config, [record])
+    old_output.to_csv(store.output_path, index=False, lineterminator="\n")
+
+    resumed = store.initialize(dataset, config)
+    assert resumed.loc[0, "user_prompt"] == record.user_prompt
+    assert store.completed_keys(resumed, dataset, config) == {key}
+
+
+def test_checkpoint_preserves_large_integers_and_missing_candidate_metadata(tmp_path: Path) -> None:
+    dataset = _dataset()
+    dataset["candidate_1_score"] = pd.Series([2**53 + 1, None], dtype=object)
+    dataset["candidate_2_score"] = pd.Series([pd.NA, 2**53 + 3], dtype="Int64")
+    dataset.index = [101, 101]
+    original = dataset.copy(deep=True)
+    config = _config()
+    store = ExperimentResultStore(tmp_path / "results.csv")
+    first, second = build_experiment_job_keys(dataset, config)
+    partial = store.save_batch(store.initialize(dataset, config), dataset, config, [_record(second)])
+    saved = store.save_batch(partial, dataset, config, [_record(first)])
+    restored = store.initialize(dataset, config)
+
+    for frame in (saved, restored):
+        pd.testing.assert_frame_equal(frame[dataset.columns], original.reset_index(drop=True))
+        assert pd.api.types.is_integer_dtype(frame["pick1"])
+        assert pd.api.types.is_float_dtype(frame["logprob1"])
+        assert store.completed_keys(frame, dataset, config) == {first, second}
+    pd.testing.assert_frame_equal(dataset, original)
+
+
 def test_checkpoint_rejects_changed_source_values(tmp_path: Path) -> None:
     dataset = _dataset()
     config = _config()
