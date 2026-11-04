@@ -1,0 +1,248 @@
+# Public, hand-authored synthetic examples. No private data or prompt bodies.
+# Only section structure is adapted; all replacement values are already chosen.
+reference_revision: c9391854ea55806ec252625cd2f48fb9edb156cd
+placeholder_columns:
+  name: display_name
+  address: mailing_address
+  school: school_name
+  city: school_city
+  graduation_year: graduation
+  signed_on: signature_date
+  university: university_name
+  study_start: study_start_year
+  job_start_month: first_start_month
+  job_start: first_start
+  job_end: first_end
+  student_start: student_start_date
+  student_end: student_end_date
+  second_start: second_start_date
+  second_end: second_end_date
+
+families:
+  application_1950_1960:
+    reference_locations:
+      - jobs_to_experiment/prompts.py:40-71
+    candidate_id: applicant-rowan
+    missing_required_label: signed_on
+    template: |
+      APPLICATION — STOCKROOM CLERK
+      Applicant: {{name}}
+      Contact: {{address}}
+      School: {{school}}, {{city}} (completed {{graduation_year}})
+      Employment: {{job_start}} to {{job_end}}
+      Duties: Filed paper orders.
+      Signature: {{name}}
+      Signed on: {{signed_on}}
+    values:
+      display_name: Alex Rowan
+      mailing_address: 10 Example Lane, Sampletown
+      school_name: Example Secondary School
+      school_city: Sampletown
+      graduation: '1954'
+      first_start: September 1954
+      first_end: June 1958
+      signature_date: 15 July 1958
+      quality_score: 7
+      form_family: application_1950_1960
+    expected_resume: |
+      APPLICATION — STOCKROOM CLERK
+      Applicant: Alex Rowan
+      Contact: 10 Example Lane, Sampletown
+      School: Example Secondary School, Sampletown (completed 1954)
+      Employment: September 1954 to June 1958
+      Duties: Filed paper orders.
+      Signature: Alex Rowan
+      Signed on: 15 July 1958
+
+  school_employment_1970_1980:
+    reference_locations:
+      - jobs_to_experiment/prompts.py:143-166
+      - jobs_to_experiment/prompts.py:230-253
+    candidate_id: applicant-vale
+    missing_required_label: graduation_year
+    template: |
+      PROFILE — INVENTORY ASSISTANT
+      {{name}}
+      Contact: {{address}}
+      Education: {{school}}, {{city}}; completed {{graduation_year}}
+      Work: {{job_start}} — {{job_end}}
+      - Counted supply boxes and updated cards.
+      Skills: Filing and stock checks.
+    values:
+      display_name: Jamie Vale
+      mailing_address: 20 Sample Road, Demoville
+      school_name: Sample High School
+      school_city: Demoville
+      graduation: '1972'
+      first_start: August 1972
+      first_end: October 1976
+      quality_score: 5
+      form_family: school_employment_1970_1980
+    expected_resume: |
+      PROFILE — INVENTORY ASSISTANT
+      Jamie Vale
+      Contact: 20 Sample Road, Demoville
+      Education: Sample High School, Demoville; completed 1972
+      Work: August 1972 — October 1976
+      - Counted supply boxes and updated cards.
+      Skills: Filing and stock checks.
+
+  university_one_job_1990:
+    reference_locations:
+      - jobs_to_experiment/prompts.py:316-342
+    candidate_id: applicant-maple
+    missing_required_label: graduation_year
+    template: |
+      RESUME — READING-ROOM ASSISTANT
+      Name: {{name}}
+      Contact: {{address}}
+      Education: {{university}}, {{study_start}}–{{graduation_year}}
+      Employment: {{job_start_month}} {{graduation_year}}–{{job_end}}
+      - Maintained the reading-room catalog.
+      Skills: Catalog checks and visitor support.
+    values:
+      display_name: Kai Maple
+      mailing_address: 30 Demo Street, Sampletown
+      university_name: Example University
+      study_start_year: '1986'
+      graduation: '1990'
+      first_start_month: May
+      first_end: November 1990
+      quality_score: 8
+      form_family: university_one_job_1990
+    expected_resume: |
+      RESUME — READING-ROOM ASSISTANT
+      Name: Kai Maple
+      Contact: 30 Demo Street, Sampletown
+      Education: Example University, 1986–1990
+      Employment: May 1990–November 1990
+      - Maintained the reading-room catalog.
+      Skills: Catalog checks and visitor support.
+
+  university_student_job_2000_2002:
+    reference_locations:
+      - jobs_to_experiment/prompts.py:391-421
+    candidate_id: applicant-brook
+    missing_required_label: student_end
+    template: |
+      RESUME — ARCHIVE ASSISTANT
+      Name: {{name}}
+      Contact: {{address}}
+      Education: {{university}}, {{study_start}}–{{graduation_year}}
+      After study: {{job_start}}–{{job_end}}
+      - Indexed the archive's loan register.
+      During study: {{student_start}}–{{student_end}}
+      - Shelved teaching materials in the campus library.
+      Skills: Register checks and labeling.
+    values:
+      display_name: Casey Brook
+      mailing_address: 40 Example Crescent, Demoville
+      university_name: Sample University
+      study_start_year: '1996'
+      graduation: '2000'
+      first_start: July 2000
+      first_end: May 2002
+      student_start_date: September 1998
+      student_end_date: April 2000
+      quality_score: 6
+      form_family: university_student_job_2000_2002
+    expected_resume: |
+      RESUME — ARCHIVE ASSISTANT
+      Name: Casey Brook
+      Contact: 40 Example Crescent, Demoville
+      Education: Sample University, 1996–2000
+      After study: July 2000–May 2002
+      - Indexed the archive's loan register.
+      During study: September 1998–April 2000
+      - Shelved teaching materials in the campus library.
+      Skills: Register checks and labeling.
+
+  university_two_jobs_internship_2010_2020:
+    reference_locations:
+      - jobs_to_experiment/prompts.py:470-509
+    candidate_id: applicant-reed
+    missing_required_label: student_start
+    template: |
+      RESUME — OPERATIONS ASSISTANT
+      Name: {{name}}
+      Contact: {{address}}
+      Education: {{university}}, {{study_start}}–{{graduation_year}}
+      Employment 1: {{job_start}}–{{job_end}}
+      - Checked supply orders at an example depot.
+      Employment 2: {{second_start}}–{{second_end}}
+      - Maintained a demonstration equipment register.
+      Internship during study: {{student_start}}–{{student_end}}
+      - Prepared labels for a teaching collection.
+      Skills: Order checks and record maintenance.
+    values:
+      display_name: Morgan Reed
+      mailing_address: 50 Sample Way, Sampletown
+      university_name: Demonstration University
+      study_start_year: '2012'
+      graduation: '2016'
+      first_start: August 2016
+      first_end: December 2018
+      second_start_date: February 2019
+      second_end_date: August 2020
+      student_start_date: May 2015
+      student_end_date: August 2015
+      quality_score: 9
+      form_family: university_two_jobs_internship_2010_2020
+    expected_resume: |
+      RESUME — OPERATIONS ASSISTANT
+      Name: Morgan Reed
+      Contact: 50 Sample Way, Sampletown
+      Education: Demonstration University, 2012–2016
+      Employment 1: August 2016–December 2018
+      - Checked supply orders at an example depot.
+      Employment 2: February 2019–August 2020
+      - Maintained a demonstration equipment register.
+      Internship during study: May 2015–August 2015
+      - Prepared labels for a teaching collection.
+      Skills: Order checks and record maintenance.
+
+# A mechanical mixed-form cohort, not a historical experiment design.
+# Each assignment is explicit; the test loader does not enumerate combinations.
+# Rowan intentionally recurs across jobs as the same supplied applicant.
+cohort:
+  template_columns:
+    primary: template_1
+    alternate: template_2
+    extended: template_3
+  jobs:
+    - scenario_id: library-set-a
+      job_id: job-library
+      Text: Help organize a fictional community library's records.
+      research_note: Synthetic mixed-form verification only.
+      assignments:
+        - template_id: primary
+          family: application_1950_1960
+          candidate_order: 3
+        - template_id: extended
+          family: university_two_jobs_internship_2010_2020
+          candidate_order: 2
+        - template_id: alternate
+          family: university_one_job_1990
+          candidate_order: 1
+      expected_families:
+        - university_one_job_1990
+        - university_two_jobs_internship_2010_2020
+        - application_1950_1960
+    - scenario_id: workshop-set-a
+      job_id: job-workshop
+      Text: Maintain records for a fictional teaching workshop.
+      research_note: All values and candidate assignments are researcher supplied.
+      assignments:
+        - template_id: alternate
+          family: university_student_job_2000_2002
+          candidate_order: 3
+        - template_id: primary
+          family: school_employment_1970_1980
+          candidate_order: 2
+        - template_id: extended
+          family: application_1950_1960
+          candidate_order: 1
+      expected_families:
+        - application_1950_1960
+        - school_employment_1970_1980
+        - university_student_job_2000_2002
