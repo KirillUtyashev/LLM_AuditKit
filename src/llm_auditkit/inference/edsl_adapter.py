@@ -6,6 +6,7 @@ import ast
 import json
 import logging
 import math
+from importlib.metadata import version
 from collections.abc import Mapping, Sequence
 
 from edsl import (
@@ -20,7 +21,6 @@ from edsl import (
     Survey,
 )
 from edsl.inference_services.registry import GLOBAL_REGISTRY
-from edsl.interviews import Interview
 from edsl.questions.question_dict import DictResponseValidator
 
 from .batching import AdapterJobGroup, group_requests_by_compatibility
@@ -38,8 +38,9 @@ from .models import (
 _QUESTION_NAME = "response"
 _REQUEST_ID_FIELD = "request_id"
 _PROMPT_FIELD = "llm_auditkit_prompt"
-_PAIRING_FIELD = "_llm_auditkit_pair_index"
 _QUESTION_PROMPT_TEMPLATE = f"{{{{ {_PROMPT_FIELD} }}}}"
+_JINJA_OPENERS = ("{{", "{%", "{#")
+_JINJA_DELIMITERS = _JINJA_OPENERS + ("}}", "%}", "#}")
 _LOGGER = logging.getLogger(__name__)
 _VALUE_TYPE_MAP = {
     "string": "str",
@@ -175,17 +176,32 @@ async def _close_edsl_async_clients(
 
 
 def _build_job(group: AdapterJobGroup) -> object:
-    question = _build_question(group)
+    # A native question can reparse any opening delimiter. Native agent traits
+    # also HTML-escape standalone closing delimiters when storing a persona.
+    literal = any(
+        any(token in request.prompt for token in _JINJA_OPENERS)
+        or any(token in (request.persona or "") for token in _JINJA_DELIMITERS)
+        for request in group.requests
+    )
+    job_class, agent_class = Jobs, Agent
+    question_text = _QUESTION_PROMPT_TEMPLATE
+    if literal:
+        if version("edsl") not in {"1.0.8", "1.0.9"}:
+            raise InferenceBatchError("Literal prompt rendering requires EDSL 1.0.8 or 1.0.9")
+        from ._edsl_literal import LiteralAgent, LiteralJobs
+
+        job_class, agent_class = LiteralJobs, LiteralAgent
+        # EDSL validates against a nonempty question after rendering. The
+        # caller's text never enters either pass through its Jinja evaluator.
+        question_text = f"Question ({{{{ {_PROMPT_FIELD} | length }}}} characters)"
+    question = _build_question(group, question_text)
     survey = Survey([question])
     model = Model(
         group.model_config.model,
         service_name=group.model_config.provider,
         **group.model_config.parameters,
     )
-    agents = [
-        _build_agent(request, pair_index)
-        for pair_index, request in enumerate(group.requests)
-    ]
+    agent = _build_agent(group.requests[0], agent_class=agent_class, literal=literal)
     scenarios = [
         Scenario(
             {
@@ -195,27 +211,22 @@ def _build_job(group: AdapterJobGroup) -> object:
         )
         for request in group.requests
     ]
-    interviews = [
-        Interview(
-            agent=agent,
-            survey=survey,
-            scenario=scenario,
-            model=model,
-        )
-        for agent, scenario in zip(agents, scenarios, strict=True)
-    ]
-    job = Jobs.from_interviews(interviews)
-    # EDSL 1.0.8's prompt preview builds index lookups from these collections even
-    # when a job was created from explicit interviews.
-    job.agents = AgentList(agents)
-    job.scenarios = ScenarioList(scenarios)
-    return job
+    # Both native runners can expand the job's Cartesian product. With one
+    # shared agent and model, it contains exactly the requested scenarios.
+    return job_class(
+        survey=survey,
+        agents=AgentList([agent]),
+        scenarios=ScenarioList(scenarios),
+        models=[model],
+    )
 
 
-def _build_agent(request: InferenceRequest, pair_index: int) -> object:
-    traits: dict[str, object] = {_PAIRING_FIELD: pair_index}
+def _build_agent(request: InferenceRequest, *, agent_class, literal: bool) -> object:
+    # EDSL 1.0.8 drops even an explicit instruction when the agent has no
+    # traits. The presentation template keeps this marker out of the prompt.
+    traits: dict[str, object] = {"_llm_auditkit_agent": True}
     traits_presentation_template = ""
-    if request.persona is not None:
+    if request.persona is not None and not literal:
         traits["persona"] = request.persona
         traits_presentation_template = "Your traits: {{ {'persona': persona} }}"
     agent_options: dict[str, object] = {
@@ -224,19 +235,23 @@ def _build_agent(request: InferenceRequest, pair_index: int) -> object:
     }
     if request.system_prompt is not None:
         agent_options["instruction"] = request.system_prompt
-    return Agent(**agent_options)
+    if literal:
+        # Native agent traits HTML-escape Jinja delimiters on construction.
+        # Keep the original for the job's system-channel persona component.
+        agent_options.update(prompt_field=_PROMPT_FIELD, literal_persona=request.persona)
+    return agent_class(**agent_options)
 
 
-def _build_question(group: AdapterJobGroup) -> object:
+def _build_question(group: AdapterJobGroup, question_text: str) -> object:
     if group.response_format is None:
         return QuestionFreeText(
             question_name=_QUESTION_NAME,
-            question_text=_QUESTION_PROMPT_TEMPLATE,
+            question_text=question_text,
         )
 
     return _RecoverableQuestionDict(
         question_name=_QUESTION_NAME,
-        question_text=_QUESTION_PROMPT_TEMPLATE,
+        question_text=question_text,
         answer_keys=[field.name for field in group.response_format.fields],
         value_types=(
             [
@@ -274,30 +289,30 @@ def _normalize_rendered_prompts(
         if not isinstance(row, Mapping):
             raise InferenceBatchError("EDSL rendered prompt row must be a mapping")
 
-        agent_index = row.get("agent_index")
+        scenario_index = row.get("scenario_index")
         if (
-            isinstance(agent_index, bool)
-            or not isinstance(agent_index, int)
-            or agent_index < 0
-            or agent_index >= len(group.requests)
+            isinstance(scenario_index, bool)
+            or not isinstance(scenario_index, int)
+            or scenario_index < 0
+            or scenario_index >= len(group.requests)
         ):
             raise InferenceBatchError(
-                "EDSL rendered prompt row has an invalid agent index"
+                "EDSL rendered prompt row has an invalid scenario index"
             )
-        if agent_index in prompts_by_index:
+        if scenario_index in prompts_by_index:
             raise InferenceBatchError(
-                f"EDSL rendered duplicate prompts for agent index {agent_index}"
+                f"EDSL rendered duplicate prompts for scenario index {scenario_index}"
             )
 
-        request = group.requests[agent_index]
-        prompts_by_index[agent_index] = RenderedPrompt(
+        request = group.requests[scenario_index]
+        prompts_by_index[scenario_index] = RenderedPrompt(
             request_id=request.request_id,
             user_prompt=_extract_prompt_text(row.get("user_prompt"), "user"),
             system_prompt=_extract_prompt_text(row.get("system_prompt"), "system"),
         )
 
     if len(prompts_by_index) != len(group.requests):
-        raise InferenceBatchError("EDSL rendered prompts are missing an agent index")
+        raise InferenceBatchError("EDSL rendered prompts are missing a scenario index")
     return [prompts_by_index[index] for index in range(len(group.requests))]
 
 
@@ -370,7 +385,7 @@ def _result_request_id(result: object) -> str:
         request_id = _request_id_from_mapping(getattr(agent, "traits", None))
     if not isinstance(request_id, str) or not request_id:
         raise InferenceBatchError(
-            "EDSL result agent is missing its non-empty request ID"
+            "EDSL result is missing its non-empty request ID"
         )
     return request_id
 

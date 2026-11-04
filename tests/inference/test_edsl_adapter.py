@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import asyncio
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 
 import pytest
 
@@ -21,7 +21,7 @@ from llm_auditkit.inference import (
     TokenLogprob,
 )
 from llm_auditkit.inference import edsl_adapter as adapter_module
-from llm_auditkit.inference.batching import AdapterJobGroup
+from llm_auditkit.inference.batching import AdapterJobGroup, group_requests_by_compatibility
 
 
 @dataclass
@@ -184,8 +184,8 @@ def fake_edsl(monkeypatch: pytest.MonkeyPatch) -> FakeEDSLRuntime:
             runtime.events.append(("prompts", self.model.model_name, {}))
             rows = [
                 {
-                    "agent_index": index,
-                    "scenario_index": 0,
+                    "agent_index": self.agents.index(interview.agent),
+                    "scenario_index": self.scenarios.index(interview.scenario),
                     "user_prompt": FakePrompt(
                         "EDSL user:"
                         f"{interview.scenario[adapter_module._PROMPT_FIELD]}"
@@ -194,7 +194,7 @@ def fake_edsl(monkeypatch: pytest.MonkeyPatch) -> FakeEDSLRuntime:
                         self._system_prompt(interview.agent)
                     ),
                 }
-                for index, interview in enumerate(self.interviews)
+                for interview in self.interviews
             ]
             return FakeDataset(list(reversed(rows)))
 
@@ -275,19 +275,16 @@ def fake_edsl(monkeypatch: pytest.MonkeyPatch) -> FakeEDSLRuntime:
                 FakeInterview(
                     agent=agent,
                     survey=survey,
-                    scenario=scenarios[0],
+                    scenario=scenario,
                     model=models[0],
                 )
                 for agent in agents
+                for scenario in scenarios
             ]
             job = FakeJob(interviews)
             job.agents = agents
             job.scenarios = scenarios
             return job
-
-        @classmethod
-        def from_interviews(cls, interviews: list[FakeInterview]) -> FakeJob:
-            return FakeJob(interviews)
 
     class FakeQuestionFreeText:
         def __init__(self, *, question_name: str, question_text: str) -> None:
@@ -318,7 +315,6 @@ def fake_edsl(monkeypatch: pytest.MonkeyPatch) -> FakeEDSLRuntime:
     monkeypatch.setattr(adapter_module, "Agent", FakeAgent)
     monkeypatch.setattr(adapter_module, "AgentList", FakeAgentList)
     monkeypatch.setattr(adapter_module, "Jobs", FakeJobs)
-    monkeypatch.setattr(adapter_module, "Interview", FakeInterview)
     monkeypatch.setattr(adapter_module, "Model", FakeModel)
     monkeypatch.setattr(adapter_module, "QuestionFreeText", FakeQuestionFreeText)
     monkeypatch.setattr(adapter_module, "_RecoverableQuestionDict", FakeQuestionDict)
@@ -380,24 +376,23 @@ def test_real_edsl_job_has_one_interview_per_request() -> None:
             request_id=f"request-{index}",
             prompt=f"Prompt {index}",
             model_config_id="model",
-            system_prompt=f"Instruction {index}",
-            persona=f"Persona {index}",
+            system_prompt=f"Instruction {index % 2}",
+            persona=f"Persona {index % 2}",
         )
         for index in range(5)
     )
-    group = AdapterJobGroup(
-        model_config=ModelConfig("model", "test", "test"),
-        response_format=None,
-        requests=requests,
+    groups = group_requests_by_compatibility(
+        requests, {"model": ModelConfig("model", "test", "test")}
     )
 
-    job = adapter_module._build_job(group)
-
-    assert len(job.agents) == 5
-    assert len(job.scenarios) == 5
-    assert len(job.models) == 1
-    assert job.num_interviews == 5
-    assert len(job.prompts().to_dicts()) == 5
+    assert [len(group.requests) for group in groups] == [3, 2]
+    for group in groups:
+        job = adapter_module._build_job(group)
+        assert len(job.agents) == len(job.models) == 1
+        assert len(job.scenarios) == job.num_interviews == len(group.requests)
+        rows = job.prompts().to_dicts()
+        assert sorted(row["scenario_index"] for row in rows) == list(range(len(group.requests)))
+        assert all(row["agent_index"] == 0 for row in rows)
 
 
 def test_real_edsl_job_preserves_literal_request_ids_and_prompts() -> None:
@@ -496,66 +491,72 @@ def test_public_orchestrator_api_integrates_with_edsl_adapter(
 def test_render_batch_uses_effective_edsl_prompts_without_inference(
     fake_edsl: FakeEDSLRuntime,
 ) -> None:
-    rendered = EDSLAdapter().render_batch(_requests(), _models())
+    requests = _requests()
+    requests.append(replace(requests[0], request_id="request-4", prompt="Fourth prompt"))
+    rendered = EDSLAdapter().render_batch(requests, _models())
 
     assert [prompt.request_id for prompt in rendered] == [
         "request-1",
         "request-2",
         "request-3",
+        "request-4",
     ]
     assert [prompt.user_prompt for prompt in rendered] == [
         "EDSL user:First prompt",
         "EDSL user:Second prompt",
         "EDSL user:Third prompt",
+        "EDSL user:Fourth prompt",
     ]
     assert [prompt.system_prompt for prompt in rendered] == [
         "EDSL system:instruction:instruction-a|persona:persona-a",
         "",
         "EDSL system:instruction:instruction-a|persona:persona-c",
+        "EDSL system:instruction:instruction-a|persona:persona-a",
     ]
     assert all(type(prompt.user_prompt) is str for prompt in rendered)
     assert all(type(prompt.system_prompt) is str for prompt in rendered)
     assert fake_edsl.events == [
         ("prompts", "first-model", {}),
         ("prompts", "second-model", {}),
+        ("prompts", "first-model", {}),
     ]
 
 
-def test_job_construction_uses_one_paired_agent_and_scenario_per_request(
+def test_job_construction_shares_an_agent_only_across_compatible_scenarios(
     fake_edsl: FakeEDSLRuntime,
 ) -> None:
     requests = _requests()
+    requests.append(replace(requests[0], request_id="request-4", prompt="Fourth prompt"))
 
     results = EDSLAdapter().execute_batch(requests, _models())
 
-    assert len(fake_edsl.jobs) == 2
-    assert [scenario[adapter_module._REQUEST_ID_FIELD] for scenario in fake_edsl.jobs[0].scenarios] == [
-        "request-1",
-        "request-3",
-    ]
-    assert [scenario[adapter_module._REQUEST_ID_FIELD] for scenario in fake_edsl.jobs[1].scenarios] == [
-        "request-2"
+    assert [len(job.agents) for job in fake_edsl.jobs] == [1, 1, 1]
+    assert [
+        [scenario[adapter_module._REQUEST_ID_FIELD] for scenario in job.scenarios]
+        for job in fake_edsl.jobs
+    ] == [
+        ["request-1", "request-4"],
+        ["request-2"],
+        ["request-3"],
     ]
     assert [
         interview.scenario[adapter_module._REQUEST_ID_FIELD]
         for interview in fake_edsl.jobs[0].interviews
-    ] == ["request-1", "request-3"]
+    ] == ["request-1", "request-4"]
     assert [
         interview.scenario[adapter_module._PROMPT_FIELD]
         for interview in fake_edsl.jobs[0].interviews
-    ] == ["First prompt", "Third prompt"]
+    ] == ["First prompt", "Fourth prompt"]
     assert all(
         adapter_module._REQUEST_ID_FIELD not in interview.agent.traits
         and adapter_module._PROMPT_FIELD not in interview.agent.traits
         for interview in fake_edsl.jobs[0].interviews
     )
-    assert [
-        interview.agent.traits["persona"]
-        for interview in fake_edsl.jobs[0].interviews
-    ] == ["persona-a", "persona-c"]
+    assert [agent.traits.get("persona") for agent in fake_edsl.agents] == [
+        "persona-a", None, "persona-c",
+    ]
     assert fake_edsl.agents[0].kwargs == {"instruction": "instruction-a"}
-    assert fake_edsl.agents[1].kwargs == {"instruction": "instruction-a"}
-    assert "persona" not in fake_edsl.agents[2].traits
+    assert fake_edsl.agents[2].kwargs == {"instruction": "instruction-a"}
     assert fake_edsl.models[0].model_name == "first-model"
     assert fake_edsl.models[0].service_name == "provider-1"
     assert fake_edsl.models[0].parameters == {"temperature": 0.2}
@@ -567,11 +568,13 @@ def test_job_construction_uses_one_paired_agent_and_scenario_per_request(
     assert fake_edsl.events == [
         ("run", "first-model", {"print_exceptions": False}),
         ("run", "second-model", {"print_exceptions": False}),
+        ("run", "first-model", {"print_exceptions": False}),
     ]
     assert [result.request_id for result in results] == [
         "request-1",
         "request-2",
         "request-3",
+        "request-4",
     ]
     assert results[0].metadata == requests[0].metadata
     assert results[0].metadata is not requests[0].metadata
@@ -604,6 +607,7 @@ def test_async_execution_uses_only_sequential_run_async_calls(
     assert fake_edsl.events == [
         ("run_async", "first-model", {"print_exceptions": False}),
         ("run_async", "second-model", {"print_exceptions": False}),
+        ("run_async", "first-model", {"print_exceptions": False}),
     ]
     assert cleanup_calls == [["request-1", "request-2", "request-3"]]
 
@@ -744,10 +748,10 @@ def test_none_and_empty_system_prompts_preserve_edsl_instruction_behavior(
 
     EDSLAdapter().execute_batch(requests, _models())
 
-    assert len(fake_edsl.jobs) == 1
-    assert fake_edsl.agents[0].traits[adapter_module._PAIRING_FIELD] == 0
+    assert len(fake_edsl.jobs) == 2
+    assert "persona" not in fake_edsl.agents[0].traits
     assert fake_edsl.agents[0].kwargs == {}
-    assert fake_edsl.agents[1].traits[adapter_module._PAIRING_FIELD] == 1
+    assert "persona" not in fake_edsl.agents[1].traits
     assert fake_edsl.agents[1].kwargs == {"instruction": ""}
     assert all(
         agent.traits_presentation_template == "" for agent in fake_edsl.agents
