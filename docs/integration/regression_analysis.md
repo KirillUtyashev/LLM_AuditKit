@@ -191,14 +191,14 @@ fit; its estimates are not research evidence.
 
 ### Experiment-execution boundary (#13 and holistic integration pass)
 
-Issue #13 is implemented, but its checkpoint writer and the regression
-preparer currently expose different contracts. The writer can aggregate
-personas and model configurations; emits `pick1` through `pickN`, `logprob1`
-through `logprobN`, and error fields; and does not persist `result_status`,
-`candidate_count`, durable candidate identities, or the preparer's dynamic
-candidate-family names. Its `experiment_id` identifies the logical experiment
-definition; whether that is also sufficient run-level audit provenance remains
-unresolved.
+The issue #13 checkpoint writer preserves source columns. When issue #12
+supplies the input, they include `candidate_count`, `candidate_<i>_id`, and
+candidate covariates in the configured résumé order. Other experiment inputs
+may omit them. The writer records `pick1` through `pickN`, `logprob1` through
+`logprobN`, and error fields. R preparation requires a `result_status` and
+its own candidate result column names. The writer can aggregate personas and
+model configurations. Its `experiment_id` identifies the logical experiment
+definition, and its use as run-level audit provenance remains open.
 
 Even successful native Python checkpoint rows are not accepted directly by the
 current R preparation command. The R preparation stage is implemented and

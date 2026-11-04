@@ -26,6 +26,12 @@ The output is a copy of the input dataset with additional columns:
 
 where `N = templates_per_job_posting`.
 
+For downstream AuditKit population, the completed template cells must use
+the [population placeholder grammar](template_population.md#placeholder-language-and-coverage).
+For example, a source template can contain `{{school}}` if the researcher
+maps `school` to a column in the replacement table. Researchers can also
+supply a table with the same shape directly to the population stage.
+
 ## Configuration
 
 Template generation behavior is controlled through `TemplateGenerationConfig`, including:
