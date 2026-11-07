@@ -16,7 +16,9 @@ All Python pipeline stages exchange `pandas.DataFrame` objects. `ExperimentRunne
 therefore accepts a DataFrame rather than a path. The user-facing command is a
 composition boundary: it reads dataset and output paths from YAML, uses the shared
 dataset-loading stage to load and identify the CSV once, then constructs the runner and
-result store.
+result store. Existing checkpoints with the previous generated `scenario_id` placement
+after `experiment_id` are accepted and reordered in memory to the current schema;
+source values, identities, and outcomes are still validated before reuse.
 
 ## Configuration
 

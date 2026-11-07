@@ -4,7 +4,7 @@ LLM AuditKit audits large language model behavior in hiring experiments. The
 main pipeline is a Python package, while statistical analysis is implemented
 as reproducible R entry points alongside it.
 
-Dataset loading is implemented for normalized local and HTTP(S) tabular sources with
+Dataset loading is implemented for normalized local tabular sources with
 configurable validation and stable scenario IDs. The shared inference package provides
 validated deterministic batching, synchronous and asynchronous execution, prompt
 preview, normalized outcomes, and an Expected Parrot EDSL adapter. Experiment execution
@@ -49,7 +49,7 @@ Read [Using Shared Inference](docs/guides/shared_inference.md) for configuration
 request identity, prompt preview, batching, sync and async execution, results,
 failures, and checkpoint integration.
 
-Read [Loading Pipeline Datasets](docs/guides/dataset_loading.md) for local and remote
+Read [Loading Pipeline Datasets](docs/guides/dataset_loading.md) for local
 sources, supported formats, configurable validation, optional-field warnings, and
 stable scenario IDs.
 

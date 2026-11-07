@@ -1,4 +1,4 @@
-"""Public interfaces for normalized local and remote dataset loading."""
+"""Public interfaces for normalized local dataset loading."""
 
 from .exceptions import (
     DatasetConfigurationError,
@@ -11,8 +11,8 @@ from .exceptions import (
 )
 from .identity import SCENARIO_ID_COLUMN, build_scenario_id, derive_scenario_ids
 from .loader import DatasetLoader
-from .models import DatasetSchema, RemoteConfig
-from .sources import DatasetSource, LocalDatasetSource, RemoteDatasetSource
+from .models import DatasetSchema
+from .sources import DatasetSource, LocalDatasetSource
 from .validation import DatasetValidator
 
 __all__ = [
@@ -28,8 +28,6 @@ __all__ = [
     "DatasetValidator",
     "LocalDatasetSource",
     "MissingOptionalColumnWarning",
-    "RemoteConfig",
-    "RemoteDatasetSource",
     "SCENARIO_ID_COLUMN",
     "build_scenario_id",
     "derive_scenario_ids",

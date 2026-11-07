@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 from pathlib import Path
+import csv
+import json
 
 import pandas as pd
 import pytest
@@ -12,6 +14,38 @@ from llm_auditkit.data import (
     DatasetSourceError,
     LocalDatasetSource,
 )
+
+
+@pytest.mark.parametrize("suffix,delimiter", [("csv", ","), ("tsv", "\t")])
+def test_delimited_nul_is_rejected_without_truncation(tmp_path, suffix, delimiter):
+    path = tmp_path / f"jobs.{suffix}"
+    path.write_text(f"job{delimiter}city\nBefore\x00After{delimiter}Toronto\n")
+    with pytest.raises(DatasetSourceError, match="NUL"):
+        LocalDatasetSource(path).load()
+
+
+@pytest.mark.parametrize("separator", ["\u2028", "\u2029", "\u0085"])
+@pytest.mark.parametrize("newline", ["\n", "\r\n"])
+def test_jsonl_unicode_in_strings_is_not_a_record_boundary(tmp_path, separator, newline):
+    value = f"first{separator}second"
+    path = tmp_path / "jobs.jsonl"
+    path.write_bytes((json.dumps({"job": value}, ensure_ascii=False) + newline
+                      + json.dumps({"job": "next"}) + newline).encode("utf-8"))
+    assert LocalDatasetSource(path).load()["job"].tolist() == [value, "next"]
+
+
+def test_long_csv_field_limit_is_explicit_and_can_be_raised(tmp_path):
+    previous_limit = csv.field_size_limit()
+    path = tmp_path / "jobs.csv"
+    value = "x" * (previous_limit + 1)
+    path.write_text("job\n" + value + "\n")
+    with pytest.raises(DatasetSourceError, match="field limit"):
+        LocalDatasetSource(path).load()
+    try:
+        csv.field_size_limit(len(value))
+        assert LocalDatasetSource(path).load().loc[0, "job"] == value
+    finally:
+        csv.field_size_limit(previous_limit)
 
 
 def test_csv_and_tsv_preserve_literal_strings(tmp_path: Path) -> None:

@@ -40,11 +40,11 @@ class DatasetLoader:
             ) from error
 
         dataset = normalize_dataset(raw_dataset)
+        self._validator.validate(dataset)
         scenario_ids = derive_scenario_ids(dataset)
         _validate_scenario_ids(scenario_ids)
         if SCENARIO_ID_COLUMN not in dataset.columns:
             dataset[SCENARIO_ID_COLUMN] = pd.array(scenario_ids, dtype="string")
-        self._validator.validate(dataset)
         return dataset
 
 

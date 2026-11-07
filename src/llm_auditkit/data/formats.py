@@ -69,7 +69,6 @@ def read_tabular_bytes(
     file_format: str,
     *,
     source_label: str,
-    expose_error_details: bool = True,
 ) -> pd.DataFrame:
     """Parse tabular bytes without exposing source-specific objects downstream."""
 
@@ -82,24 +81,20 @@ def read_tabular_bytes(
             return _read_json_records(data)
         if file_format == "jsonl":
             return _read_json_lines(data)
-    except DatasetSourceError as error:
-        if expose_error_details:
-            raise
-        raise DatasetSourceError(
-            f"could not parse {source_label} as {file_format}: "
-            f"{type(error).__name__}"
-        ) from error
+    except DatasetSourceError:
+        raise
     except Exception as error:
-        detail = f": {error}" if expose_error_details else ""
         raise DatasetSourceError(
             f"could not parse {source_label} as {file_format}: "
-            f"{type(error).__name__}{detail}"
+            f"{type(error).__name__}: {error}"
         ) from error
     raise DatasetSourceError(f"unsupported dataset format {file_format!r}")
 
 
 def _read_delimited(data: bytes, *, delimiter: str) -> pd.DataFrame:
     text = data.decode("utf-8-sig")
+    if "\x00" in text:
+        raise DatasetSourceError("CSV/TSV datasets must not contain NUL characters")
     reader = csv.reader(StringIO(text), delimiter=delimiter)
     try:
         header = next(reader)
@@ -137,7 +132,7 @@ def _read_json_records(data: bytes) -> pd.DataFrame:
 
 def _read_json_lines(data: bytes) -> pd.DataFrame:
     records: list[dict[str, object]] = []
-    for line_number, line in enumerate(data.decode("utf-8-sig").splitlines(), start=1):
+    for line_number, line in enumerate(data.decode("utf-8-sig").split("\n"), start=1):
         if not line.strip():
             continue
         record = json.loads(line, object_pairs_hook=_unique_json_object)

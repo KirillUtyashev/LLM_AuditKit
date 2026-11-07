@@ -15,7 +15,20 @@ from llm_auditkit.data import (
     DatasetSourceError,
     DatasetValidationError,
     MissingOptionalColumnWarning,
+    LocalDatasetSource,
 )
+
+
+def test_columnless_custom_source_reports_missing_required_column():
+    with pytest.raises(DatasetValidationError, match="missing required columns.*job"):
+        _loader().load(StaticSource(pd.DataFrame([{}])))
+
+
+def test_columnless_json_reports_missing_required_column(tmp_path):
+    path = tmp_path / "jobs.json"
+    path.write_text("[{}]")
+    with pytest.raises(DatasetValidationError, match="missing required columns.*job"):
+        _loader().load(LocalDatasetSource(path))
 
 
 @dataclass

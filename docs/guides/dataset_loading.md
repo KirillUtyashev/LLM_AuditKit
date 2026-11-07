@@ -1,6 +1,6 @@
 # Loading Pipeline Datasets
 
-Dataset loading turns a local file, a same-schema directory, or an HTTP(S) resource
+Dataset loading turns a local file or a same-schema directory
 into the normalized `pandas.DataFrame` used by the rest of LLM AuditKit. It preserves
 caller columns, validates the fields needed by the next stage, and supplies stable
 scenario IDs without using row numbers.
@@ -38,7 +38,9 @@ from the extension. For an extensionless single file, pass `file_format="csv"`,
 
 The loader converts scalar cells to pandas string dtype while preserving missing
 values. Literal CSV values such as `NA` and identifiers such as `00007` remain literal
-strings. Additional columns are preserved.
+strings. Additional columns are preserved. CSV/TSV inputs containing NUL characters
+are rejected. The CSV parser defaults to 131,072 characters per field; for longer
+cells, set Python's `csv.field_size_limit()` before loading.
 
 ## Load a Directory
 
@@ -55,39 +57,8 @@ column set, although column order may differ. Unsupported files and nested direc
 are ignored. Include a stable replicate column when intentionally duplicated rows need
 to remain separate scenarios.
 
-## Load an HTTP(S) Resource
-
-Remote loading uses the same parsers and normalized output:
-
-```python
-from llm_auditkit.data import RemoteConfig, RemoteDatasetSource
-
-source = RemoteDatasetSource(
-    RemoteConfig(
-        backend="http",
-        url="https://example.org/datasets/job_postings.jsonl",
-        timeout_seconds=30,
-        max_bytes=25_000_000,
-    )
-)
-dataset = DatasetLoader(schema).load(source)
-```
-
-For a bearer-protected resource, configure only the environment variable name:
-
-```python
-source = RemoteDatasetSource(
-    RemoteConfig(
-        backend="http",
-        url="https://example.org/private/job_postings.csv",
-        credential_env="JOB_DATA_TOKEN",
-    )
-)
-```
-
-Set `JOB_DATA_TOKEN` in the process environment. Do not place the token itself in
-configuration or source control. Use `file_format` when the URL path has no supported
-extension.
+Remote downloads are outside the current scope. Download a hosted dataset to a local
+file before using the loader.
 
 ## Understand Validation and Warnings
 

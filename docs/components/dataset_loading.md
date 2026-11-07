@@ -4,8 +4,8 @@
 
 ## Overview
 
-Dataset loading is the single path-or-URL-to-DataFrame boundary in the Python
-pipeline. It reads a configured local or remote tabular source, normalizes it into a
+Dataset loading is the single path-to-DataFrame boundary in the Python
+pipeline. It reads a configured local tabular source, normalizes it into a
 common `pandas.DataFrame`, validates the caller's minimum schema, and establishes
 stable `scenario_id` values before handing the DataFrame to downstream stages.
 
@@ -19,7 +19,6 @@ The stage consists of:
 
 - `DatasetSource`, a protocol whose `load()` method returns one raw DataFrame;
 - `LocalDatasetSource`, for one local file or a local directory;
-- `RemoteDatasetSource`, for a configured HTTP(S) resource;
 - `DatasetSchema`, which defines required, nonempty, and optional fields;
 - `DatasetValidator`, which applies that schema to a normalized DataFrame; and
 - `DatasetLoader`, which coordinates source loading, normalization, stable identity,
@@ -73,7 +72,7 @@ The supported formats are:
 | JSON | `.json` | an array of record objects |
 | JSON Lines | `.jsonl`, `.ndjson` | one record object per nonempty line |
 
-An explicit format is useful when a single remote resource or local file has no
+An explicit format is useful when a local file has no
 meaningful extension. Compressed files, spreadsheets, and Parquet are not supported by
 the initial implementation because they require additional format and dependency
 contracts.
@@ -86,28 +85,14 @@ the first file before concatenation. Source row order is preserved within each f
 An explicit `file_format` is not accepted for directory sources because each file is
 inferred independently.
 
-## Remote Sources
+CSV and TSV reject NUL characters rather than silently truncating cells. Their initial
+per-field limit follows Python's `csv.field_size_limit()` (131,072 characters by
+default); oversized fields raise `DatasetSourceError`. Applications that need longer
+fields may set that standard-library limit before loading. JSON Lines records are
+separated by LF (including CRLF files); Unicode separators inside strings are preserved.
 
-`RemoteConfig` contains:
-
-- `backend`, initially the single value `http`;
-- `url`, whose scheme must be `http` or `https`;
-- optional `file_format`, otherwise inferred from the URL path;
-- optional `credential_env`, naming an environment variable that contains a bearer
-  token;
-- positive `timeout_seconds`; and
-- positive `max_bytes`, which bounds the response read into memory.
-
-`RemoteDatasetSource` uses the standard-library HTTP client, follows its normal
-redirect behavior, and parses the downloaded bytes with the same format readers as a
-local file. When `credential_env` is configured, the source reads it at request time
-and sends `Authorization: Bearer <value>`. Configuration stores only the environment
-variable name. Missing credentials fail before the request, and credential values are
-never included in errors.
-
-Responses larger than `max_bytes`, unsupported URL schemes, download failures, and
-unrecognized formats raise `DatasetSourceError`. Other remote backends can be added
-behind the source protocol without changing `DatasetLoader` or downstream stages.
+Remote downloads are outside the current scope. Download hosted datasets to a local
+file before loading them.
 
 ## Normalized DataFrame Contract
 
@@ -119,8 +104,8 @@ After a source returns, `DatasetLoader`:
 4. preserves native missing values as `pd.NA` and preserves explicit CSV/TSV empty
    strings as empty strings;
 5. resets the DataFrame index, which is never durable identity;
-6. preserves and validates a supplied `scenario_id`, or appends a derived one; and
-7. runs `DatasetValidator` against the normalized result.
+6. runs `DatasetValidator` against the normalized result; and
+7. preserves and validates a supplied `scenario_id`, or appends a derived one.
 
 The returned DataFrame contains the source columns in their source order plus a
 canonical `scenario_id` when one was not already present. Loading never mutates a
@@ -144,9 +129,8 @@ so direct DataFrame use and loader-produced DataFrames follow the same algorithm
 ## Failure Contract
 
 Configuration, source, normalization, identity, and schema failures use distinct
-dataset-loading exception types. Reader and transport exceptions are wrapped with the
-source operation and exception type while retaining the original exception as the
-cause. Remote credentials and response contents are not copied into error messages.
+dataset-loading exception types. Reader exceptions are wrapped with the source operation and exception type while
+retaining the original exception as the cause.
 
 Loading and validation perform no LLM calls, retries, or checkpoint writes. A failure
 returns no partial DataFrame.

@@ -1,15 +1,10 @@
-"""Local and remote implementations of the dataset source boundary."""
+"""Local implementations of the dataset source boundary."""
 
 from __future__ import annotations
 
-import math
-import os
-import urllib.error
-import urllib.request
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Protocol, runtime_checkable
-from urllib.parse import urlsplit
 
 import pandas as pd
 
@@ -20,7 +15,6 @@ from .formats import (
     normalize_file_format,
     read_tabular_bytes,
 )
-from .models import RemoteConfig
 
 
 @runtime_checkable
@@ -112,109 +106,3 @@ class LocalDatasetSource:
             resolved_format,
             source_label=f"local dataset file {path}",
         )
-
-
-@dataclass(frozen=True, slots=True)
-class RemoteDatasetSource:
-    """Download one bounded HTTP(S) table and parse it in memory."""
-
-    config: RemoteConfig
-
-    def __post_init__(self) -> None:
-        _validate_remote_config(self.config)
-
-    def load(self) -> pd.DataFrame:
-        """Download and parse the configured remote dataset."""
-
-        config = self.config
-        _validate_remote_config(config)
-        parsed_url = urlsplit(config.url)
-        file_format = normalize_file_format(config.file_format)
-        if file_format is None:
-            file_format = infer_file_format(parsed_url.path)
-
-        headers = {"User-Agent": "LLM-AuditKit"}
-        if config.credential_env is not None:
-            credential = os.environ.get(config.credential_env)
-            if credential is None or not credential.strip():
-                raise DatasetSourceError(
-                    f"remote credential environment variable "
-                    f"{config.credential_env!r} is not set"
-                )
-            headers["Authorization"] = f"Bearer {credential}"
-
-        request = urllib.request.Request(config.url, headers=headers)
-        try:
-            with urllib.request.urlopen(
-                request,
-                timeout=config.timeout_seconds,
-            ) as response:
-                content_length = response.headers.get("Content-Length")
-                if (
-                    content_length is not None
-                    and int(content_length) > config.max_bytes
-                ):
-                    raise DatasetSourceError(
-                        "remote dataset exceeds configured max_bytes"
-                    )
-                data = response.read(config.max_bytes + 1)
-        except DatasetSourceError:
-            raise
-        except urllib.error.HTTPError as error:
-            raise DatasetSourceError(
-                f"remote dataset request failed with HTTP status {error.code}"
-            ) from error
-        except (OSError, ValueError, urllib.error.URLError) as error:
-            raise DatasetSourceError(
-                f"could not download remote dataset: {type(error).__name__}"
-            ) from error
-
-        if len(data) > config.max_bytes:
-            raise DatasetSourceError("remote dataset exceeds configured max_bytes")
-        return read_tabular_bytes(
-            data,
-            file_format,
-            source_label="remote dataset",
-            expose_error_details=False,
-        )
-
-
-def _validate_remote_config(config: RemoteConfig) -> None:
-    if not isinstance(config, RemoteConfig):
-        raise DatasetConfigurationError("config must be a RemoteConfig")
-    if config.backend != "http":
-        raise DatasetConfigurationError("remote backend must be 'http'")
-    if not isinstance(config.url, str) or not config.url.strip():
-        raise DatasetConfigurationError("remote url must be a non-empty string")
-    parsed = urlsplit(config.url)
-    if parsed.scheme not in {"http", "https"} or not parsed.netloc:
-        raise DatasetConfigurationError(
-            "remote url must be an absolute HTTP(S) URL"
-        )
-    if parsed.username is not None or parsed.password is not None:
-        raise DatasetConfigurationError(
-            "remote url must not contain embedded credentials"
-        )
-    normalize_file_format(config.file_format)
-    if config.credential_env is not None and (
-        not isinstance(config.credential_env, str)
-        or not config.credential_env.strip()
-    ):
-        raise DatasetConfigurationError(
-            "credential_env must be a non-empty string or None"
-        )
-    if (
-        isinstance(config.timeout_seconds, bool)
-        or not isinstance(config.timeout_seconds, (int, float))
-        or not math.isfinite(config.timeout_seconds)
-        or config.timeout_seconds <= 0
-    ):
-        raise DatasetConfigurationError(
-            "timeout_seconds must be a positive finite number"
-        )
-    if (
-        isinstance(config.max_bytes, bool)
-        or not isinstance(config.max_bytes, int)
-        or config.max_bytes <= 0
-    ):
-        raise DatasetConfigurationError("max_bytes must be a positive integer")

@@ -12,7 +12,7 @@ class DatasetConfigurationError(DatasetLoadingException):
 
 
 class DatasetSourceError(DatasetLoadingException):
-    """Raised when a local or remote source cannot produce a table."""
+    """Raised when a source cannot produce a table."""
 
 
 class DatasetNormalizationError(DatasetLoadingException):
