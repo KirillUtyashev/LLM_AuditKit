@@ -19,6 +19,60 @@ from llm_auditkit.templates.identity import build_generation_fingerprint
 from .helpers import config, dataset, template_text
 
 
+@pytest.mark.parametrize("missing", [None, float("nan"), pd.NA])
+@pytest.mark.parametrize("reverse", [False, True])
+def test_rendered_input_fingerprint_rejects_missing_empty_drift(tmp_path, missing, reverse):
+    source = dataset(1)
+    source["city_name"] = pd.Series(["" if reverse else missing], dtype=object)
+    generation = config()
+    store = TemplateStore(tmp_path / "templates.csv")
+    saved = store.save_result(store.initialize(source, generation), source,
+                              generation, _record("scenario-1"))
+    unchanged = store.initialize(source, generation)
+    assert store.completed_scenario_ids(unchanged, source, generation) == {"scenario-1"}
+    changed = source.copy()
+    changed["city_name"] = pd.Series([missing if reverse else ""], dtype=object)
+    with pytest.raises(TemplateStoreError, match="source or generation metadata"):
+        store.initialize(changed, generation)
+    with pytest.raises(TemplateStoreError, match="input fingerprint"):
+        store.completed_scenario_ids(saved, changed, generation)
+
+
+def test_legacy_checkpoint_without_input_fingerprint_cannot_be_reused(tmp_path):
+    source, generation = dataset(1), config()
+    store = TemplateStore(tmp_path / "templates.csv")
+    output = store.initialize(source, generation)
+    output = output.drop(columns="template_generation_input_fingerprint")
+    output.to_csv(store.output_path, index=False)
+    with pytest.raises(TemplateStoreError, match="cannot safely resume.*older checkpoint"):
+        store.initialize(source, generation)
+
+
+def test_nul_save_leaves_existing_checkpoint_intact(tmp_path):
+    source = dataset(1)
+    generation = config()
+    store = TemplateStore(tmp_path / "templates.csv")
+    output = store.initialize(source, generation)
+    store.save(output)
+    original = store.output_path.read_bytes()
+    output.loc[0, "template_1"] = "{{name}} {{address}} before\x00after"
+    with pytest.raises(TemplateStoreError, match="NUL"):
+        store.save(output)
+    assert store.output_path.read_bytes() == original
+
+
+def test_nul_in_external_checkpoint_is_rejected_before_csv_parsing(tmp_path):
+    source = dataset(1)
+    generation = config()
+    store = TemplateStore(tmp_path / "templates.csv")
+    output = store.apply_result(store.initialize(source, generation), source,
+                                generation, _record("scenario-1"))
+    output.loc[0, "template_1"] += " before\x00after"
+    output.to_csv(store.output_path, index=False)
+    with pytest.raises(TemplateStoreError, match="NUL"):
+        store.initialize(source, generation)
+
+
 def _record(
     scenario_id: str,
     *,

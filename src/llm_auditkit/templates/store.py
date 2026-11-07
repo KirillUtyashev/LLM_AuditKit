@@ -14,7 +14,11 @@ import pandas as pd
 from llm_auditkit.data.identity import SCENARIO_ID_COLUMN, derive_scenario_ids
 
 from .exceptions import TemplateResponseParseError, TemplateStoreError
-from .identity import build_generation_fingerprint, build_template_request_id
+from .identity import (
+    build_generation_fingerprint,
+    build_input_fingerprint,
+    build_template_request_id,
+)
 from .models import TemplateGenerationConfig, TemplateOutputRecord
 from .parsing import validate_template_contents
 from .validation import validate_template_generation_inputs
@@ -23,9 +27,12 @@ from .validation import validate_template_generation_inputs
 _FINGERPRINT_COLUMN = "template_generation_fingerprint"
 _MODEL_COLUMN = "template_generation_model_config_id"
 _REQUEST_COLUMN = "template_generation_request_id"
+_INPUT_FINGERPRINT_COLUMN = "template_generation_input_fingerprint"
 _ERROR_TYPE_COLUMN = "template_generation_error_type"
 _ERROR_MESSAGE_COLUMN = "template_generation_error_message"
-_METADATA_COLUMNS = [_FINGERPRINT_COLUMN, _MODEL_COLUMN, _REQUEST_COLUMN]
+_METADATA_COLUMNS = [
+    _FINGERPRINT_COLUMN, _MODEL_COLUMN, _REQUEST_COLUMN, _INPUT_FINGERPRINT_COLUMN,
+]
 _ERROR_COLUMNS = [_ERROR_TYPE_COLUMN, _ERROR_MESSAGE_COLUMN]
 _RESERVED_STATIC_COLUMNS = set(_METADATA_COLUMNS + _ERROR_COLUMNS)
 _DYNAMIC_TEMPLATE_COLUMN = re.compile(r"template_[1-9][0-9]*\Z")
@@ -151,6 +158,12 @@ class TemplateStore:
                 "output_dataset column names must be unique before saving"
             )
         temporary_path: Path | None = None
+        if any(
+            isinstance(value, str) and "\x00" in value
+            for row in output_dataset.itertuples(index=False, name=None)
+            for value in row
+        ):
+            raise TemplateStoreError("template CSV must not contain NUL characters")
         try:
             self.output_path.parent.mkdir(parents=True, exist_ok=True)
             with NamedTemporaryFile(
@@ -187,7 +200,16 @@ class TemplateStore:
         config: TemplateGenerationConfig,
     ) -> pd.DataFrame:
         try:
+            if b"\x00" in self.output_path.read_bytes():
+                raise TemplateStoreError(
+                    "existing template CSV must not contain NUL characters"
+                )
             header = pd.read_csv(self.output_path, nrows=0)
+            if _INPUT_FINGERPRINT_COLUMN not in header.columns:
+                raise TemplateStoreError(
+                    "existing template CSV has no input fingerprint; cannot safely "
+                    "resume this older checkpoint. Use a new output path to regenerate."
+                )
             if list(header.columns) != expected_columns:
                 raise TemplateStoreError(
                     "existing template CSV columns do not match the current dataset "
@@ -221,6 +243,9 @@ def _new_output(
     fingerprint = build_generation_fingerprint(config)
     output[_FINGERPRINT_COLUMN] = fingerprint
     output[_MODEL_COLUMN] = config.model_config_id
+    output[_INPUT_FINGERPRINT_COLUMN] = [
+        build_input_fingerprint(row, config) for row in dataset.to_dict(orient="records")
+    ]
     output[_REQUEST_COLUMN] = [
         build_template_request_id(scenario_id, fingerprint)
         for scenario_id in scenario_ids
@@ -354,10 +379,18 @@ def _validate_output(
             "output_dataset rows do not match canonical scenario order"
         )
     fingerprint = build_generation_fingerprint(config)
+    input_fingerprints = {
+        scenario_id: build_input_fingerprint(row, config)
+        for scenario_id, row in zip(
+            expected_ids, dataset.to_dict(orient="records"), strict=True
+        )
+    }
     for row in output_dataset.to_dict(orient="records"):
         scenario_id = row[SCENARIO_ID_COLUMN]
         if row[_FINGERPRINT_COLUMN] != fingerprint:
             raise TemplateStoreError("template generation fingerprint does not match")
+        if row[_INPUT_FINGERPRINT_COLUMN] != input_fingerprints[scenario_id]:
+            raise TemplateStoreError("template input fingerprint does not match")
         if row[_MODEL_COLUMN] != config.model_config_id:
             raise TemplateStoreError("template model configuration does not match")
         if row[_REQUEST_COLUMN] != build_template_request_id(scenario_id, fingerprint):

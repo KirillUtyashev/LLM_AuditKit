@@ -8,6 +8,12 @@ complete run, while dataset loading remains the separate path-to-DataFrame stage
 For the complete validation and persistence contract, see the
 [template generation component documentation](../components/template_generation.md).
 
+LLM generation is optional. You can write templates yourself, fill their `{{...}}`
+tokens using your own code, and pass a DataFrame containing completed `resume_1`
+through `resume_N` columns directly to the experiment API. No template-generation
+metadata is required. For example, `Name: {{name}}; City: {{city}}` filled with
+`name="Alex"` and `city="Toronto"` becomes `Name: Alex; City: Toronto`.
+
 ## Prepare Prompt Files
 
 Keep materially different resume layouts in versioned UTF-8 text files. A user prompt
@@ -205,4 +211,7 @@ completed scenarios and retries failed scenarios. AuditKit fingerprints prompt t
 schema, template count, placeholders, and the selected model configuration, so a
 content-affecting change cannot silently reuse an incompatible checkpoint. Batch size
 and checkpoint frequency may change between resumptions because they do not define the
-generated content.
+generated content. A per-row input fingerprint also binds completed results to the
+rendered user and system prompts, so changes such as missing context becoming an
+empty string cannot reuse stale results. Older checkpoints without that fingerprint
+cannot safely resume; select a new output path to regenerate.

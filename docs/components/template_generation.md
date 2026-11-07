@@ -97,7 +97,9 @@ Prompt templates use single-brace fields such as `{job_posting}`, `{city}`, and
 The user prompt must reference `{job_posting}`, `{templates_per_scenario}`, and
 `{required_placeholders}` so changing configuration cannot silently leave a hard-coded
 cardinality or placeholder list in the instructions. Unknown fields and conflicting
-aliases fail before inference.
+aliases that override reserved generation fields fail before inference. Explicit
+`context_columns` mappings take precedence over same-named source columns: mapping
+`city` to `city_name` makes `{city}` use `city_name`, even if a `city` column exists.
 
 The optional system-prompt template uses the same rendering context. Its rendered text
 is passed normally as `InferenceRequest.system_prompt`; template generation does not
@@ -128,6 +130,12 @@ derive a stable request ID. A changed prompt, placeholder contract, selected mod
 other generation-defining setting therefore cannot reuse an incompatible checkpoint,
 even when `N` remains unchanged. Users do not create or maintain this fingerprint.
 
+The store additionally computes `template_generation_input_fingerprint` for each row
+from the rendered user prompt, rendered system prompt, and generation fingerprint.
+This detects prompt-affecting source changes even with supplied stable scenario IDs,
+including missing values versus empty strings that otherwise serialize identically in
+CSV. The fingerprint does not depend on source row order or checkpoint frequency.
+
 ## Request Construction and Structured Results
 
 For every incomplete scenario, `TemplateGenerator` builds one generic
@@ -149,6 +157,8 @@ A successful domain result must contain exactly `N` nonempty strings in configur
 order. Templates must be pairwise distinct after surrounding whitespace is removed.
 Every template must contain each configured `{{placeholder_name}}`, and any
 double-brace placeholder token in a template must belong to the configured set.
+Templates and checkpoint CSVs containing NUL characters are rejected before saving
+or loading, so hidden control characters cannot silently truncate stored text.
 
 ## Preview
 
@@ -194,6 +204,7 @@ also adds:
 - `template_generation_fingerprint`;
 - `template_generation_model_config_id`;
 - `template_generation_request_id`;
+- `template_generation_input_fingerprint`;
 - `template_1` through `template_N`;
 - `template_generation_error_type`;
 - `template_generation_error_message`.
@@ -210,7 +221,9 @@ caller-owned source values are restored so numeric-looking text and leading zero
 not changed by resume.
 
 Before resume, the store validates the source scenario set and values, output schema,
-generation fingerprint, model configuration, request IDs, and template/error fields.
+generation and per-row input fingerprints, model configuration, request IDs, and
+template/error fields. Older checkpoints without input fingerprints are rejected with
+an actionable error; use a new output path to regenerate them safely.
 Input row positions are never used as identity, and output is restored to current input
 order.
 

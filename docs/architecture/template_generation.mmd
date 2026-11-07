@@ -50,6 +50,7 @@ classDiagram
     class GenerationIdentity {
         +derive_scenario_ids(dataset: DataFrame) List~str~
         +build_generation_fingerprint(config: TemplateGenerationConfig) str
+        +build_input_fingerprint(row: Mapping, config: TemplateGenerationConfig) str
         +build_template_request_id(scenario_id: str, fingerprint: str) str
     }
     class InferenceConfig {
@@ -88,4 +89,5 @@ classDiagram
     TemplateGenerator --> TemplateOutputRecord : parses normalized outcomes
     TemplateGenerator --> TemplateStore : checkpoints each result
     TemplateGenerator --> DataFrame : processes
+    TemplateStore --> GenerationIdentity : validates input fingerprints
     TemplateStore --> DataFrame : validates and persists

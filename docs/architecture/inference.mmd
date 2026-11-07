@@ -92,10 +92,11 @@ classDiagram
     }
     class EDSLJob {
         <<Expected Parrot>>
-        +one_shared_agent
+        +paired_agents
         +request_scenarios
         +single_model
         +single_response_format
+        +zip_assign()
     }
     class EDSLAgent {
         <<Expected Parrot>>
@@ -128,9 +129,9 @@ classDiagram
     EDSLAdapter ..|> InferenceAdapter : implements
     EDSLAdapter --> ModelConfig : configures
     EDSLAdapter --> EDSLJob : creates compatible group
-    EDSLJob --> EDSLAgent : one shared
+    EDSLJob --> EDSLAgent : one per request
     EDSLJob --> EDSLScenario : one per request
     EDSLJob --> EDSLInterview : one per scenario
-    EDSLInterview --> EDSLAgent : shared
+    EDSLInterview --> EDSLAgent : paired
     EDSLInterview --> EDSLScenario : request
     EDSLAdapter --> EDSL : submits compatible groups

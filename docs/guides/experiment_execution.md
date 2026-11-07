@@ -221,10 +221,9 @@ Batches are submitted sequentially. A completed batch is validated and applied b
 the runner requests the next one.
 
 Within one logical batch, the adapter groups requests by model configuration, response
-format, system prompt, and persona. Ten compatible requests therefore become one EDSL
-job containing one shared agent and ten request scenarios. Requests with different
-rendered persona traits or system instructions become separate EDSL jobs. This grouping
-is identical in sync and async modes.
+format. Ten compatible requests become one EDSL job with ten paired interviews, even
+when their rendered persona traits or system instructions differ. EDSL schedules those
+interviews concurrently. This grouping is identical in sync and async modes.
 
 With `execution.save_after_each_batch: true`, the runner performs one atomic CSV
 replacement after each handled batch. A crash or systemic failure therefore leaves the

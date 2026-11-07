@@ -24,6 +24,10 @@ classDiagram
     class DataFrame {
         <<pandas>>
     }
+    class TemplateInput {
+        <<generated or manually authored>>
+    }
+    TemplateInput --> DataFrame : supplies templates
     TemplatePopulationConfig --> PopulationStrategyConfig
     TemplatePopulator --> TemplatePopulationConfig
     TemplatePopulator --> PopulationStrategy : uses

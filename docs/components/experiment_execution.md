@@ -225,10 +225,9 @@ updating the output.
 Both entry points are first-class. The synchronous path delegates to EDSL's native blocking execution, and the asynchronous path delegates to EDSL's native async execution. They use the same request construction, batch boundaries, result association, failures, checkpoint behavior, and returned DataFrame shape.
 
 Batches are sequential at the LLM AuditKit layer. Within a batch, the adapter groups
-requests by model configuration, response format, system prompt, and persona and
-submits those EDSL jobs sequentially. Ten mutually compatible logical requests become
-one EDSL job with one shared agent and ten request scenarios; differing rendered
-personas or instructions create separate jobs. EDSL owns parallel interview execution,
+requests by model configuration and response format and submits those EDSL jobs
+sequentially. Ten compatible logical requests become one EDSL job with ten paired
+agent–scenario interviews, even when personas or instructions differ. EDSL owns parallel interview execution,
 provider rate limiting, caching, and retry behavior inside each job. The runner does
 not create its own request-worker pool or retry individual EDSL interviews.
 

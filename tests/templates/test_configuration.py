@@ -49,6 +49,21 @@ inference:
 """
 
 
+@pytest.mark.parametrize("target", ["yaml", "user_prompt", "system_prompt"])
+def test_invalid_utf8_has_actionable_configuration_error(tmp_path, target):
+    path = _write_config(tmp_path)
+    affected = {
+        "yaml": path,
+        "user_prompt": path.parent / "prompts/resume_templates.txt",
+        "system_prompt": path.parent / "prompts/resume_system.txt",
+    }[target]
+    affected.write_bytes(b"invalid \xff encoding")
+    with pytest.raises(TemplateGenerationConfigurationError) as captured:
+        load_template_generation_run_config(path)
+    assert str(affected) in str(captured.value)
+    assert "please save it as UTF-8" in str(captured.value)
+
+
 def _write_config(tmp_path: Path, contents: str = _VALID_YAML) -> Path:
     config_directory = tmp_path / "configs"
     config_directory.mkdir()

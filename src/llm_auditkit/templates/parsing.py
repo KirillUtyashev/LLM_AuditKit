@@ -156,6 +156,10 @@ def validate_template_contents(
         )
     required = set(required_placeholders)
     for position, template in enumerate(templates, start=1):
+        if "\x00" in template:
+            raise TemplateResponseParseError(
+                f"template_{position} must not contain NUL characters"
+            )
         if not has_valid_placeholder_syntax(template):
             raise TemplateResponseParseError(
                 f"template_{position} contains invalid double-brace placeholder syntax"

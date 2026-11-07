@@ -4,15 +4,35 @@ from __future__ import annotations
 
 import hashlib
 import json
+from collections.abc import Mapping
 
 from .exceptions import (
     TemplateGenerationConfigurationError,
     TemplateGenerationIdentityError,
 )
 from .models import TemplateGenerationConfig
+from .prompts import build_template_prompt, build_template_system_prompt
 
 
 _FINGERPRINT_SCHEMA = "template-generation-v1"
+
+
+def build_input_fingerprint(
+    row: Mapping[str, object],
+    config: TemplateGenerationConfig,
+) -> str:
+    """Bind checkpoint reuse to the actual rendered instructions for a scenario."""
+
+    payload = [
+        "template-input-v1",
+        build_generation_fingerprint(config),
+        build_template_prompt(row, config),
+        build_template_system_prompt(row, config),
+    ]
+    encoded = json.dumps(
+        payload, ensure_ascii=False, separators=(",", ":")
+    ).encode("utf-8")
+    return f"template-input:{hashlib.sha256(encoded).hexdigest()}"
 
 
 def build_generation_fingerprint(config: TemplateGenerationConfig) -> str:

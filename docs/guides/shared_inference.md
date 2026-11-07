@@ -34,7 +34,8 @@ OPENAI_API_KEY=your-key-here
 The repository ignores `.env` and common variants. Never add a real credential to
 source control. Provider calls consume quota and may incur cost.
 
-The included examples use `gpt-4.1-nano`, which was verified with EDSL 1.0.8. To use
+The included examples use `gpt-4.1-nano`. EDSL 1.0.9 or later within the supported
+1.0.x range is required for correct paired execution in both sync and async modes. To use
 another model or provider in application code, change the `ModelConfig` values and
 provide credentials using that provider's EDSL-supported environment variables or
 credential store.

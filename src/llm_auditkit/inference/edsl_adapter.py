@@ -3,10 +3,13 @@
 from __future__ import annotations
 
 import ast
+import hashlib
 import json
 import logging
 import math
+import re
 from collections.abc import Mapping, Sequence
+from typing import Any
 
 from edsl import (
     Agent,
@@ -37,8 +40,10 @@ from .models import (
 _QUESTION_NAME = "response"
 _REQUEST_ID_FIELD = "request_id"
 _PROMPT_FIELD = "llm_auditkit_prompt"
+_LITERAL_PROMPT_FIELD = "llm_auditkit_literal_prompt"
+_LITERAL_PERSONA_FIELD = "llm_auditkit_literal_persona"
 _AGENT_MARKER_FIELD = "_llm_auditkit_agent"
-_QUESTION_PROMPT_TEMPLATE = f"{{{{ {_PROMPT_FIELD} }}}}"
+_QUESTION_PROMPT_TEMPLATE = f"{{{{ {_LITERAL_PROMPT_FIELD} }}}}"
 _LOGGER = logging.getLogger(__name__)
 _VALUE_TYPE_MAP = {
     "string": "str",
@@ -46,6 +51,54 @@ _VALUE_TYPE_MAP = {
     "number": "float",
     "boolean": "bool",
 }
+
+
+class _LiteralText:
+    """Keep caller text opaque until EDSL has finished rendering its instructions.
+
+    EDSL recursively renders scenario values. Replacing whole caller strings with
+    opaque markers prevents literal Jinja syntax from being evaluated. Restoration
+    at the model's async_get_response boundary happens before EDSL constructs cache
+    keys or sends prompts to the provider. Preview/result normalization uses the same
+    single-pass restoration; restored text is never interpreted again.
+    """
+
+    def __init__(self, literals: Mapping[str, str]) -> None:
+        self.literals = dict(literals)
+        self._markers = re.compile("|".join(re.escape(key) for key in literals))
+
+    def restore(self, text: str) -> str:
+        return self._markers.sub(lambda match: self.literals[match[0]], text)
+
+    def protect_model(self, model: Any) -> None:
+        original = model.async_get_response
+
+        async def literal_response(
+            *, user_prompt: str, system_prompt: str, **kwargs: Any,
+        ) -> Any:
+            return await original(
+                user_prompt=self.restore(user_prompt),
+                system_prompt=self.restore(system_prompt),
+                **kwargs,
+            )
+
+        model.async_get_response = literal_response
+
+
+def _literal_marker(text: str) -> str:
+    return "LLM_AUDITKIT_LITERAL_" + hashlib.sha256(text.encode("utf-8")).hexdigest()
+
+
+def _group_literals(group: AdapterJobGroup) -> _LiteralText:
+    literals = {}
+    for request in group.requests:
+        literals[_literal_marker(request.prompt)] = request.prompt
+        if request.system_prompt is not None:
+            literals[_literal_marker(request.system_prompt)] = request.system_prompt
+        if request.persona is not None:
+            text = repr({"persona": request.persona})
+            literals[_literal_marker(text)] = text
+    return _LiteralText(literals)
 
 
 class _GeneratedContentDictResponseValidator(DictResponseValidator):
@@ -110,7 +163,9 @@ class EDSLAdapter:
         for group in group_requests_by_compatibility(requests, models):
             try:
                 job = _build_job(group)
-                edsl_results = job.run(print_exceptions=False)
+                edsl_results = job.run(
+                    print_exceptions=False, disable_remote_inference=True
+                )
                 normalized_results.extend(_normalize_results(group, edsl_results))
             except InferenceBatchError:
                 raise
@@ -131,7 +186,9 @@ class EDSLAdapter:
             for group in group_requests_by_compatibility(requests, models):
                 try:
                     job = _build_job(group)
-                    edsl_results = await job.run_async(print_exceptions=False)
+                    edsl_results = await job.run_async(
+                        print_exceptions=False, disable_remote_inference=True
+                    )
                     normalized_results.extend(_normalize_results(group, edsl_results))
                 except InferenceBatchError:
                     raise
@@ -177,16 +234,6 @@ def _build_job(group: AdapterJobGroup) -> object:
     if not group.requests:
         raise InferenceBatchError("cannot build an EDSL job for an empty request group")
 
-    shared_request = group.requests[0]
-    if any(
-        request.system_prompt != shared_request.system_prompt
-        or request.persona != shared_request.persona
-        for request in group.requests[1:]
-    ):
-        raise InferenceBatchError(
-            "EDSL job group contains incompatible system prompts or personas"
-        )
-
     question = _build_question(group)
     survey = Survey([question])
     model = Model(
@@ -194,22 +241,26 @@ def _build_job(group: AdapterJobGroup) -> object:
         service_name=group.model_config.provider,
         **group.model_config.parameters,
     )
-    agent = _build_agent(shared_request)
+    _group_literals(group).protect_model(model)
+    agents = [_build_agent(request) for request in group.requests]
     scenarios = [
         Scenario(
             {
                 _REQUEST_ID_FIELD: request.request_id,
                 _PROMPT_FIELD: request.prompt,
+                _LITERAL_PROMPT_FIELD: _literal_marker(request.prompt),
             }
         )
         for request in group.requests
     ]
+    # EDSL 1.0.9 honors this pairing in both its synchronous runner and async
+    # interview executor. from_interviews alone is ignored by the sync runner.
     return Jobs(
         survey=survey,
-        agents=AgentList([agent]),
+        agents=AgentList(agents),
         models=[model],
         scenarios=ScenarioList(scenarios),
-    )
+    ).zip_assign()
 
 
 def _build_agent(request: InferenceRequest) -> object:
@@ -219,14 +270,18 @@ def _build_agent(request: InferenceRequest) -> object:
     traits: dict[str, object] = {_AGENT_MARKER_FIELD: True}
     traits_presentation_template = ""
     if request.persona is not None:
-        traits["persona"] = request.persona
-        traits_presentation_template = "Your traits: {{ {'persona': persona} }}"
+        traits[_LITERAL_PERSONA_FIELD] = _literal_marker(
+            repr({"persona": request.persona})
+        )
+        traits_presentation_template = f"Your traits: {{{{ {_LITERAL_PERSONA_FIELD} }}}}"
     agent_options: dict[str, object] = {
         "traits": traits,
         "traits_presentation_template": traits_presentation_template,
     }
     if request.system_prompt is not None:
-        agent_options["instruction"] = request.system_prompt
+        agent_options["instruction"] = (
+            _literal_marker(request.system_prompt) if request.system_prompt else ""
+        )
     return Agent(**agent_options)
 
 
@@ -273,6 +328,7 @@ def _normalize_rendered_prompts(
         )
 
     prompts_by_index: dict[int, RenderedPrompt] = {}
+    literals = _group_literals(group)
     for row in rows:
         if not isinstance(row, Mapping):
             raise InferenceBatchError("EDSL rendered prompt row must be a mapping")
@@ -296,8 +352,12 @@ def _normalize_rendered_prompts(
         request = group.requests[scenario_index]
         prompts_by_index[scenario_index] = RenderedPrompt(
             request_id=request.request_id,
-            user_prompt=_extract_prompt_text(row.get("user_prompt"), "user"),
-            system_prompt=_extract_prompt_text(row.get("system_prompt"), "system"),
+            user_prompt=literals.restore(
+                _extract_prompt_text(row.get("user_prompt"), "user")
+            ),
+            system_prompt=literals.restore(
+                _extract_prompt_text(row.get("system_prompt"), "system")
+            ),
         )
 
     if len(prompts_by_index) != len(group.requests):
@@ -322,6 +382,7 @@ def _normalize_results(
 
     requests_by_id = {request.request_id: request for request in group.requests}
     results_by_id: dict[str, InferenceResult] = {}
+    literals = _group_literals(group)
 
     for result in result_items:
         request_id = _result_request_id(result)
@@ -336,6 +397,15 @@ def _normalize_results(
 
         request = requests_by_id[request_id]
         rendered_prompt = _result_rendered_prompt(result, request_id)
+        if rendered_prompt is not None:
+            rendered_prompt = RenderedPrompt(
+                request_id=request_id,
+                user_prompt=literals.restore(rendered_prompt.user_prompt),
+                system_prompt=(
+                    None if rendered_prompt.system_prompt is None
+                    else literals.restore(rendered_prompt.system_prompt)
+                ),
+            )
         content, structured_content, comment = _result_response(result, request)
         if content is None:
             error = task_errors.get(

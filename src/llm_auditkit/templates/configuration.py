@@ -179,6 +179,10 @@ def _load_yaml(config_path: Path) -> object:
     try:
         with config_path.open(encoding="utf-8") as config_file:
             return yaml.load(config_file, Loader=_UniqueKeySafeLoader)
+    except UnicodeError as error:
+        raise TemplateGenerationConfigurationError(
+            f"Cannot read {config_path} as UTF-8; please save it as UTF-8"
+        ) from error
     except (OSError, yaml.YAMLError) as error:
         raise TemplateGenerationConfigurationError(
             f"could not load template-generation YAML: "
@@ -213,6 +217,10 @@ def _read_text_file(value: object, config_path: Path, field_name: str) -> str:
         )
     try:
         return resolved.read_text(encoding="utf-8").strip()
+    except UnicodeError as error:
+        raise TemplateGenerationConfigurationError(
+            f"Cannot read {resolved} as UTF-8; please save it as UTF-8"
+        ) from error
     except OSError as error:
         raise TemplateGenerationConfigurationError(
             f"could not read {field_name}: {type(error).__name__}: {error}"

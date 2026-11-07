@@ -4,11 +4,13 @@
 
 ## Overview
 
-The template population stage deterministically replaces placeholders in generated resume templates. No LLM calls are made during this stage.
+The planned template population stage deterministically replaces placeholders in
+generated or manually authored resume templates. No LLM calls are made during this
+stage; the population API is not implemented yet.
 
 ## Input
 
-- Output of the template generation stage.
+- A DataFrame of generated or manually authored resume templates.
 - `TemplatePopulationConfig`.
 
 Generated placeholders use the canonical syntax `{{placeholder_name}}`, with names
@@ -16,6 +18,11 @@ matching `[A-Za-z][A-Za-z0-9_]*`. Template generation guarantees that every succ
 template contains its configured required placeholders and no unknown double-brace
 placeholder tokens. Population configuration uses placeholder names without the
 surrounding braces, for example `name` for `{{name}}`.
+
+LLM template generation is optional. Users can author templates such as
+`Name: {{name}}; City: {{city}}`, fill them with their own code and an in-memory table,
+and pass completed `resume_1` through `resume_N` columns directly to experiment
+execution. That entry route requires no generation-specific metadata.
 
 ## Output
 
