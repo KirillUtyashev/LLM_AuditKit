@@ -4,20 +4,19 @@ LLM AuditKit audits large language model behavior in hiring experiments. The
 main pipeline is a Python package, while statistical analysis is implemented
 as reproducible R entry points alongside it.
 
-The shared inference package is implemented with validated deterministic batching,
-synchronous and asynchronous execution, prompt preview, normalized outcomes, and an
-Expected Parrot EDSL adapter. Template generation and experiment execution use that
-layer for deterministic planning, preview, normalized parsing, synchronous and
-asynchronous execution, and atomic CSV checkpoint/resume storage. User-facing template
-generation and experiment runs are defined in strict YAML. Experiment execution is
-also launched through one command. The remaining domain pipeline stages are documented
-for incremental implementation.
+Dataset loading is implemented for normalized local tabular sources with
+configurable validation and stable scenario IDs. The shared inference package provides
+validated deterministic batching, synchronous and asynchronous execution, prompt
+preview, normalized outcomes, and an Expected Parrot EDSL adapter. Template generation
+and experiment execution use that layer for deterministic planning, parsing, execution,
+and atomic CSV checkpoint/resume storage. Both stages have strict YAML run
+configuration; experiment execution also has a command-line entry point.
 
 ## Quickstart
 
-The current user-facing functionality includes shared inference, template generation,
-and experiment execution. The following commands install the package from this
-repository and make one real OpenAI request:
+The current Python functionality includes dataset loading, shared inference, template
+generation, and experiment execution. The following commands install the package from
+this repository and make one real OpenAI request:
 
 ```bash
 python -m venv .venv
@@ -50,6 +49,10 @@ Read [Using Shared Inference](docs/guides/shared_inference.md) for configuration
 request identity, prompt preview, batching, sync and async execution, results,
 failures, and checkpoint integration.
 
+Read [Loading Pipeline Datasets](docs/guides/dataset_loading.md) for local
+sources, supported formats, configurable validation, optional-field warnings, and
+stable scenario IDs.
+
 Read [Generating Resume Templates](docs/guides/template_generation.md) for the
 YAML run format, DataFrame schema, prompt and placeholder contracts, configurable
 template counts, preview, sync and async generation, checkpoints, and resume behavior.
@@ -74,7 +77,8 @@ follow-up integration work.
 ## Documentation
 
 The [package architecture](docs/architecture.md) describes the planned hiring pipeline.
-The [shared inference component contract](docs/components/inference.md) documents its
+The [dataset loading component contract](docs/components/dataset_loading.md) and
+[shared inference component contract](docs/components/inference.md) document their
 detailed behavior and boundaries. The
 [experiment execution component contract](docs/components/experiment_execution.md)
 documents the implemented hiring-experiment stage.

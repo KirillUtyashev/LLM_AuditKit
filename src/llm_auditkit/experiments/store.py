@@ -15,7 +15,7 @@ from tempfile import NamedTemporaryFile
 import pandas as pd
 
 from .exceptions import ExperimentResultStoreError
-from .identity import derive_scenario_ids
+from .identity import SCENARIO_ID_COLUMN, derive_scenario_ids
 from .models import (
     ExperimentConfig,
     ExperimentJobKey,
@@ -205,7 +205,13 @@ class ExperimentResultStore:
     ) -> pd.DataFrame:
         try:
             header = pd.read_csv(self.output_path, nrows=0)
-            if list(header.columns) != expected_columns:
+            # Before dataset loading supplied scenario_id, the store placed its
+            # generated ID after experiment_id. Accept that precise legacy order.
+            legacy_columns = [c for c in expected_columns if c != SCENARIO_ID_COLUMN]
+            legacy_columns.insert(
+                legacy_columns.index("experiment_id") + 1, SCENARIO_ID_COLUMN
+            )
+            if list(header.columns) not in [expected_columns, legacy_columns]:
                 raise ExperimentResultStoreError(
                     "existing experiment CSV columns do not match the current "
                     "dataset and experiment configuration"
@@ -215,6 +221,7 @@ class ExperimentResultStore:
                 dtype="string",
                 keep_default_na=False,
             )
+            output_dataset = output_dataset[expected_columns]
             return _restore_checkpoint_types(output_dataset, dataset, config)
         except ExperimentResultStoreError:
             raise
