@@ -1,0 +1,34 @@
+dataset:
+  path: ../../examples/template_generation/data/synthetic_job_postings.csv
+  job_posting_column: job_posting
+  context_columns:
+    city: city
+    category: category
+
+prompt:
+  template_path: ../../examples/template_generation/prompts/resume_templates.txt
+  system_template_path: ../../examples/template_generation/prompts/resume_system.txt
+
+output:
+  path: ../../examples/output/synthetic_template_generation.csv
+
+generation:
+  templates_per_scenario: 2
+  required_placeholders:
+    - name
+    - address
+  model_config_id: openai-template-v1
+
+execution:
+  mode: async
+  batch_size: 2
+  save_after_each_result: true
+
+inference:
+  models:
+    - config_id: openai-template-v1
+      provider: openai
+      model: gpt-4.1-nano
+      parameters:
+        temperature: 0
+        max_tokens: 3000

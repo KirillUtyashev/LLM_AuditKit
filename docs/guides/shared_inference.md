@@ -34,7 +34,8 @@ OPENAI_API_KEY=your-key-here
 The repository ignores `.env` and common variants. Never add a real credential to
 source control. Provider calls consume quota and may incur cost.
 
-The included examples use `gpt-4.1-nano`, which was verified with EDSL 1.0.8. To use
+The included examples use `gpt-4.1-nano`. EDSL 1.0.9 or later within the supported
+1.0.x range is required for correct paired execution in both sync and async modes. To use
 another model or provider in application code, change the `ModelConfig` values and
 provide credentials using that provider's EDSL-supported environment variables or
 credential store.
@@ -126,8 +127,8 @@ must be unique within a run.
 
 `system_prompt` maps to EDSL's agent instruction, while `persona` maps to its standard
 `persona` trait. EDSL combines them into the effective rendered system prompt. Requests
-can use different models, instructions, and personas; the adapter represents each
-request as one agent inside a compatible EDSL job and preserves input and output order.
+can use different models, instructions, and personas; the adapter places differing
+agent configurations in separate compatible jobs and preserves input and output order.
 
 ## Use Metadata to Handle Results
 

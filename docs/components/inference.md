@@ -10,7 +10,7 @@ For installation and task-oriented examples, see
 [Using Shared Inference](../guides/shared_inference.md). This page defines the detailed
 component contract and implementation boundaries.
 
-The shared layer validates and batches generic requests, partitions each logical batch into EDSL-compatible job groups, delegates those jobs to EDSL, and normalizes the returned outcomes. Requests can share one EDSL job when they use the same model configuration and response format. The adapter represents each request as one explicitly paired EDSL agent, scenario, and interview, preserving its user prompt, persona, system instruction, and request ID without producing a Cartesian product. EDSL owns parallel interview execution, provider rate limiting, caching, and retry behavior within each submitted job. LLM AuditKit does not implement a second worker pool or retry loop around individual EDSL interviews.
+The shared layer validates and batches generic requests, partitions each logical batch into EDSL-compatible job groups, delegates those jobs to EDSL, and normalizes the returned outcomes. Requests can share one EDSL job when they use the same model configuration and response format. Each job pairs agents and scenarios using EDSL's public `zip_assign()` API, creating exactly one interview per request even when instructions or personas differ. EDSL owns parallel interview execution, provider rate limiting, caching, and retry behavior within each submitted job. LLM AuditKit does not implement a second worker pool or retry loop around individual EDSL interviews.
 
 ## Public API
 
@@ -112,7 +112,7 @@ A request ID must be unique within one inference run and stable when the same lo
 model, and parameter values are not duplicated on individual requests. The caller
 passes the request collection and configuration together to preview or execute it.
 
-`prompt` is always a string. The adapter supplies a non-null `system_prompt` as the standard EDSL `Agent.instruction` and a non-null `persona` as the standard `Agent` `persona` trait. The literal request ID and user prompt are carried in the request's paired EDSL `Scenario`, avoiding EDSL's trait-value escaping while keeping them out of the persona. If no system prompt is supplied, EDSL uses its default agent instruction. EDSL's normal agent and prompt rendering remain authoritative, and preview exposes the effective combined system prompt.
+`prompt` is always a string. A system instruction uses the normal EDSL agent-instruction component; persona text uses an explicit trait-presentation template. If no system prompt is supplied, EDSL uses its default agent instruction. The request ID remains in the request's scenario. Caller user, system, and persona text is protected with opaque markers during EDSL rendering and restored at the model-response boundary before EDSL computes cache keys or calls the provider. Preview and normalized result prompts apply the same restoration. Literal `{{...}}` and `{%...%}` text is therefore preserved rather than interpreted as EDSL template syntax.
 
 `response_format=None` requests free text and preserves the existing
 `QuestionFreeText` behavior. The supported generic structured format is
@@ -124,10 +124,12 @@ hints omits them from EDSL's prompt but does not change the normalized field con
 The EDSL adapter maps this generic format to `QuestionDict`; callers never construct or
 receive an EDSL question type directly.
 
-Response format is part of adapter job compatibility. Requests with different response
-formats are submitted in different EDSL job groups even when their model configuration
-matches. Persona and system-instruction differences do not split a group because each
-request is represented by its own agent.
+Only model configuration and response format determine adapter job compatibility.
+Different instructions or personas remain in the same job, with one paired interview
+per request. The job uses EDSL's local executor (`disable_remote_inference=True`),
+which still owns concurrency, provider retries, rate limiting, and caching. Remote
+execution offloading is disabled because reconstruction would lose the adapter's
+literal-text protection at the model boundary.
 
 Request metadata is optional caller-owned convenience context. It is not sent to the
 model or used for execution decisions. The inference layer copies it to the normalized
@@ -194,7 +196,7 @@ Both interfaces:
 1. validate the configuration and all requests;
 2. preserve request order and partition pending requests into deterministic batches of at most `batch_size`;
 3. delegate one logical batch at a time to the matching synchronous or asynchronous adapter method;
-4. partition that batch into deterministic EDSL job groups keyed by model configuration and response format, build one explicitly paired agent, scenario, and interview per request, then run or await each group with the corresponding EDSL execution method;
+4. partition that batch into deterministic EDSL job groups keyed by model configuration and response format; pair each request's agent and scenario with `zip_assign()`; then run or await each group with the corresponding EDSL execution method;
 5. verify and normalize exactly one terminal result for every submitted request;
 6. yield an `InferenceBatchResult` before starting the next batch.
 
@@ -217,7 +219,12 @@ The orchestrator does not begin the next batch until the caller requests the nex
 
 `InferenceAdapter` is the domain-neutral protocol consumed by `InferenceOrchestrator`. It accepts only generic requests and a model-configuration lookup and returns only generic rendered prompts or normalized results. This protocol is also the test seam for exercising orchestration without importing EDSL or making network calls.
 
-`EDSLAdapter` implements that protocol by translating a generic request batch and model definitions into Expected Parrot questions, surveys, agents, models, scenarios, interviews, and jobs. Each adapter-created job is limited to one model configuration and one response format. Every request becomes one EDSL agent and one EDSL scenario joined in one explicit `Interview`; `Jobs.from_interviews` combines those interviews without forming a Cartesian product. The scenario carries the literal user prompt and request ID, the standard `persona` trait remains visible through an explicit trait-presentation template, and the system prompt remains the normal agent instruction. Free-text formats use `QuestionFreeText`; generic dictionary formats use an adapter-specific `QuestionDict` subclass. The adapter exposes matching synchronous and asynchronous batch methods that call EDSL's native `run` and `run_async` methods for each group and convert EDSL responses and terminal failures into the same generic results.
+`EDSLAdapter` translates generic requests into Expected Parrot questions, surveys,
+agents, models, scenarios, and jobs. Each job has one model configuration and response
+format. Its agents and scenarios are zipped into one interview per request, so different
+personas and instructions remain concurrent. Free-text requests use `QuestionFreeText`;
+dictionary requests use an adapter-specific `QuestionDict` subclass. Both interfaces
+call EDSL's corresponding native `run` or `run_async` method and normalize the outcomes.
 
 When a provider returns token log probabilities, the adapter extracts them from the EDSL
 result and normalizes them into ordered `TokenLogprob` records containing the emitted
@@ -226,11 +233,13 @@ remain behind the adapter boundary. Absence of token log probabilities is repres
 generically so the calling stage can decide whether they are optional or required for
 its domain result.
 
-The adapter must preserve the submitted request set without accidentally creating additional scenario, persona, or model combinations. Request IDs are carried in the paired EDSL scenarios so returned outcomes can be associated without relying on EDSL list positions.
+The adapter must preserve the submitted request set without accidentally creating additional scenario, persona, or model combinations. Request IDs are carried in EDSL scenarios so returned outcomes can be associated without relying on EDSL list positions.
 
 No other package component depends directly on EDSL-specific classes. The package
-installs EDSL's `inference` dependency extra and supports `edsl>=1.0.8,<1.1`;
-compatibility outside that range is not implied.
+installs EDSL's `inference` dependency extra and supports `edsl>=1.0.9,<1.1`;
+compatibility outside that range is not implied. Version 1.0.9 is required because
+its synchronous runner honors zipped assignment plans; `from_interviews()` alone
+can expand into an agents-by-scenarios product during synchronous execution in 1.0.8.
 
 ## Results and Failures
 

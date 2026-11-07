@@ -7,16 +7,16 @@ as reproducible R entry points alongside it.
 Dataset loading is implemented for normalized local tabular sources with
 configurable validation and stable scenario IDs. The shared inference package provides
 validated deterministic batching, synchronous and asynchronous execution, prompt
-preview, normalized outcomes, and an Expected Parrot EDSL adapter. Experiment execution
-includes deterministic planning, parsing, execution, and atomic CSV checkpoint/resume
-storage. The other domain pipeline stages remain documented for incremental
-implementation.
+preview, normalized outcomes, and an Expected Parrot EDSL adapter. Template generation
+and experiment execution use that layer for deterministic planning, parsing, execution,
+and atomic CSV checkpoint/resume storage. Both stages have strict YAML run
+configuration; experiment execution also has a command-line entry point.
 
 ## Quickstart
 
-The current user-facing functionality includes dataset loading, shared inference, and
-experiment execution. The following commands install the package from this repository
-and make one real OpenAI request:
+The current Python functionality includes dataset loading, shared inference, template
+generation, and experiment execution. The following commands install the package from
+this repository and make one real OpenAI request:
 
 ```bash
 python -m venv .venv
@@ -53,6 +53,12 @@ Read [Loading Pipeline Datasets](docs/guides/dataset_loading.md) for local
 sources, supported formats, configurable validation, optional-field warnings, and
 stable scenario IDs.
 
+Read [Generating Resume Templates](docs/guides/template_generation.md) for the
+YAML run format, DataFrame schema, prompt and placeholder contracts, configurable
+template counts, preview, sync and async generation, checkpoints, and resume behavior.
+A complete paid OpenAI configuration example is available at
+[`synthetic_template_generation.yaml`](configs/template_generation/synthetic_template_generation.yaml).
+
 For the higher-level YAML workflow, read
 [Running Hiring Experiments](docs/guides/experiment_execution.md). The guide covers
 dataset and output paths, schema mapping, explicit question and persona templates,
@@ -76,6 +82,8 @@ The [dataset loading component contract](docs/components/dataset_loading.md) and
 detailed behavior and boundaries. The
 [experiment execution component contract](docs/components/experiment_execution.md)
 documents the implemented hiring-experiment stage.
+The [template generation component contract](docs/components/template_generation.md)
+documents the implemented resume-template stage.
 
 Contributors should also follow the [engineering workflow](docs/development_workflow.md) for issues, branches, pull requests, and review.
 
