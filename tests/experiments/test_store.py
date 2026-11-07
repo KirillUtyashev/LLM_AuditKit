@@ -20,6 +20,25 @@ from llm_auditkit.experiments import (
 )
 from llm_auditkit.experiments.planning import build_experiment_job_keys
 from llm_auditkit.inference import InferenceConfig, ModelConfig
+from llm_auditkit.data import DatasetLoader, DatasetSchema, LocalDatasetSource
+
+
+def test_loader_added_scenario_id_can_resume_legacy_checkpoint(tmp_path):
+    source = _dataset().drop(columns="scenario_id")
+    config = _config()
+    store = ExperimentResultStore(tmp_path / "results.csv")
+    output = store.initialize(source, config)
+    key = build_experiment_job_keys(source, config)[0]
+    output = store.apply_batch(output, source, config, [_record(key)])
+    store.save(output)
+    source_path = tmp_path / "source.csv"
+    source.to_csv(source_path, index=False)
+    loaded = DatasetLoader(DatasetSchema(required_columns=list(source.columns))).load(
+        LocalDatasetSource(source_path)
+    )
+    restored = store.initialize(loaded, config)
+    assert store.is_complete(restored, key, config)
+    assert restored.columns.get_loc("scenario_id") < restored.columns.get_loc("experiment_id")
 
 
 def _config() -> ExperimentConfig:

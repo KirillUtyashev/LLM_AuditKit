@@ -174,12 +174,10 @@ def test_command_csv_loader_preserves_all_literal_strings(tmp_path: Path) -> Non
 
     dataset = cli._load_experiment_dataset(run_config)
 
-    assert dataset.iloc[0].to_dict() == {
-        "scenario_id": "001",
-        "job_posting": "NA",
-        "resume_1": "00007",
-        "case_id": "00009",
-    }
+    assert dataset.loc[0, "scenario_id"] == "001"
+    assert dataset.loc[0, "job_posting"] == "NA"
+    assert dataset.loc[0, "resume_1"] == "00007"
+    assert dataset.loc[0, "case_id"] == "00009"
 
 
 def test_command_csv_loader_does_not_require_scenario_ids(tmp_path: Path) -> None:
@@ -191,7 +189,8 @@ def test_command_csv_loader_does_not_require_scenario_ids(tmp_path: Path) -> Non
 
     dataset = cli._load_experiment_dataset(run_config)
 
-    assert list(dataset.columns) == ["job_posting", "resume_1"]
+    assert list(dataset.columns) == ["job_posting", "resume_1", "scenario_id"]
+    assert dataset.loc[0, "scenario_id"].startswith("scenario:")
 
 
 def test_command_rejects_missing_or_non_csv_dataset(tmp_path: Path) -> None:
