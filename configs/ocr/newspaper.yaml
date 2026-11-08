@@ -1,0 +1,26 @@
+# Paid example: supply your own scan and Google/provider credentials.
+documents:
+  - path: ../../inputs/newspaper.pdf
+    metadata:
+      newspaper: Example Daily
+      city: Example City
+      publication_date: "1950-06-15"
+output:
+  path: ../../outputs/ocr/ads.csv
+  checkpoint_directory: ../../outputs/ocr/checkpoints
+execution:
+  mode: sync
+  batch_size: 5
+  save_after_each_batch: true
+ocr:
+  dpi: 300
+  language_hints: [en]
+  timeout: 120
+  max_page_characters: 40000
+inference:
+  model:
+    config_id: newspaper-extraction
+    provider: openai
+    model: gpt-4o-2024-08-06
+    parameters:
+      temperature: 0

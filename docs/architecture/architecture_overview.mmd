@@ -3,10 +3,14 @@ config:
   theme: mc
 ---
 flowchart LR
+    S[Optional scans / PDFs] --> O[Newspaper OCR and ad reconstruction]
+    O -->|Job-ad CSV| A
     A[Dataset Loading] --> B[Template Generation]
     B --> C[Template Population]
     C --> D[Experiment Execution]
     D --> E[Regression Analysis]
     B -.-> I[Shared Inference Batching]
     D -.-> I
+    O -.-> I
+    O --> V[Google Vision OCR]
     I --> F[Expected Parrot Sync or Async Jobs<br/>Parallelism, Rate Limits, Caching, Retries]

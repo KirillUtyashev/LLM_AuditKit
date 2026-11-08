@@ -19,9 +19,11 @@ dependencies = [
 
 [project.scripts]
 llm-auditkit-experiment = "llm_auditkit.experiments.cli:main"
+llm-auditkit-ocr = "llm_auditkit.ocr.cli:main"
 
 [project.optional-dependencies]
 test = ["pytest>=8"]
+ocr = ["google-cloud-vision>=3,<4", "pdf2image>=1.17,<2", "Pillow>=10"]
 
 [tool.setuptools.packages.find]
 where = ["src"]

@@ -40,9 +40,13 @@ When an architectural contract represented in a Mermaid diagram changes, update 
 ## Architecture Guardrails
 
 - The hiring workflow has five pipeline stages: dataset loading, template generation, template population, experiment execution, and regression analysis.
+- Optional [newspaper OCR preprocessing](docs/components/newspaper_ocr.md) sits before
+  dataset loading, exports source-traceable CSVs and uses shared inference for
+  reconstruction/cleanup. Do not mix synthetic-ad generation or substantive
+  research selection into OCR. Preserve raw text and source coverage for review.
 - Template generation and experiment execution must use the shared inference layer in `src/llm_auditkit/inference/`.
 - Keep Expected Parrot EDSL-specific types and behavior behind the inference adapter. Domain packages must use generic inference requests, results, and configuration rather than importing EDSL concepts directly.
-- Dataset loading is the single path-to-DataFrame boundary. Downstream Python stages accept and return `pandas.DataFrame` objects rather than loading input paths from stage configuration.
+- Dataset loading is the single tabular path-to-DataFrame boundary. Downstream Python stages accept and return `pandas.DataFrame` objects rather than loading input paths from stage configuration.
 - The shared inference layer owns generic model and response-format configuration, deterministic request batching, EDSL execution, and normalized outcomes, including structured content and token log probabilities when requested. It delegates parallel interview execution, provider rate limiting, caching, and retries within each batch to EDSL rather than implementing a second worker pool or retry loop. Calling stages own domain prompts, response parsing, checkpoint policy, and output storage.
 - Shared inference batch size is measured in logical inference requests, not DataFrame rows. Batches are submitted sequentially so calling stages can validate and checkpoint one completed batch before another spends tokens.
 - Shared inference must provide behaviorally equivalent synchronous and asynchronous batch APIs backed by EDSL's matching synchronous and asynchronous execution methods. Do not implement the synchronous API by driving an event loop or the asynchronous API by hiding blocking execution in a worker thread.
