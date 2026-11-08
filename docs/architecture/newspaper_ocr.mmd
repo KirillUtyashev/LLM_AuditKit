@@ -1,0 +1,15 @@
+flowchart TD
+    S[Local PNG / JPEG / multi-page PDF + explicit metadata] --> P[Every physical page]
+    P --> V[Google Vision OCR adapter: sync / async]
+    V --> R[Raw response + all blocks + polygons + confidence]
+    R --> C[Atomic raw OCR checkpoint when enabled]
+    R --> Q[Whole-page reconstruction and cleanup request]
+    Q --> I[Shared inference: sync / async logical batches]
+    I --> A[Validate exact block coverage and ad associations]
+    A -->|valid| B[Raw ads + cleaned ads + source spans]
+    A -->|invalid / failed| E[Checkpoint failure and stop later batches]
+    B --> J[Atomic outcomes/CSV per batch or on completion]
+    J --> H[Human scan comparison / inspection]
+    H --> D[Existing DatasetLoader]
+    C -. compatible resume .-> Q
+    J -. skip successful pages .-> Q

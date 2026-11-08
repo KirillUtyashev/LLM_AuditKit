@@ -1,0 +1,1 @@
+"""Offline newspaper OCR tests."""

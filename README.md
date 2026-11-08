@@ -14,6 +14,11 @@ configuration; experiment execution also has a command-line entry point.
 
 ## Quickstart
 
+Optional [newspaper OCR preprocessing](docs/guides/newspaper_ocr.md) extracts
+job ads from local scans/PDFs before dataset loading, preserving raw OCR and
+source provenance. It has separate optional dependencies and makes paid Google
+Vision and model calls only when explicitly run.
+
 The current Python functionality includes dataset loading, shared inference, template
 generation, and experiment execution. The following commands install the package from
 this repository and make one real OpenAI request:
