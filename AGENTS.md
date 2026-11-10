@@ -5,8 +5,9 @@ This file contains repository-wide guidance for human contributors and coding ag
 ## Project Status and Scope
 
 LLM AuditKit audits LLM behavior in hiring experiments through a Python
-pipeline and an accompanying R regression stage. Shared inference and
-experiment execution are implemented in Python. The regression stage has a
+pipeline and an accompanying R regression stage. The Python package implements
+dataset loading, shared inference, template generation, template population,
+and experiment execution. The regression stage has a
 locked R environment, separate preparation and fixed-effects estimation
 runners, tidy numerical result export, and independent in-memory or PNG
 rendering. Its synthetic workflow is complete, but its preparation input does
@@ -45,7 +46,7 @@ When an architectural contract represented in a Mermaid diagram changes, update 
 - Dataset loading is the single path-to-DataFrame boundary. Downstream Python stages accept and return `pandas.DataFrame` objects rather than loading input paths from stage configuration.
 - The shared inference layer owns generic model and response-format configuration, deterministic request batching, EDSL execution, and normalized outcomes, including structured content and token log probabilities when requested. It delegates parallel interview execution, provider rate limiting, caching, and retries within each batch to EDSL rather than implementing a second worker pool or retry loop. Calling stages own domain prompts, response parsing, checkpoint policy, and output storage.
 - Shared inference batch size is measured in logical inference requests, not DataFrame rows. Batches are submitted sequentially so calling stages can validate and checkpoint one completed batch before another spends tokens.
-- Within a logical batch, group requests by model configuration, response format, persona, and system instruction. Give each EDSL job one model, one shared agent, and one scenario per request so native execution produces only the requested interviews.
+- Within a logical batch, group requests by model configuration and response format. Use EDSL's public `zip_assign()` to pair each request's agent with its scenario so different reviewers can run concurrently and each request produces one interview.
 - Shared inference must provide behaviorally equivalent synchronous and asynchronous batch APIs backed by EDSL's matching synchronous and asynchronous execution methods. Do not implement the synchronous API by driving an event loop or the asynchronous API by hiding blocking execution in a worker thread.
 - Template counts are configurable as `N`; do not hard-code four resumes or templates.
 - Experiment resume and completion behavior must use stable experiment,

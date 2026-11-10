@@ -105,7 +105,9 @@ python examples/template_population/preview.py
 The [preview script](../../examples/template_population/preview.py) reads the
 editable [template table](../../examples/template_population/templates.csv)
 and [replacement table](../../examples/template_population/replacements.csv)
-from this example. It prints the slot-to-candidate mapping and the actual
+using the shared local file source. The template table goes through the dataset
+loader. The replacement table has several rows per scenario, so population
+validates its composite keys. The example prints the slot-to-candidate mapping and the actual
 EDSL-rendered questions for both jobs. The example puts both job requests in
 one batch, with both applicants in each question. It stops at preview: no model
 call, interview decision, or saved result is needed.
@@ -168,25 +170,19 @@ probabilities with the expected candidate IDs.
 
 Two boundaries matter for audit reproducibility:
 
-- **Text in a resume stays text.** With AuditKit preparing the prompt locally
-  on EDSL 1.0.8 or 1.0.9,
-  a supplied `{{ 2+2 }}` is still `{{ 2+2 }}` at the model, in the
-  preview and in the recorded prompt. Supply the desired text directly;
-  there is no extra escaping step for replacement values. The adapter
-  lets EDSL render its answer instructions, then includes the caller's
-  literal question before caching or model execution.
-- **Each request schedules one interview.** A native job uses one model
-  and one agent with the requested persona and system instruction. Each
-  request supplies one scenario. Requests for different reviewers can
-  form separate jobs inside the same logical batch. There is no need to
-  set the experiment batch size to one to preserve the pairings. EDSL
-  can still use its normal cache and retries.
+- **Text in a resume stays text.** A supplied `{{ 2+2 }}` reaches the
+  model, preview, and recorded question exactly as written. AuditKit protects
+  the supplied text while EDSL renders its answer instructions and restores
+  it before caching and sending the prompt to the provider.
+- **Each request schedules one interview.** Requests with the same model
+  configuration and response format can run concurrently in one EDSL job,
+  even with different personas and instructions. EDSL's `zip_assign()` pairs
+  each request's agent with its scenario. EDSL schedules interviews, caches
+  responses, and manages retries.
 
-The literal renderer runs where AuditKit is installed. If EDSL selects
-*whole-job offload*, a job that requires this renderer is refused before
-upload: the remote worker cannot run AuditKit’s renderer. This does not
-prevent the locally orchestrated job from using a configured model
-provider. Ordinary jobs retain EDSL's hosting behavior.
+AuditKit runs each EDSL job locally so it can restore literal text. The model
+provider can run remotely. This applies to all shared-inference jobs. See the
+[inference contract](../components/inference.md) for supported EDSL versions.
 
 To reproduce the [native execution checks](../../tests/inference/test_edsl_literal_transport.py)
 and [experiment handoff](../../tests/integration/test_population_to_experiment.py)

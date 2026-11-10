@@ -306,7 +306,7 @@ def test_native_batch_selects_the_populated_candidates(
     monkeypatch.setattr(edsl_adapter, "Model", scripted_model)
     native_run, native_run_async = Jobs.run, Jobs.run_async
     local_options = dict(
-        use_api_proxy=False, disable_remote_inference=True, disable_remote_cache=True,
+        use_api_proxy=False, disable_remote_cache=True,
         stop_on_exception=True,
     )
 

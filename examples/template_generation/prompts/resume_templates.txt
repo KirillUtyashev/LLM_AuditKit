@@ -1,0 +1,6 @@
+Create {templates_per_scenario} distinct, equally qualified resume templates for the
+following {category} job in {city}:
+
+{job_posting}
+
+Every template must preserve these tokens literally: {required_placeholders}.

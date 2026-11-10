@@ -4,7 +4,7 @@ config:
 ---
 flowchart TD
     C["TemplatePopulationConfig<br/>template_columns: template ID to text column<br/>placeholder_columns: label to payload column<br/>job_posting_column: Text by default<br/>N = number of configured templates"]
-    T["Prepared templates DataFrame<br/>One row per unique scenario_id<br/>Job text, N template columns, scenario metadata"]
+    T["Generated or manually prepared templates DataFrame<br/>One row per unique scenario_id<br/>Job text, N template columns, scenario metadata"]
     R["Researcher-prepared replacements DataFrame<br/>scenario_id, template_id, candidate_id, candidate_order<br/>Exact insertion strings and scalar candidate metadata"]
     P["TemplatePopulator.populate<br/>Two DataFrames plus configuration<br/>No input mutation or I/O"]
     C --> P
@@ -20,7 +20,6 @@ flowchart TD
     D["Researcher populates templates independently in EDSL<br/>Supplies finished job and applicant text in a DataFrame"] --> X
     O --> W["Researcher builds and runs their own EDSL experiment<br/>Uses the output text and tracks candidate IDs by slot"]
     X --> Q["Experiment question<br/>Label resume_1 as Applicant 1, through resume_N as Applicant N"]
-    Q --> J["Native EDSL job<br/>One reviewer and model, one scenario per request<br/>Preserve literal question text before caching and execution"]
+    Q --> J["Local EDSL job per model and response format<br/>Pair each reviewer with its scenario using zip_assign<br/>Preserve literal text for caching and the provider"]
     J --> K["Experiment result and CSV checkpoint<br/>Keep scenario_id and source metadata<br/>For population output, read pick1 and logprob1 with candidate_1_id"]
-    J -.-> B["If whole-job offload is selected for a job requiring local literal rendering<br/>Stop before uploading that job"]
     K -.-> H["Later holistic integration<br/>Experiment writer to R preparation mapping<br/>Status, audit partition and identity validation"]

@@ -13,10 +13,7 @@ def offline_edsl(tmp_path, monkeypatch):
     from edsl.object_store.store import ObjectStore
 
     root = tmp_path / "objects"
-    if hasattr(ObjectStore, "default_root"):  # EDSL 1.0.9
-        monkeypatch.setattr(ObjectStore, "default_root", staticmethod(lambda: root))
-    else:  # EDSL 1.0.8
-        monkeypatch.setattr(ObjectStore, "DEFAULT_ROOT", root)
+    monkeypatch.setattr(ObjectStore, "default_root", staticmethod(lambda: root))
     monkeypatch.setattr(CONFIG, "EDSL_FETCH_TOKEN_PRICES", "False", raising=False)
 
     def forbid_network(*args, **kwargs):

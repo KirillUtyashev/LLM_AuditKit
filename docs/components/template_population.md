@@ -40,6 +40,11 @@ EDSL 1.0.8 and 1.0.9, with five opt-in live tests skipped on each version.
 The [researcher-owned EDSL handoffs](#later-cross-subissue-consistency-review)
 remain open for the later cross-subissue review.
 
+After integrating the dataset-loading and generation stages, 668 tests passed
+on EDSL 1.0.9 with five optional live tests skipped. The combined checks cover
+concurrent interviews with different reviewers, resume from the older checkpoint
+column order, and the experiment CLI's shared input-file validation.
+
 ### Earlier verification
 
 On 2026-11-03, the step-two baseline was rerun before step-three edits:
@@ -118,10 +123,11 @@ this API and configuration.
 
 ## Input 1: Prepared Templates
 
-Researchers can prepare this table directly. It also follows the
-[generation stage's planned wide DataFrame shape](template_generation.md#output).
-In either case, completed templates supplied to AuditKit use the
-[placeholder syntax below](#placeholder-language-and-coverage).
+Researchers can prepare this table directly or use completed rows from the
+[generation stage](template_generation.md#output-contract). Generation requires
+placeholder names to start with a letter. Manually authored templates can
+also start a label with an underscore. For either source, map each label to a
+column of researcher-supplied values using the [population syntax](#placeholder-language-and-coverage).
 
 | Columns | Constraints |
 | --- | --- |

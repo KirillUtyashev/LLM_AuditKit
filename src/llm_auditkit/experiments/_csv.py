@@ -1,4 +1,4 @@
-"""Read experiment CSVs without interpreting or truncating text fields."""
+"""Read experiment checkpoints without interpreting or truncating text fields."""
 
 from io import StringIO
 from pathlib import Path

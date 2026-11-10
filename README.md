@@ -4,21 +4,15 @@ LLM AuditKit audits large language model behavior in hiring experiments. The
 main pipeline is a Python package, while statistical analysis is implemented
 as reproducible R entry points alongside it.
 
-The shared inference package is implemented with validated deterministic batching,
-synchronous and asynchronous execution, prompt preview, normalized outcomes, and an
-Expected Parrot EDSL adapter. Experiment execution currently includes its configuration,
-DataFrame schema validation, deterministic job/request planning and preview, normalized
-outcome parsing, synchronous and asynchronous execution, and atomic CSV
-checkpoint/resume storage. User-facing experiment runs are defined in strict YAML and
-launched through one command. [Template population](docs/components/template_population.md)
-fills named placeholders with researcher-supplied values and passes its
-result directly to experiment execution. The
-[handoff guide](docs/guides/template_population.md#pass-the-populated-table-to-experiment-execution)
-shows how to keep each applicant aligned with the displayed resume and the
-resulting decision, and how the adapter preserves
-[literal text and reviewer pairings](docs/guides/template_population.md#native-edsl-literal-text-and-interview-counts)
-in native execution.
-Dataset loading and template generation remain documented for incremental implementation.
+Dataset loading validates local tables and establishes stable scenario IDs.
+Template generation and experiment execution use shared inference to run EDSL
+jobs and save progress to CSV checkpoints. Both accept YAML run configurations.
+Experiment execution also has a command-line entry point.
+
+[Template population](docs/components/template_population.md) fills each applicant
+template with researcher-supplied values. The [worked example](docs/guides/template_population.md#pass-the-populated-table-to-experiment-execution)
+shows how to pass the populated table directly to experiment execution and keep
+each decision associated with its applicant.
 
 ## Quickstart
 
@@ -65,6 +59,16 @@ Read [Using Shared Inference](docs/guides/shared_inference.md) for configuration
 request identity, prompt preview, batching, sync and async execution, results,
 failures, and checkpoint integration.
 
+Read [Loading Pipeline Datasets](docs/guides/dataset_loading.md) for local
+sources, supported formats, configurable validation, optional-field warnings, and
+stable scenario IDs.
+
+Read [Generating Resume Templates](docs/guides/template_generation.md) for the
+YAML run format, DataFrame schema, prompt and placeholder contracts, configurable
+template counts, preview, sync and async generation, checkpoints, and resume behavior.
+A complete paid OpenAI configuration example is available at
+[`synthetic_template_generation.yaml`](configs/template_generation/synthetic_template_generation.yaml).
+
 For the higher-level YAML workflow, read
 [Running Hiring Experiments](docs/guides/experiment_execution.md). The guide covers
 dataset and output paths, schema mapping, explicit question and persona templates,
@@ -83,10 +87,13 @@ follow-up integration work.
 ## Documentation
 
 The [package architecture](docs/architecture.md) describes the planned hiring pipeline.
-The [shared inference component contract](docs/components/inference.md) documents its
+The [dataset loading component contract](docs/components/dataset_loading.md) and
+[shared inference component contract](docs/components/inference.md) document their
 detailed behavior and boundaries. The
 [experiment execution component contract](docs/components/experiment_execution.md)
 documents the implemented hiring-experiment stage.
+The [template generation component contract](docs/components/template_generation.md)
+documents the implemented resume-template stage.
 
 Contributors should also follow the [engineering workflow](docs/development_workflow.md) for issues, branches, pull requests, and review.
 

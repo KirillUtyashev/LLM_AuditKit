@@ -34,7 +34,8 @@ OPENAI_API_KEY=your-key-here
 The repository ignores `.env` and common variants. Never add a real credential to
 source control. Provider calls consume quota and may incur cost.
 
-The included examples use `gpt-4.1-nano`, which was verified with EDSL 1.0.8. To use
+The included examples use `gpt-4.1-nano`. EDSL 1.0.9 or later within the supported
+1.0.x range is required for correct paired execution in both sync and async modes. To use
 another model or provider in application code, change the `ModelConfig` values and
 provide credentials using that provider's EDSL-supported environment variables or
 credential store.
@@ -124,18 +125,17 @@ Use durable request IDs derived from domain identifiers. Do not use a DataFrame 
 number, list position, or random value if results will later be resumed. Request IDs
 must be unique within a run.
 
-`system_prompt` maps to EDSL's agent instruction, while `persona` supplies the
-persona component. EDSL combines them into the effective rendered system prompt. Within
-a logical batch, requests that share a model configuration, response format, persona,
-and system instruction run together in one native EDSL job. That job uses one model
-and one agent, with a separate scenario for each request. If two requests specify
-different reviewers, the adapter submits separate jobs and returns their results by
-request ID in the original order. Your code still receives the whole logical batch.
+Within a logical batch, EDSL runs requests with the same model configuration
+and response format in one job. Each request gets its own agent and scenario.
+For example, two requests with different reviewer instructions can run
+concurrently. Each uses the intended reviewer, and results return in the order
+you supplied the requests.
 
-Prompt and persona text may contain template syntax meant to be shown to
-the model. Supply that text as written. See the
-[local renderer and whole-job offload boundary](../components/inference.md#edsl-boundary)
-for the supported EDSL versions and hosting behavior.
+EDSL uses the supplied `system_prompt` as the agent instruction and includes
+the `persona` in the system prompt it renders. Supply literal text such as
+`{{lot_code}}` as written. AuditKit prepares the job locally so the exact
+text reaches the configured model provider and EDSL's cache. The provider
+can be remote. See the [EDSL boundary](../components/inference.md#edsl-boundary).
 
 ## Use Metadata to Handle Results
 

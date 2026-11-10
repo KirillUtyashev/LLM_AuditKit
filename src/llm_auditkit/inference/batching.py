@@ -25,8 +25,9 @@ class RequestBatch:
 class AdapterJobGroup:
     """Requests compatible with one backend job.
 
-    An EDSL job uses one model, response format, and agent. Each request has
-    its own scenario.
+    EDSL jobs created by the shared adapter use exactly one model configuration and
+    one response format. Each request supplies its own explicitly paired agent and
+    scenario, so different instructions can execute concurrently within the job.
     """
 
     model_config: ModelConfig
@@ -71,13 +72,12 @@ def group_requests_by_compatibility(
     """Build compatible job groups without adding request combinations.
 
     Groups and requests within each group preserve first-seen input order.
-    Structurally equivalent dictionary response formats can share a group.
-    Requests with different personas or system instructions require their own
-    groups because EDSL runs every scenario with every agent in a job.
+    Structurally equivalent dictionary response formats share a group even when callers
+    constructed separate format objects. Agent instructions do not split a group.
     """
 
     grouped_requests: dict[
-        tuple[str, ResponseFormatKey, str | None, str | None],
+        tuple[str, ResponseFormatKey],
         list[InferenceRequest],
     ] = {}
 
@@ -90,18 +90,19 @@ def group_requests_by_compatibility(
         group_key = (
             request.model_config_id,
             _response_format_key(request.response_format),
-            request.persona,
-            request.system_prompt,
         )
         grouped_requests.setdefault(group_key, []).append(request)
 
     return tuple(
         AdapterJobGroup(
-            model_config=models[group_requests[0].model_config_id],
+            model_config=models[model_config_id],
             response_format=group_requests[0].response_format,
             requests=tuple(group_requests),
         )
-        for group_requests in grouped_requests.values()
+        for (
+            model_config_id,
+            _response_format,
+        ), group_requests in grouped_requests.items()
     )
 
 

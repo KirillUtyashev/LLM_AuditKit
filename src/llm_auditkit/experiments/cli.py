@@ -10,6 +10,12 @@ from collections.abc import Sequence
 import pandas as pd
 from dotenv import load_dotenv
 
+from llm_auditkit.data import (
+    DatasetLoader,
+    DatasetLoadingException,
+    DatasetSchema,
+    LocalDatasetSource,
+)
 from llm_auditkit.inference import (
     EDSLAdapter,
     InferenceBatchPreview,
@@ -17,7 +23,6 @@ from llm_auditkit.inference import (
     InferenceOrchestrator,
 )
 
-from ._csv import read_text_csv
 from .configuration import load_experiment_run_config
 from .exceptions import (
     ExperimentConfigurationError,
@@ -91,15 +96,31 @@ def _load_experiment_dataset(run_config: ExperimentRunConfig) -> pd.DataFrame:
         raise ExperimentDatasetError(
             "the experiment command currently supports CSV dataset paths"
         )
-    if not dataset_path.is_file():
-        raise ExperimentDatasetError(
-            f"experiment dataset file does not exist: {dataset_path}"
+    schema = run_config.experiment_config.dataset_schema
+    required_columns = list(
+        dict.fromkeys(
+            [
+                schema.job_posting_column,
+                *schema.resume_columns,
+                *schema.context_columns.values(),
+            ]
         )
+    )
     try:
-        return read_text_csv(dataset_path)
-    except Exception as error:
+        return DatasetLoader(
+            DatasetSchema(
+                required_columns=required_columns,
+                nonempty_columns=[
+                    schema.job_posting_column,
+                    *schema.resume_columns,
+                ],
+            )
+        ).load(
+            LocalDatasetSource(dataset_path),
+        )
+    except DatasetLoadingException as error:
         raise ExperimentDatasetError(
-            f"could not load experiment CSV: {type(error).__name__}: {error}"
+            f"could not load experiment CSV: {error}"
         ) from error
 
 

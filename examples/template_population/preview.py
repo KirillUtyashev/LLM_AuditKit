@@ -10,6 +10,7 @@ import pandas as pd
 os.environ["PYTHON_DOTENV_DISABLED"] = "1"
 os.environ["EDSL_FETCH_TOKEN_PRICES"] = "False"
 
+from llm_auditkit.data import DatasetLoader, DatasetSchema, LocalDatasetSource
 from llm_auditkit.experiments import (
     ExperimentConfig,
     ExperimentDatasetSchema,
@@ -28,10 +29,6 @@ from llm_auditkit.templates.population import TemplatePopulationConfig, Template
 
 def main() -> None:
     example_dir = Path(__file__).resolve().parent
-    templates = pd.read_csv(example_dir / "templates.csv", dtype=str, keep_default_na=False)
-    replacements = pd.read_csv(
-        example_dir / "replacements.csv", dtype=str, keep_default_na=False, na_values=[""]
-    ).astype({"candidate_order": "int64", "quality_score": "Int64"})
     population = TemplatePopulationConfig(
         job_posting_column="Text",
         template_columns={"application": "template_1", "resume": "template_2"},
@@ -43,6 +40,15 @@ def main() -> None:
             "credential": "credential",
             "skill": "skill",
         },
+    )
+    schema = DatasetSchema(
+        required_columns=[population.job_posting_column, *population.template_columns.values()]
+    )
+    templates = DatasetLoader(schema).load(LocalDatasetSource(example_dir / "templates.csv"))
+    # Replacement rows share scenario IDs. Population validates their template and applicant keys.
+    replacements = LocalDatasetSource(example_dir / "replacements.csv").load()
+    replacements = replacements.replace("", pd.NA).astype(
+        {"candidate_order": "int64", "quality_score": "Int64"}
     )
     populated = TemplatePopulator().populate(templates, replacements, population)
 

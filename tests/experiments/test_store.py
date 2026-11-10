@@ -7,6 +7,7 @@ from pathlib import Path
 import pandas as pd
 import pytest
 
+from llm_auditkit.data import DatasetLoader, DatasetSchema, LocalDatasetSource
 from llm_auditkit.experiments import (
     ExperimentConfig,
     ExperimentDatasetSchema,
@@ -20,6 +21,34 @@ from llm_auditkit.experiments import (
 )
 from llm_auditkit.experiments.planning import build_experiment_job_keys
 from llm_auditkit.inference import InferenceConfig, ModelConfig
+
+
+def test_loader_added_scenario_id_can_resume_legacy_checkpoint(tmp_path: Path) -> None:
+    source = _dataset().drop(columns="scenario_id")
+    config = _config()
+    store = ExperimentResultStore(tmp_path / "results.csv")
+    output = store.initialize(source, config)
+    key = build_experiment_job_keys(source, config)[0]
+    record = _record(key)
+    record.user_prompt = "Applicant 1: A\x00B\rApplicant 2: C\r\n"
+    legacy = store.save_batch(output, source, config, [record])
+    assert legacy.columns.get_loc("scenario_id") == legacy.columns.get_loc("experiment_id") + 1
+    source_path = tmp_path / "source.csv"
+    source.to_csv(source_path, index=False)
+    loaded = DatasetLoader(DatasetSchema(required_columns=list(source.columns))).load(
+        LocalDatasetSource(source_path)
+    )
+    restored = store.initialize(loaded, config)
+    assert store.is_complete(restored, key, config)
+    assert list(restored.columns[:len(loaded.columns)]) == list(loaded.columns)
+    assert restored.at[0, "user_prompt"] == record.user_prompt
+
+    # The old position of scenario_id is the only supported change in header order.
+    columns = list(legacy.columns)
+    columns[0], columns[1] = columns[1], columns[0]
+    store.save(legacy[columns])
+    with pytest.raises(ExperimentResultStoreError, match="columns do not match"):
+        store.initialize(loaded, config)
 
 
 def _config() -> ExperimentConfig:

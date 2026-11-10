@@ -14,8 +14,11 @@ Each dataset row represents one complete scenario containing:
 
 All Python pipeline stages exchange `pandas.DataFrame` objects. `ExperimentRunner`
 therefore accepts a DataFrame rather than a path. The user-facing command is a
-composition boundary: it reads dataset and output paths from YAML, loads the CSV once,
-then constructs the runner and result store.
+composition boundary: it reads dataset and output paths from YAML, uses the shared
+dataset-loading stage to load and identify the CSV once, then constructs the runner and
+result store. Existing checkpoints with the previous generated `scenario_id` placement
+after `experiment_id` are accepted and reordered in memory to the current schema;
+source values, identities, and outcomes are still validated before reuse.
 
 ## Configuration
 
@@ -240,13 +243,11 @@ updating the output.
 Both entry points are first-class. The synchronous path delegates to EDSL's native blocking execution, and the asynchronous path delegates to EDSL's native async execution. They use the same request construction, batch boundaries, result association, failures, checkpoint behavior, and returned DataFrame shape.
 
 Batches are sequential at the LLM AuditKit layer. Within a batch, the adapter groups
-requests by model configuration, response format, rendered persona, and system
-instruction. Each native job uses one model and one agent for all its request
-scenarios. A different rendered persona or instruction starts a separate job
-within the same logical batch. The adapter submits these jobs sequentially,
-associates results by request ID, and restores the original request order before
-the runner applies the batch. EDSL manages parallel interview execution, provider
-rate limiting, caching, and retries within each job.
+requests by model configuration and response format and submits those EDSL jobs
+sequentially. Ten compatible logical requests become one EDSL job with ten paired
+agent–scenario interviews, even when personas or instructions differ. EDSL owns parallel interview execution,
+provider rate limiting, caching, and retry behavior inside each job. The runner does
+not create its own request-worker pool or retry individual EDSL interviews.
 
 The YAML `execution.mode` selects the public runner method: `sync` calls
 `ExperimentRunner.run` and EDSL's blocking execution, while `async` calls

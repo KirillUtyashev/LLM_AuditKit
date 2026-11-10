@@ -1,9 +1,10 @@
 # Running Hiring Experiments
 
 This guide shows how to turn a populated hiring-scenario CSV and an experiment YAML
-file into durable model decisions. The command loads the CSV into a DataFrame once,
-constructs prompts, uses shared inference, parses applicant decisions and token log
-probabilities, and checkpoints a canonical output CSV that can be resumed safely.
+file into durable model decisions. The command uses the shared dataset-loading stage
+to load and identify the CSV once, constructs prompts, uses shared inference, parses
+applicant decisions and token log probabilities, and checkpoints a canonical output
+CSV that can be resumed safely.
 
 For the internal contract and design rationale, see the
 [experiment execution component documentation](../components/experiment_execution.md).
@@ -39,12 +40,13 @@ job_posting,resume_1,resume_2,city
 Hire a careful research assistant.,Candidate A has research experience.,Candidate B has retail experience.,Toronto
 ```
 
-The command-line entrypoint currently accepts CSV input. AuditKit derives each
-`scenario_id` from the complete source row and stores it in experiment output. Reordering
-columns or changing the DataFrame index does not change the ID, while changing any
-source value does. Exact duplicate rows must include an ordinary stable replicate
-column if they should run as distinct scenarios. A canonical `scenario_id` column from
-an upstream stage is optional and, when present, is preserved as strings.
+The command-line entrypoint currently accepts CSV input. The shared dataset loader
+derives each `scenario_id` from the complete normalized source row before experiment
+execution, and the experiment stores it in output. Reordering columns or changing the
+DataFrame index does not change the ID, while changing any source value does. Exact
+duplicate rows must include an ordinary stable replicate column if they should run as
+distinct scenarios. A canonical `scenario_id` column from an upstream stage is
+optional and, when present, is preserved as strings.
 
 If you already have the DataFrame returned by template population, pass it
 directly to the Python runner with its existing `scenario_id`. Use the same
@@ -231,11 +233,10 @@ pending scenarios × personas × model configurations
 Batches are submitted sequentially. A completed batch is validated and applied before
 the runner requests the next one.
 
-Within one logical batch, requests share an EDSL job when the model configuration,
-response format, rendered persona, and system instruction match. For example, ten
-requests with the same settings use one agent and ten request scenarios. If five
-of those requests use a different reviewer instruction, EDSL receives two jobs of
-five scenarios each. Both modes return the ten results in the original request order.
+Within one logical batch, the adapter groups requests by model configuration and response
+format. Ten compatible requests become one EDSL job with ten paired interviews, even
+when their rendered persona traits or system instructions differ. EDSL schedules those
+interviews concurrently. This grouping is identical in sync and async modes.
 
 With `execution.save_after_each_batch: true`, the runner performs one atomic CSV
 replacement after each handled batch. A crash or systemic failure therefore leaves the
@@ -245,9 +246,12 @@ and one CSV is written after successful execution.
 The command reads source CSV cells as strings without treating values such as `NA` as
 missing, so identifiers, resumes, and other caller values retain leading zeroes and
 literal text. Quoted fields can contain commas, quotes, or line breaks.
-Embedded NUL characters also survive input loading and checkpoint reload.
-Reload parses AuditKit's numeric result columns explicitly and restores
-source values from the current input DataFrame.
+The shared [dataset loader](../components/dataset_loading.md#local-sources)
+rejects embedded NUL characters in input CSV and TSV files. Callers that
+supply a DataFrame directly can preserve these characters in experiment
+checkpoints. Reload validates source values and parses numeric result columns.
+It accepts the older checkpoint order that stored a generated `scenario_id`
+after `experiment_id` when the input now supplies the same IDs.
 
 Rerunning with the same YAML loads the output CSV, skips complete job keys, and retries
 failed or incomplete job keys. A fully complete checkpoint causes a no-op run with no

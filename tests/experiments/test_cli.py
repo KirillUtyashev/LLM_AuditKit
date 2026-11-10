@@ -174,28 +174,18 @@ def test_command_csv_loader_preserves_all_literal_strings(tmp_path: Path) -> Non
 
     dataset = cli._load_experiment_dataset(run_config)
 
-    assert dataset.iloc[0].to_dict() == {
-        "scenario_id": "001",
-        "job_posting": "NA",
-        "resume_1": "00007",
-        "case_id": "00009",
-    }
+    assert dataset.loc[0, "scenario_id"] == "001"
+    assert dataset.loc[0, "job_posting"] == "NA"
+    assert dataset.loc[0, "resume_1"] == "00007"
+    assert dataset.loc[0, "case_id"] == "00009"
 
 
-def test_command_csv_loader_preserves_long_multiline_resume_with_nul(tmp_path: Path) -> None:
+def test_command_csv_loader_applies_dataset_policy_to_nul_in_resume(tmp_path: Path) -> None:
     run_config = _run_config(tmp_path, "sync")
-    resume = "Work samples\r\n" + ("x" * 150_000) + '\0 {{notes}}\r"quoted", café\n'
-    table = pd.DataFrame({
-        "scenario_id": ["001"],
-        "job_posting": ["Hiring"],
-        "resume_1": [resume],
-        "note\0id": ["0002"],
-    }, dtype="string")
-    table.to_csv(run_config.dataset_path, index=False, lineterminator="\r\n")
+    run_config.dataset_path.write_bytes(b"job_posting,resume_1\nHiring,Before\0after\n")
 
-    dataset = cli._load_experiment_dataset(run_config)
-
-    pd.testing.assert_frame_equal(dataset, table)
+    with pytest.raises(ExperimentDatasetError, match="NUL"):
+        cli._load_experiment_dataset(run_config)
 
 
 def test_command_csv_loader_does_not_require_scenario_ids(tmp_path: Path) -> None:
@@ -207,7 +197,8 @@ def test_command_csv_loader_does_not_require_scenario_ids(tmp_path: Path) -> Non
 
     dataset = cli._load_experiment_dataset(run_config)
 
-    assert list(dataset.columns) == ["job_posting", "resume_1"]
+    assert list(dataset.columns) == ["job_posting", "resume_1", "scenario_id"]
+    assert dataset.loc[0, "scenario_id"].startswith("scenario:")
 
 
 def test_command_rejects_missing_or_non_csv_dataset(tmp_path: Path) -> None:

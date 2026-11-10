@@ -92,13 +92,11 @@ classDiagram
     }
     class EDSLJob {
         <<Expected Parrot>>
-        +single_agent
+        +paired_agents
+        +request_scenarios
         +single_model
         +single_response_format
-    }
-    class LocalLiteralRenderer {
-        +preserve_question_and_persona
-        +refuse_unsupported_whole_job_offload
+        +zip_assign()
     }
     class EDSLAgent {
         <<Expected Parrot>>
@@ -131,10 +129,9 @@ classDiagram
     EDSLAdapter ..|> InferenceAdapter : implements
     EDSLAdapter --> ModelConfig : configures
     EDSLAdapter --> EDSLJob : creates compatible group
-    EDSLAdapter ..> LocalLiteralRenderer : selects for literal data
-    LocalLiteralRenderer --> EDSLJob : renders before cache and execution
-    EDSLJob --> EDSLAgent : one shared reviewer
-    EDSLJob --> EDSLInterview : one per request
-    EDSLInterview --> EDSLAgent : uses shared reviewer
-    EDSLInterview --> EDSLScenario : carries one request
-    EDSLAdapter --> EDSL : submits each native job
+    EDSLJob --> EDSLAgent : one per request
+    EDSLJob --> EDSLScenario : one per request
+    EDSLJob --> EDSLInterview : one per scenario
+    EDSLInterview --> EDSLAgent : paired
+    EDSLInterview --> EDSLScenario : request
+    EDSLAdapter --> EDSL : submits compatible groups
