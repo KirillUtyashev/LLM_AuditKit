@@ -16,7 +16,7 @@ from llm_auditkit.inference import edsl_adapter as adapter_module
 @pytest.mark.parametrize("mode", ["sync", "async"])
 @pytest.mark.parametrize("structured", [False, True])
 def test_real_edsl_pairs_concurrently_and_preserves_literals_before_caching(
-    monkeypatch, mode, structured,
+    monkeypatch, offline_edsl, mode, structured,
 ):
     monkeypatch.setattr(Coop, "fetch_prices", lambda *args, **kwargs: {})
     monkeypatch.setattr(Coop, "edsl_settings", property(lambda self: {}))

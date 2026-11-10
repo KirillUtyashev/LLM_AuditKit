@@ -35,6 +35,12 @@ not affect a derived ID. Exact duplicate rows are rejected because they cannot b
 distinguished durably; callers can add an ordinary stable replicate column when
 repeated scenarios are intentional.
 
+For downstream AuditKit population, the completed template cells must use
+the [population placeholder grammar](template_population.md#placeholder-language-and-coverage).
+For example, a source template can contain `{{school}}` if the researcher
+maps `school` to a column in the replacement table. Researchers can also
+supply a table with the same shape directly to the population stage.
+
 ## Configuration
 
 `TemplateGenerationConfig` contains:

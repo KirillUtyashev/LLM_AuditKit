@@ -2,34 +2,24 @@
 config:
   theme: mc
 ---
-classDiagram
-    class TemplatePopulationConfig {
-        +placeholders: Dict~str, List~str~~
-        +strategy: PopulationStrategyConfig
-    }
-    class PopulationStrategyConfig {
-        +type: str
-    }
-    class PopulationStrategy {
-        <<interface>>
-        +populate(dataset: DataFrame, config: TemplatePopulationConfig) DataFrame
-    }
-    class DefaultPopulationStrategy {
-        +populate(dataset: DataFrame, config: TemplatePopulationConfig) DataFrame
-    }
-    class TemplatePopulator {
-        -population_strategy: PopulationStrategy
-        +populate(dataset: DataFrame, config: TemplatePopulationConfig) DataFrame
-    }
-    class DataFrame {
-        <<pandas>>
-    }
-    class TemplateInput {
-        <<generated or manually authored>>
-    }
-    TemplateInput --> DataFrame : supplies templates
-    TemplatePopulationConfig --> PopulationStrategyConfig
-    TemplatePopulator --> TemplatePopulationConfig
-    TemplatePopulator --> PopulationStrategy : uses
-    PopulationStrategy <|.. DefaultPopulationStrategy
-    TemplatePopulator --> DataFrame : populates
+flowchart TD
+    C["TemplatePopulationConfig<br/>template_columns: template ID to text column<br/>placeholder_columns: label to payload column<br/>job_posting_column: Text by default<br/>N = number of configured templates"]
+    T["Generated or manually prepared templates DataFrame<br/>One row per unique scenario_id<br/>Job text, N template columns, scenario metadata"]
+    R["Researcher-prepared replacements DataFrame<br/>scenario_id, template_id, candidate_id, candidate_order<br/>Exact insertion strings and scalar candidate metadata"]
+    P["TemplatePopulator.populate<br/>Two DataFrames plus configuration<br/>No input mutation or I/O"]
+    C --> P
+    T --> P
+    R --> P
+    P --> V["Validate schema and full output namespace<br/>Match explicit scenario_id and template_id<br/>Exactly N rows and unique candidate IDs per scenario<br/>candidate_order is a permutation of 1..N"]
+    V --> L["Parse named source placeholders<br/>Validate syntax and template-specific mapped values<br/>Honor escaped literal delimiters"]
+    L --> S["Single-pass literal substitution<br/>Repeated labels reuse the same value<br/>Inserted text is never parsed again"]
+    V --> E["Any error: no partial output<br/>Inputs remain unchanged"]
+    L --> E
+    S --> O["Output DataFrame: one row per input scenario<br/>Retain source columns and original templates<br/>Append candidate_count and ordered resume_i<br/>Preserve candidate_i_id, template ID and source column<br/>Append candidate_i_payload metadata"]
+    O --> X["ExperimentRunner takes a DataFrame of finished text<br/>Configure the job text column and ordered resume_columns"]
+    D["Researcher populates templates independently in EDSL<br/>Supplies finished job and applicant text in a DataFrame"] --> X
+    O --> W["Researcher builds and runs their own EDSL experiment<br/>Uses the output text and tracks candidate IDs by slot"]
+    X --> Q["Experiment question<br/>Label resume_1 as Applicant 1, through resume_N as Applicant N"]
+    Q --> J["Local EDSL job per model and response format<br/>Pair each reviewer with its scenario using zip_assign<br/>Preserve literal text for caching and the provider"]
+    J --> K["Experiment result and CSV checkpoint<br/>Keep scenario_id and source metadata<br/>For population output, read pick1 and logprob1 with candidate_1_id"]
+    K -.-> H["Later holistic integration<br/>Experiment writer to R preparation mapping<br/>Status, audit partition and identity validation"]

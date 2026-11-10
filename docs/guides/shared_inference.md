@@ -125,10 +125,17 @@ Use durable request IDs derived from domain identifiers. Do not use a DataFrame 
 number, list position, or random value if results will later be resumed. Request IDs
 must be unique within a run.
 
-`system_prompt` maps to EDSL's agent instruction, while `persona` maps to its standard
-`persona` trait. EDSL combines them into the effective rendered system prompt. Requests
-can use different models, instructions, and personas; the adapter places differing
-agent configurations in separate compatible jobs and preserves input and output order.
+Within a logical batch, EDSL runs requests with the same model configuration
+and response format in one job. Each request gets its own agent and scenario.
+For example, two requests with different reviewer instructions can run
+concurrently. Each uses the intended reviewer, and results return in the order
+you supplied the requests.
+
+EDSL uses the supplied `system_prompt` as the agent instruction and includes
+the `persona` in the system prompt it renders. Supply literal text such as
+`{{lot_code}}` as written. AuditKit prepares the job locally so the exact
+text reaches the configured model provider and EDSL's cache. The provider
+can be remote. See the [EDSL boundary](../components/inference.md#edsl-boundary).
 
 ## Use Metadata to Handle Results
 

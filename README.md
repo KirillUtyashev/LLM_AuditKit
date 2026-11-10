@@ -4,28 +4,38 @@ LLM AuditKit audits large language model behavior in hiring experiments. The
 main pipeline is a Python package, while statistical analysis is implemented
 as reproducible R entry points alongside it.
 
-Dataset loading is implemented for normalized local tabular sources with
-configurable validation and stable scenario IDs. The shared inference package provides
-validated deterministic batching, synchronous and asynchronous execution, prompt
-preview, normalized outcomes, and an Expected Parrot EDSL adapter. Template generation
-and experiment execution use that layer for deterministic planning, parsing, execution,
-and atomic CSV checkpoint/resume storage. Both stages have strict YAML run
-configuration; experiment execution also has a command-line entry point.
+Dataset loading validates local tables and establishes stable scenario IDs.
+Template generation and experiment execution use shared inference to run EDSL
+jobs and save progress to CSV checkpoints. Both accept YAML run configurations.
+Experiment execution also has a command-line entry point.
+
+[Template population](docs/components/template_population.md) fills each applicant
+template with researcher-supplied values. The [worked example](docs/guides/template_population.md#pass-the-populated-table-to-experiment-execution)
+shows how to pass the populated table directly to experiment execution and keep
+each decision associated with its applicant.
 
 ## Quickstart
 
-The current Python functionality includes dataset loading, shared inference, template
-generation, and experiment execution. The following commands install the package from
-this repository and make one real OpenAI request:
+Install the package from the repository root:
 
 ```bash
 python -m venv .venv
 source .venv/bin/activate
 python -m pip install -e .
-cp -n .env.example .env
 ```
 
-Add your key to `.env`:
+To inspect applicant order without credentials or a model call, run the
+[population preview](examples/template_population/preview.py):
+
+```bash
+python examples/template_population/preview.py
+```
+
+It fills two synthetic job scenarios and prints their candidate IDs,
+names, and experiment questions in presentation order.
+
+To make a real OpenAI request using the shared-inference example, copy
+`.env.example` to `.env` and add your key:
 
 ```dotenv
 OPENAI_API_KEY=your-key-here

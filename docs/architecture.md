@@ -9,7 +9,9 @@ LLM AuditKit is organized around six primary components: five sequential pipelin
 5. [Experiment execution](components/experiment_execution.md)
 6. [Regression analysis](components/regression_analysis.md)
 
-Each component has a separate detailed Mermaid diagram under [`docs/architecture/`](architecture/). The five pipeline stages run in this sequence:
+The [overview diagram](architecture/architecture_overview.mmd) shows where
+researchers can enter or leave the workflow. The five stages have this intended
+sequence when used together:
 
 ```text
 Dataset Loading
@@ -30,6 +32,14 @@ contain source and destination paths so a composition entrypoint can load once a
 invoke those DataFrame APIs. Dataset loading supports local CSV, TSV, record-oriented
 JSON, and JSON Lines files and deterministic same-schema directories. It normalizes scalar cells, validates a caller-configured schema, and
 preserves or derives canonical `scenario_id` values before downstream processing.
+
+Template population fills researcher-supplied values and keeps one row per
+scenario. Experiment execution consumes that DataFrame directly. Configure
+the resume columns and the question's applicant labels in the same numeric
+order to keep each decision with its intended candidate. Researchers can
+also supply a DataFrame they populated in EDSL to the experiment runner, or
+use AuditKit's population output in their own EDSL experiment. See the
+[population-to-experiment walkthrough](guides/template_population.md#pass-the-populated-table-to-experiment-execution).
 
 ## Shared Inference Layer
 

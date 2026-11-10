@@ -125,11 +125,12 @@ The EDSL adapter maps this generic format to `QuestionDict`; callers never const
 receive an EDSL question type directly.
 
 Only model configuration and response format determine adapter job compatibility.
-Different instructions or personas remain in the same job, with one paired interview
-per request. The job uses EDSL's local executor (`disable_remote_inference=True`),
-which still owns concurrency, provider retries, rate limiting, and caching. Remote
-execution offloading is disabled because reconstruction would lose the adapter's
-literal-text protection at the model boundary.
+Different instructions or personas can run concurrently in that job, with one
+agent paired with the matching scenario for each request. AuditKit runs these
+jobs through EDSL's local executor. This keeps prompt restoration available
+before EDSL caches the request or sends it to the configured model provider.
+That provider can run remotely. EDSL owns scheduling, retries, rate limiting,
+and caching.
 
 Request metadata is optional caller-owned convenience context. It is not sent to the
 model or used for execution decisions. The inference layer copies it to the normalized
@@ -233,7 +234,10 @@ remain behind the adapter boundary. Absence of token log probabilities is repres
 generically so the calling stage can decide whether they are optional or required for
 its domain result.
 
-The adapter must preserve the submitted request set without accidentally creating additional scenario, persona, or model combinations. Request IDs are carried in EDSL scenarios so returned outcomes can be associated without relying on EDSL list positions.
+For preview, the adapter maps each EDSL scenario index within the job to its
+submitted request ID. During execution, the adapter associates each result with
+the ID carried by its scenario. Both paths return the original batch order even
+when interviews finish in a different order.
 
 No other package component depends directly on EDSL-specific classes. The package
 installs EDSL's `inference` dependency extra and supports `edsl>=1.0.9,<1.1`;

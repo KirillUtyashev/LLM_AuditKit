@@ -14,6 +14,7 @@ from tempfile import NamedTemporaryFile
 
 import pandas as pd
 
+from ._csv import read_text_csv
 from .exceptions import ExperimentResultStoreError
 from .identity import SCENARIO_ID_COLUMN, derive_scenario_ids
 from .models import (
@@ -98,25 +99,16 @@ class ExperimentResultStore:
             return output_dataset.copy(deep=True).reset_index(drop=True)
 
         replaced_keys = {record.key for record in validated_records}
+        result_columns = _output_columns(config)
         retained_rows = [
             row
-            for row in output_dataset.to_dict(orient="records")
+            for row in output_dataset[result_columns].to_dict(orient="records")
             if _key_from_row(row) not in replaced_keys
         ]
-        source_rows = dict(
-            zip(
-                derive_scenario_ids(dataset),
-                dataset.to_dict(orient="records"),
-                strict=True,
-            )
-        )
-        new_rows = [
-            _record_to_row(record, source_rows[record.key.scenario_id], config)
-            for record in validated_records
-        ]
+        new_rows = [_record_to_row(record, config) for record in validated_records]
         combined = pd.DataFrame(
             retained_rows + new_rows,
-            columns=_expected_columns(dataset, config),
+            columns=result_columns,
         )
         return _canonicalize_output(combined, dataset, config)
 
@@ -204,23 +196,18 @@ class ExperimentResultStore:
         config: ExperimentConfig,
     ) -> pd.DataFrame:
         try:
-            header = pd.read_csv(self.output_path, nrows=0)
+            output_dataset = read_text_csv(self.output_path)
             # Before dataset loading supplied scenario_id, the store placed its
             # generated ID after experiment_id. Accept that precise legacy order.
             legacy_columns = [c for c in expected_columns if c != SCENARIO_ID_COLUMN]
             legacy_columns.insert(
                 legacy_columns.index("experiment_id") + 1, SCENARIO_ID_COLUMN
             )
-            if list(header.columns) not in [expected_columns, legacy_columns]:
+            if list(output_dataset.columns) not in [expected_columns, legacy_columns]:
                 raise ExperimentResultStoreError(
                     "existing experiment CSV columns do not match the current "
                     "dataset and experiment configuration"
                 )
-            output_dataset = pd.read_csv(
-                self.output_path,
-                dtype="string",
-                keep_default_na=False,
-            )
             output_dataset = output_dataset[expected_columns]
             return _restore_checkpoint_types(output_dataset, dataset, config)
         except ExperimentResultStoreError:
@@ -245,7 +232,7 @@ class ExperimentResultStore:
                 delete=False,
             ) as temporary_file:
                 temporary_path = Path(temporary_file.name)
-                output_dataset.to_csv(temporary_file, index=False)
+                output_dataset.to_csv(temporary_file, index=False, lineterminator="\r\n")
                 temporary_file.flush()
                 os.fsync(temporary_file.fileno())
             os.replace(temporary_path, self.output_path)
@@ -279,23 +266,14 @@ def _restore_checkpoint_types(
     dataset: pd.DataFrame,
     config: ExperimentConfig,
 ) -> pd.DataFrame:
-    """Validate serialized source cells, then restore caller-owned source values."""
+    """Validate serialized source cells and restore the numeric result columns."""
 
     output = output_dataset.copy(deep=True)
     source_columns = list(dataset.columns)
     scenario_ids = derive_scenario_ids(dataset)
-    source_rows = dict(
-        zip(scenario_ids, dataset.to_dict(orient="records"), strict=True)
-    )
-
-    serialized_buffer = StringIO()
-    dataset.to_csv(serialized_buffer, index=False)
-    serialized_buffer.seek(0)
-    serialized_dataset = pd.read_csv(
-        serialized_buffer,
-        dtype="string",
-        keep_default_na=False,
-    )
+    serialized_buffer = StringIO(newline="")
+    dataset.to_csv(serialized_buffer, index=False, lineterminator="\r\n")
+    serialized_dataset = read_text_csv(serialized_buffer)
     serialized_rows = dict(
         zip(
             scenario_ids,
@@ -304,11 +282,9 @@ def _restore_checkpoint_types(
         )
     )
 
-    for column in source_columns:
-        output[column] = output[column].astype(object)
-    for row_index, row in output.iterrows():
+    for _, row in output.iterrows():
         scenario_id = row["scenario_id"]
-        if scenario_id not in source_rows:
+        if scenario_id not in serialized_rows:
             raise ExperimentResultStoreError(
                 "existing experiment CSV contains source data outside the current "
                 "dataset"
@@ -319,7 +295,6 @@ def _restore_checkpoint_types(
                     "existing experiment CSV source values do not match the current "
                     "dataset"
                 )
-            output.at[row_index, column] = source_rows[scenario_id][column]
 
     resume_count = len(config.dataset_schema.resume_columns)
     numeric_columns = [
@@ -550,30 +525,26 @@ def _validate_record_outcome(
 
 def _record_to_row(
     record: ExperimentOutputRecord,
-    source_row: dict[str, object],
     config: ExperimentConfig,
 ) -> dict[str, object]:
-    row = dict(source_row)
-    row.update(
-        {
-            "experiment_id": record.key.experiment_id,
-            "scenario_id": record.key.scenario_id,
-            "persona_id": record.key.persona_id,
-            "model_config_id": record.key.model_config_id,
-            "request_id": record.request_id,
-            "persona_name": record.persona_name,
-            "model": record.model,
-            "provider": record.provider,
-            "persona_instruction": record.persona_instruction,
-            "user_prompt": record.user_prompt,
-            "system_prompt": record.system_prompt,
-            "generated_response": None,
-            "comment": None,
-            "picks": None,
-            "error_type": record.error_type,
-            "error_message": record.error_message,
-        }
-    )
+    row = {
+        "experiment_id": record.key.experiment_id,
+        "scenario_id": record.key.scenario_id,
+        "persona_id": record.key.persona_id,
+        "model_config_id": record.key.model_config_id,
+        "request_id": record.request_id,
+        "persona_name": record.persona_name,
+        "model": record.model,
+        "provider": record.provider,
+        "persona_instruction": record.persona_instruction,
+        "user_prompt": record.user_prompt,
+        "system_prompt": record.system_prompt,
+        "generated_response": None,
+        "comment": None,
+        "picks": None,
+        "error_type": record.error_type,
+        "error_message": record.error_message,
+    }
     resume_count = len(config.dataset_schema.resume_columns)
     for position in range(1, resume_count + 1):
         row[f"pick{position}"] = None
@@ -603,19 +574,22 @@ def _canonicalize_output(
     dataset: pd.DataFrame,
     config: ExperimentConfig,
 ) -> pd.DataFrame:
-    rows_by_key = {
-        _key_from_row(row): row
-        for row in output_dataset.to_dict(orient="records")
+    positions_by_key = {
+        _key_from_row(row): position
+        for position, row in enumerate(output_dataset[_IDENTITY_COLUMNS].to_dict(orient="records"))
     }
-    ordered_rows = [
-        rows_by_key[key]
+    ordered_positions = [
+        positions_by_key[key]
         for key in build_experiment_job_keys(dataset, config)
-        if key in rows_by_key
+        if key in positions_by_key
     ]
-    return pd.DataFrame(
-        ordered_rows,
-        columns=_expected_columns(dataset, config),
-    ).reset_index(drop=True)
+    results = output_dataset.iloc[ordered_positions].reset_index(drop=True)
+    # Take whole source rows from the input. Re-inferencing a list of row
+    # dictionaries coerces integers to floats if any value is missing.
+    source_positions = {scenario: i for i, scenario in enumerate(derive_scenario_ids(dataset))}
+    source = dataset.iloc[[source_positions[scenario] for scenario in results["scenario_id"]]]
+    result_columns = [column for column in _output_columns(config) if column not in source]
+    return pd.concat([source.reset_index(drop=True), results[result_columns]], axis=1)
 
 
 def _row_is_complete(row: dict[str, object], config: ExperimentConfig) -> bool:

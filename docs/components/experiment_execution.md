@@ -81,6 +81,21 @@ caller-owned scenario metadata and are preserved unchanged in experiment output.
 is an experiment-boundary schema, not one universal column schema imposed on every
 pipeline stage.
 
+A researcher who populates templates independently in EDSL can pass a DataFrame
+of finished job and applicant text directly to `ExperimentRunner`. Configure
+the job column, the résumé columns in presentation order, and any context
+columns used by the experiment. The runner accepts this table without a prior
+`TemplatePopulator` call and uses shared inference to execute the experiment
+through EDSL. See the [population contract and planned handoff checks](template_population.md#later-cross-subissue-consistency-review).
+
+When the input comes from [template population](template_population.md),
+pass its returned DataFrame directly to the runner. Use its job-posting
+column and list `resume_1` through `resume_N` in numeric slot order. Label
+the question fields in that same order so each structured answer refers to
+the displayed applicant. The [handoff example](../guides/template_population.md#pass-the-populated-table-to-experiment-execution)
+shows how the supplied candidate IDs line up with `pick1`, `pick2`, and
+their corresponding log probabilities in the checkpoint.
+
 ## Job Identity
 
 Each scheduled job has a stable `ExperimentJobKey` composed of:
@@ -328,15 +343,15 @@ assigns its `audit_id`. Its raw schema requires `result_status`,
 `candidate_<i>_pick`, `candidate_<i>_log_probability`, and any explicitly
 configured scalar candidate covariates.
 
-The implemented experiment checkpoint can contain multiple persona/model
-combinations, has no `result_status` or persisted `candidate_count`, names
-decisions `pick1` through `pickN` and `logprob1` through `logprobN`, and does
-not create durable candidate IDs or declare how caller-owned candidate
-covariates correspond to resume positions. Preserving source columns does not
-by itself establish that mapping. `experiment_id` identifies the logical
-experiment definition; whether it also supplies the distinguishable execution
-provenance required by an audit remains unresolved. No production adapter or
-writer transformation currently bridges these differences.
+With AuditKit population output, the checkpoint carries through
+`candidate_count`, `candidate_<i>_id`, and supplied candidate covariates.
+Their slot order comes from the populated input and the configured résumé
+columns. Independently prepared inputs can omit those metadata fields.
+The writer records `pick1` through `pickN`, `logprob1` through `logprobN`,
+and error fields. R preparation still needs an explicit status, its own
+candidate result field names, and an audit partition. Checkpoints can span
+multiple personas and model configurations. The experiment ID identifies a
+logical definition, and its use as run-level audit provenance remains open.
 
 A later integration change must validate the researcher-created audit
 partition and define unsuccessful-row/status translation, candidate identity
