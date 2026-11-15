@@ -1,0 +1,3 @@
+scenario_id,job_id,Text,template_1,template_2
+clerk-set-a,job-clerk,Hire a records clerk.,Application: {{name}}. Education: {{school}}. Signed: {{name}}.,Resume: {{name}}. Experience: {{start_month}} to {{end_month}}.
+assistant-set-a,job-assistant,Hire a laboratory assistant.,Application: {{name}}. Training: {{school}} ({{credential}}). Signed: {{name}}.,Resume: {{name}}. Skills: {{skill}}.

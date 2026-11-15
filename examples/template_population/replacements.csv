@@ -1,0 +1,5 @@
+scenario_id,template_id,candidate_id,candidate_order,full_name,school,start_month,end_month,credential,skill,quality_score
+clerk-set-a,application,applicant-cedar,2,Alex Rowan,Example College,,,,,7
+assistant-set-a,resume,applicant-elm,2,Jamie Vale,,,,,Printing {{lot_code}} labels,6
+clerk-set-a,resume,applicant-birch,1,Casey Brook,,May 2021,June 2024,,,8
+assistant-set-a,application,applicant-ash,1,Morgan Reed,Sample Institute,,,Laboratory certificate,,9

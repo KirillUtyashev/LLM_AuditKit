@@ -48,6 +48,17 @@ duplicate rows must include an ordinary stable replicate column if they should r
 distinct scenarios. A canonical `scenario_id` column from an upstream stage is
 optional and, when present, is preserved as strings.
 
+If you already have the DataFrame returned by template population, pass it
+directly to the Python runner with its existing `scenario_id`. Use the same
+ordered list of `resume_1` through `resume_N` for the dataset schema and
+the question's numbered applicants. The
+[population walkthrough](template_population.md#pass-the-populated-table-to-experiment-execution)
+shows two jobs with different candidate assignments and how to check their
+order before submitting model requests.
+The [native handoff checks](template_population.md#native-edsl-literal-text-and-interview-counts)
+cover literal applicant text, multi-request batches, and the boundary for
+whole-job offload.
+
 ## Create the Experiment YAML
 
 Store the dynamic persona trait and static instruction in separate text files. For
@@ -222,7 +233,7 @@ pending scenarios × personas × model configurations
 Batches are submitted sequentially. A completed batch is validated and applied before
 the runner requests the next one.
 
-Within one logical batch, the adapter groups requests by model configuration, response
+Within one logical batch, the adapter groups requests by model configuration and response
 format. Ten compatible requests become one EDSL job with ten paired interviews, even
 when their rendered persona traits or system instructions differ. EDSL schedules those
 interviews concurrently. This grouping is identical in sync and async modes.
@@ -234,8 +245,13 @@ and one CSV is written after successful execution.
 
 The command reads source CSV cells as strings without treating values such as `NA` as
 missing, so identifiers, resumes, and other caller values retain leading zeroes and
-literal text. Checkpoint reload parses AuditKit's numeric result columns explicitly and
-restores source values from the current input DataFrame.
+literal text. Quoted fields can contain commas, quotes, or line breaks.
+The shared [dataset loader](../components/dataset_loading.md#local-sources)
+rejects embedded NUL characters in input CSV and TSV files. Callers that
+supply a DataFrame directly can preserve these characters in experiment
+checkpoints. Reload validates source values and parses numeric result columns.
+It accepts the older checkpoint order that stored a generated `scenario_id`
+after `experiment_id` when the input now supplies the same IDs.
 
 Rerunning with the same YAML loads the output CSV, skips complete job keys, and retries
 failed or incomplete job keys. A fully complete checkpoint causes a no-op run with no

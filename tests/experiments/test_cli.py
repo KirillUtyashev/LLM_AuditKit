@@ -180,6 +180,14 @@ def test_command_csv_loader_preserves_all_literal_strings(tmp_path: Path) -> Non
     assert dataset.loc[0, "case_id"] == "00009"
 
 
+def test_command_csv_loader_applies_dataset_policy_to_nul_in_resume(tmp_path: Path) -> None:
+    run_config = _run_config(tmp_path, "sync")
+    run_config.dataset_path.write_bytes(b"job_posting,resume_1\nHiring,Before\0after\n")
+
+    with pytest.raises(ExperimentDatasetError, match="NUL"):
+        cli._load_experiment_dataset(run_config)
+
+
 def test_command_csv_loader_does_not_require_scenario_ids(tmp_path: Path) -> None:
     run_config = _run_config(tmp_path, "sync")
     run_config.dataset_path.write_text(
