@@ -58,6 +58,12 @@ def test_valid_inputs_and_empty_request_collection_are_accepted() -> None:
     validate_inference_inputs([], config)
 
 
+@pytest.mark.parametrize("value", [None, 0, 1, "false"])
+def test_cache_policy_must_be_a_boolean(value) -> None:
+    with pytest.raises(InferenceRequestValidationError, match="use_cache"):
+        validate_inference_inputs([_request(use_cache=value)], _config())
+
+
 @pytest.mark.parametrize("batch_size", [True, 1.5, 0, -1])
 def test_batch_size_must_be_a_positive_integer(batch_size: object) -> None:
     with pytest.raises(InferenceConfigurationError, match="batch_size"):

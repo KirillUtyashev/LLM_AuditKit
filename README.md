@@ -16,6 +16,11 @@ each decision associated with its applicant.
 
 ## Quickstart
 
+Optional [newspaper OCR preprocessing](docs/guides/newspaper_ocr.md) extracts
+job ads from local scans/PDFs before dataset loading, preserving raw OCR and
+source provenance. It has separate optional dependencies and makes paid Google
+Vision and model calls only when explicitly run.
+
 Install the package from the repository root:
 
 ```bash

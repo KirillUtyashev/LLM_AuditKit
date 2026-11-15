@@ -25,8 +25,15 @@ Experiment Execution
 Regression Analysis
 ```
 
+An optional [newspaper OCR preprocessing workflow](components/newspaper_ocr.md)
+can precede dataset loading: local scans/PDFs become source-traceable job-ad
+CSVs. It is not a sixth hiring stage. It uses Google Vision for OCR and shared
+inference for ad reconstruction/cleanup; it does not generate new ads or apply
+research-specific selection rules. The existing loader remains the tabular
+path-to-DataFrame boundary.
+
 The package uses `pandas.DataFrame` as the common tabular representation passed between
-Python pipeline stages. Dataset loading is the single path-to-DataFrame boundary;
+Python pipeline stages. Dataset loading is the single tabular path-to-DataFrame boundary;
 downstream stage APIs accept DataFrames. A user-facing pipeline run configuration may
 contain source and destination paths so a composition entrypoint can load once and then
 invoke those DataFrame APIs. Dataset loading supports local CSV, TSV, record-oriented
@@ -51,7 +58,9 @@ Template Generation ─┐
 Experiment Execution ┘
 ```
 
-The inference layer owns generic model and response-format configuration, deterministic request batching, compatible EDSL job grouping through its adapter, and normalized batch results including structured content and token log probabilities when requested. A logical batch is grouped by model configuration and response format. Each EDSL job pairs one agent and one scenario per request using EDSL's `zip_assign()` API, retaining distinct personas and instructions while allowing concurrent interviews. The adapter preserves caller prompt text literally through EDSL rendering. EDSL owns parallel interview execution, provider rate limiting, caching, and retries within each submitted job. Pipeline stages own domain-specific configured prompt templates, rendering, response parsing, checkpointing, and output storage.
+Optional newspaper OCR reconstruction also uses this shared inference boundary.
+
+The inference layer owns generic model and response-format configuration, deterministic request batching, compatible EDSL job grouping through its adapter, and normalized batch results including structured content and token log probabilities when requested. A logical batch is grouped by model configuration, response format and request cache policy. Each EDSL job pairs one agent and one scenario per request using EDSL's `zip_assign()` API, retaining distinct personas and instructions while allowing concurrent interviews. The adapter preserves caller prompt text literally through EDSL rendering. EDSL owns parallel interview execution, provider rate limiting, caching, and retries within each submitted job. Pipeline stages own domain-specific configured prompt templates, rendering, response parsing, checkpointing, and output storage. Explicit domain-rejected retries may set `use_cache=False` to request a fresh isolated EDSL cache without changing durable request IDs or introducing another retry loop.
 
 Batches are submitted sequentially. A calling stage validates and checkpoints the current completed batch before requesting the next one, which bounds uncheckpointed work and prevents a systemic prompt or integration error from consuming tokens across the remaining dataset. Template generation validates a complete logical batch and, when `save_after_each_result` is enabled, performs one atomic CSV replacement for each handled scenario result. Experiment execution applies all outcomes from a completed logical batch and performs one atomic CSV replacement before advancing when `save_after_each_batch` is enabled.
 

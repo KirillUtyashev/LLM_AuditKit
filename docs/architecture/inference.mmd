@@ -21,6 +21,7 @@ classDiagram
         +model_config_id: str
         +response_format: Optional~DictResponseFormat~
         +metadata: Dict
+        +use_cache: bool = true
     }
     class DictResponseFormat {
         +fields: List~ResponseField~
@@ -96,6 +97,7 @@ classDiagram
         +request_scenarios
         +single_model
         +single_response_format
+        +single_cache_policy
         +zip_assign()
     }
     class EDSLAgent {

@@ -10,7 +10,7 @@ For installation and task-oriented examples, see
 [Using Shared Inference](../guides/shared_inference.md). This page defines the detailed
 component contract and implementation boundaries.
 
-The shared layer validates and batches generic requests, partitions each logical batch into EDSL-compatible job groups, delegates those jobs to EDSL, and normalizes the returned outcomes. Requests can share one EDSL job when they use the same model configuration and response format. Each job pairs agents and scenarios using EDSL's public `zip_assign()` API, creating exactly one interview per request even when instructions or personas differ. EDSL owns parallel interview execution, provider rate limiting, caching, and retry behavior within each submitted job. LLM AuditKit does not implement a second worker pool or retry loop around individual EDSL interviews.
+The shared layer validates and batches generic requests, partitions each logical batch into EDSL-compatible job groups, delegates those jobs to EDSL, and normalizes the returned outcomes. Requests can share one EDSL job when they use the same model configuration, response format and cache policy. Each job pairs agents and scenarios using EDSL's public `zip_assign()` API, creating exactly one interview per request even when instructions or personas differ. EDSL owns parallel interview execution, provider rate limiting, caching, and retry behavior within each submitted job. LLM AuditKit does not implement a second worker pool or retry loop around individual EDSL interviews.
 
 ## Public API
 
@@ -103,9 +103,19 @@ Callers submit domain-neutral `InferenceRequest` objects containing:
 - an optional persona;
 - the target model configuration ID;
 - an optional generic response format;
+- `use_cache`, a boolean defaulting to true;
 - caller-defined metadata used to associate the result with domain data.
 
 A request ID must be unique within one inference run and stable when the same logical request is resumed. Calling stages must derive it from durable domain identifiers rather than DataFrame row positions. If prompt-defining inputs or the selected model configuration change in a way that invalidates an existing result, the calling stage must also invalidate the corresponding completion identity.
+
+`use_cache=False` asks for an explicit fresh attempt without reading the existing
+EDSL cache. The adapter uses the supported `cache=False` job option (an isolated
+job cache); policy differences split compatible job groups, not logical batches.
+This does not alter request IDs, prompts, or metadata, and adds no caller retry
+loop. A calling stage may use it when explicitly resuming a domain-rejected
+response while continuing to skip successful requests. Importing the adapter
+preserves pre-existing environment values despite EDSL's import-time dotenv
+loading, before adapter model/provider clients are initialized.
 
 `InferenceConfig` is the run-level model catalog and batching policy. Each request's
 `model_config_id` selects one `ModelConfig.config_id` from that catalog; provider,
@@ -197,7 +207,7 @@ Both interfaces:
 1. validate the configuration and all requests;
 2. preserve request order and partition pending requests into deterministic batches of at most `batch_size`;
 3. delegate one logical batch at a time to the matching synchronous or asynchronous adapter method;
-4. partition that batch into deterministic EDSL job groups keyed by model configuration and response format; pair each request's agent and scenario with `zip_assign()`; then run or await each group with the corresponding EDSL execution method;
+4. partition that batch into deterministic EDSL job groups keyed by model configuration, response format and cache policy; pair each request's agent and scenario with `zip_assign()`; then run or await each group with the corresponding EDSL execution method;
 5. verify and normalize exactly one terminal result for every submitted request;
 6. yield an `InferenceBatchResult` before starting the next batch.
 

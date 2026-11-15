@@ -137,6 +137,12 @@ the `persona` in the system prompt it renders. Supply literal text such as
 text reaches the configured model provider and EDSL's cache. The provider
 can be remote. See the [EDSL boundary](../components/inference.md#edsl-boundary).
 
+To explicitly retry a domain-rejected response, set `request.use_cache = False`
+on that request before a new invocation. The EDSL adapter starts an isolated job
+cache rather than reusing the rejected response. Keep the same durable request ID
+and continue to omit successful requests. This is an opt-in execution policy, not
+an additional retry loop; it behaves the same in sync and async batches.
+
 ## Use Metadata to Handle Results
 
 `metadata` is optional caller-owned context. It is not added to the prompt and does not

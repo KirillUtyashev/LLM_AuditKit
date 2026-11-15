@@ -26,13 +26,14 @@ class AdapterJobGroup:
     """Requests compatible with one backend job.
 
     EDSL jobs created by the shared adapter use exactly one model configuration and
-    one response format. Each request supplies its own explicitly paired agent and
+    one response format and cache policy. Each request supplies its own explicitly paired agent and
     scenario, so different instructions can execute concurrently within the job.
     """
 
     model_config: ModelConfig
     response_format: DictResponseFormat | None
     requests: tuple[InferenceRequest, ...]
+    use_cache: bool = True
 
 
 def build_request_batches(
@@ -77,7 +78,7 @@ def group_requests_by_compatibility(
     """
 
     grouped_requests: dict[
-        tuple[str, ResponseFormatKey],
+        tuple[str, ResponseFormatKey, bool],
         list[InferenceRequest],
     ] = {}
 
@@ -90,6 +91,7 @@ def group_requests_by_compatibility(
         group_key = (
             request.model_config_id,
             _response_format_key(request.response_format),
+            request.use_cache,
         )
         grouped_requests.setdefault(group_key, []).append(request)
 
@@ -98,10 +100,12 @@ def group_requests_by_compatibility(
             model_config=models[model_config_id],
             response_format=group_requests[0].response_format,
             requests=tuple(group_requests),
+            use_cache=use_cache,
         )
         for (
             model_config_id,
             _response_format,
+            use_cache,
         ), group_requests in grouped_requests.items()
     )
 

@@ -104,6 +104,9 @@ def validate_inference_requests(
             )
         seen_request_ids.add(request.request_id)
 
+        if type(request.use_cache) is not bool:
+            raise InferenceRequestValidationError("request use_cache must be a boolean")
+
         _require_non_empty_string(
             request.prompt,
             field_name=f"request {request.request_id!r} prompt",
