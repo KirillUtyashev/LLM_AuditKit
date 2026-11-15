@@ -10,7 +10,7 @@ import yaml
 from llm_auditkit.inference import InferenceConfig, InferenceConfigurationError, ModelConfig
 from llm_auditkit.inference.validation import validate_inference_config
 
-from .models import OCRConfig, OCRException, OCRRunConfig, SourceDocument, canonical_json
+from .models import OCRConfig, OCRException, OCRRunConfig, SourceDocument, canonical_json, validate_export_text
 
 
 def validate_config(config: OCRConfig) -> None:
@@ -45,6 +45,10 @@ def validate_metadata(metadata: object) -> None:
         raise OCRException("source metadata values must be JSON scalars (quote dates)")
     try:
         canonical_json(metadata)
+        for key, value in metadata.items():
+            validate_export_text(key)
+            if isinstance(value, str):
+                validate_export_text(value)
     except (ValueError, TypeError) as error:
         raise OCRException("source metadata must contain finite JSON scalars") from error
 
@@ -122,5 +126,6 @@ def validate_paths(output: Path, checkpoint: Path, protected: list[Path]) -> Non
         raise OCRException("output CSV must be outside the checkpoint directory")
     for path in protected:
         same_file = output.exists() and path.exists() and output.samefile(path)
-        if same_file or path == output or path == checkpoint or checkpoint in path.parents:
+        reserved = {output, output.with_name(output.name + ".owner"), output.with_name(output.name + ".lock")}
+        if same_file or path in reserved or path == checkpoint or checkpoint in path.parents:
             raise OCRException("output/checkpoint paths must not overwrite or contain inputs/configuration")

@@ -56,25 +56,41 @@ def test_provider_errors_not_treated_as_blank_pages():
 
 def test_sync_async_sdk_paths_without_credentials_or_network():
     vision = pytest.importorskip("google.cloud.vision")
-    raw = annotation()
-    response = vision.AnnotateImageResponse(**raw)
-    calls = []
-    class Client:
-        def document_text_detection(self, **kwargs):
-            calls.append(("sync", kwargs))
-            return response
-    class AsyncClient:
-        async def document_text_detection(self, **kwargs):
-            calls.append(("async", kwargs))
-            return response
+    from google.auth.credentials import AnonymousCredentials
+    from google.api_core.gapic_v1.method import DEFAULT
+    from unittest.mock import AsyncMock, Mock
+
+    response = vision.BatchAnnotateImagesResponse(responses=[vision.AnnotateImageResponse(**annotation())])
     backend = GoogleVisionOCRBackend()
-    backend._client, backend._async_client = Client(), AsyncClient()
-    sync = backend.recognize(b"image", "page", config(language_hints=("en",)))
-    asynchronous = asyncio.run(backend.recognize_async(b"image", "page", config(language_hints=("en",))))
+    backend._client = vision.ImageAnnotatorClient(credentials=AnonymousCredentials())
+    rpc = Mock(return_value=response)
+    transport = backend._client.transport
+    transport._wrapped_methods[transport.batch_annotate_images] = rpc
+    try:
+        sync = backend.recognize(b"image", "page", config(language_hints=("en",)))
+    finally:
+        backend.close()
+
+    async def execute():
+        backend._async_client = vision.ImageAnnotatorAsyncClient(credentials=AnonymousCredentials())
+        async_rpc = AsyncMock(return_value=response)
+        transport = backend._async_client.transport
+        transport._wrapped_methods[transport.batch_annotate_images] = async_rpc
+        try:
+            result = await backend.recognize_async(b"image", "page", config(language_hints=("en",)))
+            return result, async_rpc
+        finally:
+            await backend.close_async()
+
+    asynchronous, async_rpc = asyncio.run(execute())
     assert sync == asynchronous
-    assert [call[0] for call in calls] == ["sync", "async"]
-    assert calls[0][1]["timeout"] == 120
-    assert calls[0][1]["image_context"] == {"language_hints": ["en"]}
+    for call in (rpc.call_args, async_rpc.call_args):
+        request = call.args[0].requests[0]
+        assert request.image.content == b"image"
+        assert list(request.image_context.language_hints) == ["en"]
+        assert request.features[0].type_ == vision.Feature.Type.DOCUMENT_TEXT_DETECTION
+        assert call.kwargs["timeout"] == 120
+        assert call.kwargs["retry"] is DEFAULT
 
 
 def test_png_source_identity_and_change_detection(tmp_path):
@@ -120,6 +136,7 @@ def test_pdf_uses_each_requested_page_and_dpi(tmp_path, monkeypatch):
 
 def test_real_local_multi_page_pdf_rendering_when_poppler_installed(tmp_path):
     Image = pytest.importorskip("PIL.Image")
+    pytest.importorskip("pdf2image")
     if not shutil.which("pdftoppm") or not shutil.which("pdfinfo"):
         pytest.skip("optional system Poppler is not installed")
     source = tmp_path / "synthetic.pdf"

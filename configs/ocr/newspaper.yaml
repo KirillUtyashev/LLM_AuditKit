@@ -24,3 +24,4 @@ inference:
     model: gpt-4o-2024-08-06
     parameters:
       temperature: 0
+      max_tokens: 16384

@@ -14,6 +14,7 @@ from .test_configuration import values
 
 def test_atomic_replacement_failure_keeps_existing_export(tmp_path, monkeypatch):
     store = OCRStore(tmp_path / "cache", tmp_path / "ads.csv")
+    store.initialize("run", [], True)
     store.export([])
     original = store.output_path.read_bytes()
     def fail(*args):
@@ -41,7 +42,7 @@ def test_concurrent_store_or_output_writers_are_rejected(tmp_path, shared):
 def test_checkpoint_roundtrip_and_reject_bad_schema(tmp_path):
     store = OCRStore(tmp_path / "cache", tmp_path / "ads.csv")
     source = page()
-    record = {"version": 1, "page": source, "outcome": None}
+    record = {"version": 2, "page": source, "outcome": None}
     store.save(record)
     assert store.load(source.page_id) == record
     checkpoint = next(store.directory.glob("*.json"))

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from copy import deepcopy
+from contextlib import closing
 from pathlib import Path
 from typing import Sequence
 
@@ -13,7 +14,7 @@ from llm_auditkit.inference import InferenceOrchestrator
 from .configuration import validate_config, validate_paths
 from .models import OCRConfig, OCRException, SourceDocument, canonical_json, identity
 from .reconstruction import build_request, parse_response, reconstruction_fingerprint
-from .sources import check_source, inspect_document, render_page
+from .sources import check_source, inspect_document, render_page, verified_snapshot
 from .store import CSV_COLUMNS, OCRStore, validate_page
 
 
@@ -30,12 +31,13 @@ class NewspaperOCRPipeline:
         with self.store.locked():
             self._initialize(plans, fingerprint, config)
             records = {}
-            for plan, number, page_id in self._acquisition_pages(plans):
-                record = self.store.load(page_id)
-                if record is None:
-                    page = self.backend.recognize(render_page(plan, number, config), page_id, config)
-                    record = self._accept_page(page, page_id, config)
-                records[page_id] = record
+            with closing(self._acquisition_pages(plans)) as pages:
+                for plan, number, page_id in pages:
+                    record = self.store.load(page_id)
+                    if record is None:
+                        page = self.backend.recognize(render_page(plan, number, config), page_id, config)
+                        record = self._accept_page(page, page_id, config)
+                    records[page_id] = record
             requests, ads = self._request_plan(records, plans, config, fingerprint)
             processed = 0
             for batch in self.inference.run_batches(requests, config.inference):
@@ -50,12 +52,13 @@ class NewspaperOCRPipeline:
         with self.store.locked():
             self._initialize(plans, fingerprint, config)
             records = {}
-            for plan, number, page_id in self._acquisition_pages(plans):
-                record = self.store.load(page_id)
-                if record is None:
-                    page = await self.backend.recognize_async(render_page(plan, number, config), page_id, config)
-                    record = self._accept_page(page, page_id, config)
-                records[page_id] = record
+            with closing(self._acquisition_pages(plans)) as pages:
+                for plan, number, page_id in pages:
+                    record = self.store.load(page_id)
+                    if record is None:
+                        page = await self.backend.recognize_async(render_page(plan, number, config), page_id, config)
+                        record = self._accept_page(page, page_id, config)
+                    records[page_id] = record
             requests, ads = self._request_plan(records, plans, config, fingerprint)
             processed = 0
             async for batch in self.inference.run_batches_async(requests, config.inference):
@@ -93,12 +96,13 @@ class NewspaperOCRPipeline:
     def _acquisition_pages(self, plans):
         for plan in plans:
             check_source(plan)
-            yield from self._pages([plan])
+            with verified_snapshot(plan) as snapshot:
+                yield from self._pages([snapshot])
             check_source(plan)
 
     def _accept_page(self, page, page_id, config):
         validate_page(page, page_id)
-        record = {"version": 1, "page": page, "outcome": None}
+        record = {"version": 2, "page": page, "outcome": None}
         if config.save_after_each_batch:
             self.store.save(record)
         return record
@@ -115,6 +119,10 @@ class NewspaperOCRPipeline:
                 if outcome["status"] == "success":
                     ads[page_id] = parse_response(outcome["response"], page)
                     continue
+                # Explicit resume is a fresh attempt, not replay of a rejected
+                # free-text response from the backend cache. IDs stay stable.
+                if request is not None:
+                    request.use_cache = False
             if request is None:
                 record["outcome"] = self._outcome(None, '{"ads":[],"blocks":[]}', None)
                 ads[page_id] = []

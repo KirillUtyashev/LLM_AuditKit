@@ -16,6 +16,8 @@ metadata, an `OCRConfig`, an `OCRStore`, and the shared `InferenceOrchestrator`.
 `GoogleVisionOCRBackend` isolates the Google SDK. Optional PDF/image dependencies
 are imported only when used; importing the package requires no credentials.
 PDF pages are rendered individually at configured DPI, and all pages are visited.
+Both provider paths use `batch_annotate_images` with one document-text request,
+preserving the SDK's default transport retries.
 PNG and JPEG inputs represent one page. Source metadata (for example newspaper,
 city and ISO publication date) is supplied explicitly, never guessed from names.
 
@@ -25,6 +27,10 @@ block geometry are provenance, not DataFrame-row identities. Source IDs hash
 file bytes and metadata; page IDs hash source identity and physical page number;
 block IDs hash page identity, text and geometry. Identical source inputs are
 rejected rather than silently deduplicated. Input changes during a run fail.
+Each document is copied to a private temporary snapshot and its bytes verified
+against the source hash before rendering. All cached pages therefore derive from
+verified bytes, even if the original changes or processing is interrupted before
+the final source check. Snapshots are removed after acquisition.
 
 One nonempty page is one logical inference request. Its complete ordered blocks,
 geometry and source metadata are supplied together: no fixed four-chunk loop,
@@ -50,6 +56,10 @@ language. Source-coverage validation cannot establish semantic fidelity or corre
 ad boundaries. Every exported ad is marked `review_required=true`: researchers
 must compare a sample (and uncertain cases) with scans. The software does not
 claim validated extraction accuracy or automatic research readiness.
+Currency symbols and meaningful numeric punctuation (including decimals,
+grouping, signs, percentages and ranges) must also be preserved. NUL characters
+and lone Unicode surrogates in raw or cleaned text fail before success is saved.
+Ambiguous numeric changes require source review, not automatic guessing.
 
 Sync and async methods use the matching shared inference APIs. OCR acquisition
 has explicit sync/async provider methods; async execution does not wrap blocking
@@ -68,6 +78,15 @@ use a new directory for a different run. The manifest also binds its output path
 to prevent redirecting a resumed run over an unrelated CSV. Output paths may not overwrite inputs,
 configuration, or checkpoint files. Concurrent writers are rejected by an
 exclusive store lock (a stale lock requires explicit human removal).
+An atomic JSON-encoded `<output.csv>.owner` claim binds the destination to one fingerprint
+and checkpoint directory, including while no CSV exists yet. Other runs must use
+a different destination. The claim survives failure and permits the owner's
+interrupted export to resume; absence of a claim never proves ownership of an
+existing CSV. Do not delete ownership records to reuse an output path.
+
+Checkpoint schema v2 rejects v1 manifests/pages: v1 source attribution cannot be
+proven safe. Use a new checkpoint directory and output CSV for the corrected
+implementation. No automatic migration or data deletion is performed.
 
 With `save_after_each_batch=true`, raw OCR is saved after each acquired page and
 all outcomes from a completed logical LLM batch are saved before advancing. The
@@ -77,6 +96,10 @@ an LLM request. Resume skips validated successful pages (including zero-ad pages
 and reuses raw OCR. Failed requests and invalid responses retain errors and raw
 model output in enabled checkpoints; they stop later batches. A later explicit
 invocation retries failed pages, without an internal retry loop.
+Only those failed-page requests set generic `use_cache=false`; the shared EDSL
+adapter uses its supported isolated-cache execution option so a rejected cached
+response is not replayed. Successful pages remain skipped and request IDs do not
+change. Both sync and async paths use this same policy.
 
 The CSV may be partial following failure; CLI failure and checkpoint status must
 not be interpreted as completion. Stable request IDs include page identity,

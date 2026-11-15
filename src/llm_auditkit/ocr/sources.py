@@ -4,11 +4,14 @@ from __future__ import annotations
 
 import hashlib
 import io
-from dataclasses import dataclass
+import shutil
+import tempfile
+from contextlib import contextmanager
+from dataclasses import dataclass, replace
 from pathlib import Path
 
 from .configuration import validate_metadata
-from .models import OCRConfig, OCRException, SourceDocument, identity
+from .models import OCRConfig, OCRException, SourceDocument, identity, validate_export_text
 
 
 @dataclass(frozen=True)
@@ -18,6 +21,7 @@ class DocumentPlan:
     sha256: str
     metadata: dict
     page_count: int
+    snapshot_path: Path | None = None
 
 
 def file_hash(path: Path) -> str:
@@ -41,6 +45,7 @@ def inspect_document(document: SourceDocument, config: OCRConfig) -> DocumentPla
         raise OCRException("documents must contain SourceDocument values")
     validate_metadata(document.metadata)
     path = Path(document.path).resolve()
+    validate_export_text(str(path))
     if not path.is_file() or path.suffix.lower() not in {".pdf", ".png", ".jpg", ".jpeg"}:
         raise OCRException("source must be a local PDF, PNG or JPEG file")
     digest = file_hash(path)
@@ -71,15 +76,32 @@ def check_source(plan: DocumentPlan) -> None:
         raise OCRException("source changed during OCR run")
 
 
+@contextmanager
+def verified_snapshot(plan: DocumentPlan):
+    """Render only bytes verified against the durable source hash.
+
+    A later source mutation may stop the run, but cannot poison cached OCR for
+    that original source. The private copy is removed even on interruption.
+    """
+    with tempfile.TemporaryDirectory(prefix="auditkit-ocr-source-") as directory:
+        snapshot = Path(directory) / ("source" + plan.path.suffix)
+        shutil.copyfile(plan.path, snapshot)
+        if file_hash(snapshot) != plan.sha256:
+            raise OCRException("source changed while creating its verified snapshot")
+        snapshot.chmod(0o400)
+        yield replace(plan, snapshot_path=snapshot)
+
+
 def render_page(plan: DocumentPlan, number: int, config: OCRConfig) -> bytes:
     """Render only the requested physical PDF page, never silently the first."""
     if not 1 <= number <= plan.page_count:
         raise OCRException("physical page number outside source")
-    if plan.path.suffix.lower() != ".pdf":
-        return plan.path.read_bytes()
+    source = plan.snapshot_path or plan.path
+    if source.suffix.lower() != ".pdf":
+        return source.read_bytes()
     try:
         images = _pdf_tools().convert_from_path(
-            str(plan.path), dpi=config.dpi, first_page=number, last_page=number,
+            str(source), dpi=config.dpi, first_page=number, last_page=number,
             fmt="png", thread_count=1, timeout=config.timeout,
         )
         if len(images) != 1:

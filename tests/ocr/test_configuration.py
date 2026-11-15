@@ -98,3 +98,4 @@ def test_shipped_yaml_example_loads_without_reading_scans():
     root = Path(__file__).resolve().parents[2]
     run = load_ocr_run_config(root / "configs/ocr/newspaper.yaml")
     assert run.config.inference.models[0].model == "gpt-4o-2024-08-06"
+    assert run.config.inference.models[0].parameters["max_tokens"] == 16384

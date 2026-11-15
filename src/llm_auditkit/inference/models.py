@@ -58,6 +58,7 @@ class InferenceRequest:
     metadata: dict[str, object] = field(default_factory=dict)
     response_format: DictResponseFormat | None = None
     persona: str | None = None
+    use_cache: bool = True
 
 
 @dataclass(slots=True)

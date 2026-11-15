@@ -62,6 +62,17 @@ def test_empty_request_collection_produces_no_batches() -> None:
     assert build_request_batches([], batch_size=10) == ()
 
 
+def test_cache_refresh_splits_backend_groups_not_logical_batches() -> None:
+    requests = [_request("cached"), _request("fresh"), _request("cached-again")]
+    requests[1].use_cache = False
+    groups = group_requests_by_compatibility(requests, _models())
+    assert [group.use_cache for group in groups] == [True, False]
+    assert [[request.request_id for request in group.requests] for group in groups] == [
+        ["cached", "cached-again"], ["fresh"],
+    ]
+    assert len(build_request_batches(requests, batch_size=3)) == 1
+
+
 @pytest.mark.parametrize("batch_size", [True, 1.5, 0, -1])
 def test_batch_builder_rejects_invalid_batch_size(batch_size: object) -> None:
     with pytest.raises(InferenceConfigurationError, match="batch_size"):

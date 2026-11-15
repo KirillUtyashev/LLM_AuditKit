@@ -15,6 +15,16 @@ class OCRException(ValueError):
     """Invalid OCR configuration, source, checkpoint or extraction outcome."""
 
 
+def validate_export_text(value: str) -> None:
+    """Require text that survives both UTF-8 CSV export and DatasetLoader."""
+    if "\x00" in value:
+        raise OCRException("exported text must not contain NUL characters")
+    try:
+        value.encode("utf-8")
+    except UnicodeEncodeError as error:
+        raise OCRException("exported text must be valid UTF-8 without lone surrogates") from error
+
+
 @dataclass(frozen=True)
 class SourceDocument:
     path: str | Path

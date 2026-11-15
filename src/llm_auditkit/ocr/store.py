@@ -11,7 +11,7 @@ from contextlib import contextmanager
 from dataclasses import asdict
 from pathlib import Path
 
-from .models import OCRBlock, OCRException, OCRPage, canonical_json, identity
+from .models import OCRBlock, OCRException, OCRPage, canonical_json, identity, validate_export_text
 
 
 CSV_COLUMNS = [
@@ -34,6 +34,7 @@ def validate_page(page: OCRPage, page_id: str) -> None:
     for block in page.blocks:
         if not isinstance(block, OCRBlock) or not isinstance(block.text, str) or not block.text.strip():
             raise OCRException("OCR blocks require nonempty text")
+        validate_export_text(block.text)
         if len(block.vertices) != 4 or any(
             len(vertex) != 2 or any(type(value) is not int for value in vertex)
             for vertex in block.vertices
@@ -87,19 +88,23 @@ class OCRStore:
 
     def initialize(self, fingerprint: str, sources: list[dict], incremental: bool) -> None:
         expected = {
-            "version": 1, "fingerprint": fingerprint, "sources": sources,
+            "version": 2, "fingerprint": fingerprint, "sources": sources,
             "output_path": str(self.output_path),
         }
         path = self.directory / "manifest.json"
-        if path.exists():
-            if self._read(path) != expected:
-                raise OCRException("checkpoint inputs/configuration differ; use a new checkpoint directory")
-        else:
+        self._owner = {"version": 1, "fingerprint": fingerprint,
+                       "checkpoint_directory": str(self.directory)}
+        exists = path.exists()
+        if exists and self._read(path) != expected:
+            raise OCRException("checkpoint inputs/configuration differ; use a new checkpoint directory")
+        self._verify_owner()
+        if not exists:
             if any(self.directory.glob("*.json")):
                 raise OCRException("checkpoint files exist without a manifest")
             if self.output_path.exists():
                 raise OCRException("refusing to overwrite an output CSV without a matching checkpoint manifest")
             if incremental:
+                self._claim_output()
                 self._write(path, expected)
         self._manifest = expected
 
@@ -108,7 +113,7 @@ class OCRStore:
         if not path.exists():
             return None
         record = self._read(path)
-        if not isinstance(record, dict) or set(record) != {"version", "page", "outcome"} or record["version"] != 1:
+        if not isinstance(record, dict) or set(record) != {"version", "page", "outcome"} or record["version"] != 2:
             raise OCRException("invalid page checkpoint schema")
         try:
             raw_page = record["page"]
@@ -127,18 +132,40 @@ class OCRStore:
 
     def save(self, record: dict) -> None:
         self._write(self._page_path(record["page"].page_id), {
-            "version": 1, "page": asdict(record["page"]), "outcome": record["outcome"],
+            "version": 2, "page": asdict(record["page"]), "outcome": record["outcome"],
         })
 
     def save_manifest(self) -> None:
+        self._claim_output()
         self._write(self.directory / "manifest.json", self._manifest)
 
     def export(self, rows: list[dict]) -> None:
+        self._claim_output()
         def write(stream):
             writer = csv.DictWriter(stream, fieldnames=CSV_COLUMNS)
             writer.writeheader()
             writer.writerows(rows)
         _atomic(self.output_path, write)
+
+    @property
+    def owner_path(self) -> Path:
+        # Not a tabular extension: DatasetLoader directory sources must not try
+        # to load this JSON-encoded bookkeeping file as research data.
+        return self.output_path.with_name(self.output_path.name + ".owner")
+
+    def _verify_owner(self) -> None:
+        if self.owner_path.exists():
+            if self._read(self.owner_path) != self._owner:
+                raise OCRException("output CSV is owned by another OCR checkpoint store/run")
+        elif self.output_path.exists():
+            raise OCRException("refusing to overwrite an output CSV without verified ownership")
+
+    def _claim_output(self) -> None:
+        if not hasattr(self, "_owner"):
+            raise OCRException("initialize the OCR store before exporting")
+        self._verify_owner()
+        if not self.owner_path.exists():
+            self._write(self.owner_path, self._owner)
 
     def _page_path(self, page_id: str) -> Path:
         # IDs are only produced internally; validate before using as a filename.
@@ -160,5 +187,8 @@ class OCRStore:
 
     @staticmethod
     def _write(path: Path, value: object) -> None:
-        text = canonical_json(value)
+        # Escape even malformed Unicode in opaque provider output so a rejected
+        # response can be inspected without poisoning its failure checkpoint.
+        text = json.dumps(value, ensure_ascii=True, sort_keys=True, allow_nan=False,
+                          separators=(",", ":"))
         _atomic(path, lambda stream: stream.write(text + "\n"))

@@ -7,23 +7,25 @@ import hashlib
 import json
 import logging
 import math
+import os
 import re
 from collections.abc import Mapping, Sequence
 from typing import Any
 
-from edsl import (
-    Agent,
-    AgentList,
-    Jobs,
-    Model,
-    QuestionDict,
-    QuestionFreeText,
-    Scenario,
-    ScenarioList,
-    Survey,
-)
-from edsl.inference_services.registry import GLOBAL_REGISTRY
-from edsl.questions.question_dict import DictResponseValidator
+# EDSL 1.0.x loads .env with override=True at import. Restore pre-existing
+# caller settings before any adapter model/provider client is constructed;
+# newly loaded .env values remain available. Never retain credentials globally.
+_caller_environment = dict(os.environ)
+try:
+    from edsl import (
+        Agent, AgentList, Jobs, Model, QuestionDict, QuestionFreeText,
+        Scenario, ScenarioList, Survey,
+    )
+    from edsl.inference_services.registry import GLOBAL_REGISTRY
+    from edsl.questions.question_dict import DictResponseValidator
+finally:
+    os.environ.update(_caller_environment)
+    del _caller_environment
 
 from .batching import AdapterJobGroup, group_requests_by_compatibility
 from .exceptions import InferenceBatchError
@@ -164,7 +166,8 @@ class EDSLAdapter:
             try:
                 job = _build_job(group)
                 edsl_results = job.run(
-                    print_exceptions=False, disable_remote_inference=True
+                    print_exceptions=False, disable_remote_inference=True,
+                    **({"cache": False} if not group.use_cache else {}),
                 )
                 normalized_results.extend(_normalize_results(group, edsl_results))
             except InferenceBatchError:
@@ -187,7 +190,8 @@ class EDSLAdapter:
                 try:
                     job = _build_job(group)
                     edsl_results = await job.run_async(
-                        print_exceptions=False, disable_remote_inference=True
+                        print_exceptions=False, disable_remote_inference=True,
+                        **({"cache": False} if not group.use_cache else {}),
                     )
                     normalized_results.extend(_normalize_results(group, edsl_results))
                 except InferenceBatchError:

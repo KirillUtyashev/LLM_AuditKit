@@ -3,11 +3,13 @@
 from __future__ import annotations
 
 import json
+import re
+import unicodedata
 from dataclasses import asdict
 
 from llm_auditkit.inference import InferenceRequest
 
-from .models import OCRConfig, OCRException, OCRPage, canonical_json, identity
+from .models import OCRConfig, OCRException, OCRPage, canonical_json, identity, validate_export_text
 
 
 PROMPT_VERSION = "newspaper-ads-v1"
@@ -94,6 +96,7 @@ def parse_response(response: str, page: OCRPage) -> list[dict]:
             raise OCRException("ad keys must be unique nonempty strings")
         if not isinstance(ad["text"], str) or not ad["text"].strip():
             raise OCRException("cleaned ad text must be nonempty")
+        validate_export_text(ad["text"])
         ads[ad["key"]] = {"Text": ad["text"], "spans": []}
 
     expected_blocks = {block.block_id: block for block in page.blocks}
@@ -141,10 +144,13 @@ def parse_response(response: str, page: OCRPage) -> list[dict]:
         raw_text = "\n".join(expected_blocks[span["block_id"]].text[span["start"]:span["end"]] for span in spans)
         if not raw_text.strip():
             raise OCRException("ad has no nonempty source text")
+        validate_export_text(raw_text)
         source_characters = "".join(char for char in raw_text.casefold() if char.isalnum())
         cleaned_characters = "".join(char for char in ad["Text"].casefold() if char.isalnum())
         if source_characters != cleaned_characters:
             raise OCRException("cleanup changed source letters/digits instead of only spacing/punctuation")
+        if _numeric_signature(raw_text) != _numeric_signature(ad["Text"]):
+            raise OCRException("cleanup changed currency or meaningful numeric punctuation")
         result.append({
             "ad_id": identity("ad", [page.page_id, spans]),
             "raw_text": raw_text, "Text": ad["Text"], "source_spans": spans,
@@ -152,6 +158,17 @@ def parse_response(response: str, page: OCRPage) -> list[dict]:
     return sorted(result, key=lambda ad: (
         block_order[ad["source_spans"][0]["block_id"]], ad["source_spans"][0]["start"],
     ))
+
+
+def _numeric_signature(text: str) -> tuple:
+    # Conservative: preserve currency, signs, decimal/group separators, ranges,
+    # times, percentages and parenthesized numbers. Hyphenated words remain free
+    # to join; ambiguous numeric repairs require human correction of the source.
+    numbers = re.findall(r"\(?[+\-−]?\d+(?:[.,:/\-–—]\s*\d+)*(?:\s*[%‰])?\)?", text)
+    return (
+        tuple(char for char in text if unicodedata.category(char) == "Sc"),
+        tuple(re.sub(r"\s+", "", number) for number in numbers),
+    )
 
 
 def _keys(value: object, keys: set[str], label: str) -> None:

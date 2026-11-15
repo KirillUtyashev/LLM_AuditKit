@@ -58,6 +58,7 @@ inference:
     model: gpt-4o-2024-08-06
     parameters:
       temperature: 0
+      max_tokens: 16384
 ```
 
 The model is an explicit example, not a promise of ongoing provider availability.
@@ -83,6 +84,15 @@ page exceeding the configured complete-prompt character limit fails without
 truncating text; increase the limit only if the model can handle it. The feature
 does not automatically join ads continued onto another physical page.
 
+Input characters and output tokens are separate budgets. Reconstruction must
+repeat the source segments and block IDs as well as cleaned ads; a page fitting
+the 40,000-character input limit may still exceed the completion budget. The
+example explicitly requests 16,384 output tokens for its
+[selected model](https://developers.openai.com/api/docs/models/gpt-4o), rather
+than EDSL's smaller default. Check your model's supported limit and use smaller
+page inputs when the required response cannot fit. A truncated response fails
+validation; the input size check alone does not guarantee success.
+
 ## Inspect and resume
 
 Checkpoints contain the raw Google response, normalized blocks with polygons and
@@ -93,6 +103,8 @@ unreferenced ads fail validation and stop later LLM batches.
 Cleanup must preserve the case-folded sequence of source letters/digits; only
 spacing, word joining and punctuation changes are accepted automatically. Actual
 misrecognized letters/numbers must be reviewed rather than silently guessed.
+Currency symbols, decimals/grouping, numeric signs/ranges and percentages must
+also stay unchanged. NULs and invalid UTF-8 text fail before a success checkpoint.
 
 With incremental saving enabled, raw OCR is saved per page and reconstructed
 outcomes/CSV are saved after each logical batch. A failed run can leave a partial
@@ -102,6 +114,8 @@ directory. Every planned source/page must have a successful outcome for completi
 
 Rerun the same command to reuse saved OCR and skip successful pages, including
 pages with no ads. Failed pages are retried only by this new explicit invocation.
+Those requests bypass existing EDSL cache entries through shared inference, so
+a previously rejected response is not replayed; durable IDs remain the same.
 Changing the model, prompt contract, source bytes/metadata, DPI/language hints,
 or page-size limit requires a new checkpoint directory **and** a new output CSV.
 The manifest binds the original output path; do not redirect a resumed run over
@@ -110,6 +124,15 @@ Changing execution mode, batch size, or incremental saving does not invalidate
 completed results. Moving identical inputs preserves IDs when metadata is unchanged.
 Concurrent writers to the same store or output are rejected; after a killed
 process, inspect and explicitly remove stale `.lock` files before resuming.
+The persistent `<output.csv>.owner` file reserves the CSV for its original
+checkpoint store even if the run failed before writing any CSV. Leave that file
+in place when resuming; choose a different output path for an unrelated run.
+
+This corrected implementation uses checkpoint format v2. Existing v1 checkpoint
+directories are rejected rather than reused, because cached pages might have
+incorrect source attribution. Start a new directory and output CSV; old files
+are left untouched. Verified temporary snapshots protect new page checkpoints
+from input-file changes while rendering/OCR is in progress.
 
 With `save_after_each_batch: false`, checkpoints and CSV are written only after
 a complete successful run; interruption therefore loses that invocation's progress.

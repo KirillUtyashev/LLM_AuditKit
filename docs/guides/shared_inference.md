@@ -130,6 +130,12 @@ must be unique within a run.
 can use different models, instructions, and personas; the adapter places differing
 agent configurations in separate compatible jobs and preserves input and output order.
 
+To explicitly retry a domain-rejected response, set `request.use_cache = False`
+on that request before a new invocation. The EDSL adapter starts an isolated job
+cache rather than reusing the rejected response. Keep the same durable request ID
+and continue to omit successful requests. This is an opt-in execution policy, not
+an additional retry loop; it behaves the same in sync and async batches.
+
 ## Use Metadata to Handle Results
 
 `metadata` is optional caller-owned context. It is not added to the prompt and does not

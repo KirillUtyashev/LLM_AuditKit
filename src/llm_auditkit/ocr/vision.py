@@ -23,20 +23,31 @@ class GoogleVisionOCRBackend:
     def recognize(self, image: bytes, page_id: str, config: OCRConfig) -> OCRPage:
         if self._client is None:
             self._client = self._sdk().ImageAnnotatorClient()
-        response = self._client.document_text_detection(
-            image={"content": image}, image_context={"language_hints": list(config.language_hints)},
-            timeout=config.timeout,
+        response = self._client.batch_annotate_images(
+            requests=[self._request(image, config)], timeout=config.timeout,
         )
-        return self._decode(response, page_id)
+        return self._decode_batch(response, page_id)
 
     async def recognize_async(self, image: bytes, page_id: str, config: OCRConfig) -> OCRPage:
         if self._async_client is None:
             self._async_client = self._sdk().ImageAnnotatorAsyncClient()
-        response = await self._async_client.document_text_detection(
-            image={"content": image}, image_context={"language_hints": list(config.language_hints)},
-            timeout=config.timeout,
+        response = await self._async_client.batch_annotate_images(
+            requests=[self._request(image, config)], timeout=config.timeout,
         )
-        return self._decode(response, page_id)
+        return self._decode_batch(response, page_id)
+
+    def _request(self, image: bytes, config: OCRConfig):
+        vision = self._sdk()
+        return vision.AnnotateImageRequest(
+            image={"content": image},
+            features=[{"type_": vision.Feature.Type.DOCUMENT_TEXT_DETECTION}],
+            image_context={"language_hints": list(config.language_hints)},
+        )
+
+    def _decode_batch(self, response, page_id: str) -> OCRPage:
+        if len(response.responses) != 1:
+            raise OCRException("single raster OCR RPC must return exactly one response")
+        return self._decode(response.responses[0], page_id)
 
     @staticmethod
     def _decode(response, page_id: str) -> OCRPage:
