@@ -3,6 +3,11 @@ config:
   theme: mc
 ---
 flowchart LR
+    W["YAML-driven repository runner<br/>Explicit phases stop for inspection"] -. composes .-> O
+    W -. composes .-> B
+    W -. composes .-> C
+    W -. composes .-> D
+    W -. preparation then separate analysis phase .-> E
     S[Optional scans / PDFs] --> O[Newspaper OCR and ad reconstruction]
     O -->|Job-ad CSV| A
     A[Dataset Loading] --> B[Template Generation]
@@ -10,7 +15,7 @@ flowchart LR
     C --> D[Experiment Execution]
     P["Researcher populates templates in EDSL"] -->|Finished text in a DataFrame| D
     C -->|Populated DataFrame| R["Researcher runs an EDSL experiment"]
-    D -.->|CSV mapping pending| E[Regression Analysis]
+    D -->|Single-audit CSV: input_format auditkit| E[Regression Analysis]
     B -.-> I[Shared Inference Batching]
     D -.-> I
     O -.-> I

@@ -112,7 +112,12 @@ as sensitive local research artifacts, not logs or repository fixtures.
 
 One row per extracted ad: `ad_id`, `source_id`, `page_id`, `page_number`,
 `source_path`, `metadata_json`, `raw_text`, `Text` (cleaned text),
-`source_spans_json`, `request_id`, `model_config_id`, `review_required`.
+`source_spans_json`, `ocr_request_id`, `ocr_model_config_id`, `review_required`.
+OCR inference provenance is namespaced so downstream experiment request/model
+IDs can coexist without renaming or dropping source fields. Existing page
+checkpoints retain their internal IDs; resuming re-exports the new CSV names
+without rerunning successful OCR or inference. Previously loaded downstream
+datasets/checkpoints are not silently migrated to a different source schema.
 JSON-valued columns are encoded strings, so `DatasetLoader` retains scalar cells.
 No `scenario_id` is invented here; the loader establishes it normally.
 An empty successful run writes the same CSV header with zero records.

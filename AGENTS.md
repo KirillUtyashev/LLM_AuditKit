@@ -10,9 +10,10 @@ dataset loading, shared inference, template generation, template population,
 and experiment execution. The regression stage has a
 locked R environment, separate preparation and fixed-effects estimation
 runners, tidy numerical result export, and independent in-memory or PNG
-rendering. Its synthetic workflow is complete, but its preparation input does
-not yet consume the implemented experiment-execution CSV directly. That boundary
-must be reconciled explicitly before the stages are described as integrated.
+rendering. R preparation accepts native experiment-execution CSVs when configured
+with `input_format: auditkit`, alongside its default canonical schema. The offline
+cross-language workflow is tested; live newspaper accuracy and research-specific
+audit scope still require inspection.
 
 - Do not assume documented components are already implemented.
 - Do not add functionality, dependencies, interfaces, or placeholder modules outside the scope of the current task.
@@ -60,7 +61,8 @@ When an architectural contract represented in a Mermaid diagram changes, update 
   candidate position as durable identity.
 - Keep checkpoint policies stage-specific and configurable. Template generation uses `save_after_each_result`; experiment execution uses `save_after_each_batch` and writes at most once per completed logical batch. Incremental file writes must use an atomic replacement strategy.
 - The Python-to-R boundary uses raw experiment CSVs. Separate YAML-configured `Rscript` entry points prepare a regression-ready CSV, estimate one inspected dataset into plot-ready numerical results, and render figures independently from those results. Within R, estimation returns the same tidy table that the CLI can persist as CSV; plotting accepts that object, a list of compatible result tables, or equivalent result CSV paths.
-- The implemented experiment writer and current regression preparation loader use different CSV schemas. Do not claim direct compatibility or hide an ad hoc transformation; the mapping, candidate identity, and unsuccessful-job policies remain explicit integration work.
+- The repository runner `scripts/run_pipeline.py` references existing stage YAML files and runs explicitly selected review phases. Keep preparation and analysis in separate invocations, preserve researcher-owned candidate assignments and audit scope, and delegate inference/checkpoint resume to stage APIs rather than adding workflow retries or a second inference cache. See `docs/guides/pipeline.md`.
+- R preparation normalizes native experiment CSVs only with explicit `input_format: auditkit`. Preserve candidate IDs, covariates, and emitted-answer log probabilities; map either nonblank error field to failed status. Reject mixed schemas and experiment/persona/model scopes rather than partitioning them. Candidate identities and audit IDs must never be inferred.
 - Researchers define substantive numeric indicators and interaction terms outside the package. Preparation may validate and map configured source fields, but it must not infer domain-specific race, experience, or interaction definitions.
 - Plot configuration must explicitly select both `outcome_variable` (the dependent variable) and `term` (the coefficient shown), unless a complete outcome-by-panel map replaces the scalar outcome. Estimation groups create separate fits; covariance clusters only control inference within each fit.
 - Preparation stamps one researcher-assigned stable `audit_id` onto every regression-ready row; never generate or infer it from paths or model metadata. Researchers must supply input already scoped to one model configuration, one persona, and one distinguishable run or batch. Preparation validates singleton persona/model scope; researchers remain responsible for run/batch scope because the current input lacks that identity. Do not add automatic persona/model partitioning or selectors. `dataset_id` identifies an inspected analysis slice and `model_id` identifies a regression specification. Rendering preserves `(audit_id, dataset_id, model_id)` source provenance, while the configured `panel_variable` alone chooses panels. Audit comparisons must use the same right-hand-side formula, fixed effects, clustering, covariance type, estimation grouping, and inference contract; only an explicit outcome-by-panel map may vary the dependent variable.

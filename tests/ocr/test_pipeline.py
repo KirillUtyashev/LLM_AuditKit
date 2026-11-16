@@ -63,6 +63,25 @@ def test_resume_skips_ocr_and_inference_and_preserves_ids(documents, tmp_path):
     assert len(adapter.sync_calls) == 3 and not adapter.async_calls
 
 
+def test_export_namespaces_inference_ids_and_upgrades_old_export_on_resume(documents, tmp_path):
+    backend, adapter = Backend(), Adapter()
+    pipeline = make_pipeline(tmp_path, backend, adapter)
+    first = pipeline.run(documents, config())
+    assert {"request_id", "model_config_id"}.isdisjoint(first.columns)
+    assert first.ocr_request_id.tolist() == [batch[0].request_id for batch in adapter.sync_calls]
+    assert first.ocr_model_config_id.eq(config().inference.models[0].config_id).all()
+    # Old page checkpoints remain readable; re-export replaces only the CSV
+    # header without losing provenance or issuing new provider calls.
+    first.rename(columns={"ocr_request_id": "request_id", "ocr_model_config_id": "model_config_id"}).to_csv(
+        pipeline.store.output_path, index=False
+    )
+    resumed = asyncio.run(pipeline.run_async(documents, config()))
+    pd.testing.assert_frame_equal(first, resumed)
+    assert "ocr_request_id" in pd.read_csv(pipeline.store.output_path)
+    assert backend.sync_calls == 3 and not backend.async_calls
+    assert len(adapter.sync_calls) == 3 and not adapter.async_calls
+
+
 def test_page_batch_size_not_ad_count(documents, tmp_path):
     adapter = Adapter()
     cfg = config()

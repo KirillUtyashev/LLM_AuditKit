@@ -4,6 +4,7 @@ documents:
     metadata:
       newspaper: Example Daily
       city: Example City
+      year: 1950
       publication_date: "1950-06-15"
 output:
   path: ../../outputs/ocr/ads.csv

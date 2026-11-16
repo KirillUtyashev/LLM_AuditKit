@@ -1,0 +1,21 @@
+# Paid workflow. Run --check first; each --phase stops for inspection.
+ocr: ../ocr/newspaper.yaml
+templates: ../template_generation/newspaper.yaml
+metadata_columns:
+  city: city
+  year: year
+population:
+  # Create this after inspecting templates, using their scenario_id values.
+  replacements_path: ../../inputs/candidates.csv
+  output_path: ../../outputs/pipeline/populated.csv
+  template_columns:
+    layout-a: template_1
+    layout-b: template_2
+  placeholder_columns:
+    name: name
+    qualification: qualification
+experiments: ../experiments/newspaper.yaml
+regression:
+  preparation: ../regression/newspaper_prepare.yaml
+  estimation: ../regression/newspaper_estimate.yaml
+  rendering: ../regression/newspaper_render.yaml

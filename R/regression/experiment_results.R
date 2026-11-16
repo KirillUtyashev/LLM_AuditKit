@@ -183,6 +183,49 @@ EXPERIMENT_RESULT_ENVELOPE_COLUMNS <- c(
   data
 }
 
+.experiment_results_normalize_auditkit <- function(data, config, source_file) {
+  required <- c("experiment_id", "request_id", "error_type", "error_message")
+  missing <- setdiff(required, names(data))
+  if (length(missing) > 0L) {
+    .experiment_results_abort(
+      source_file, "missing AuditKit column(s): %s", paste(missing, collapse = ", ")
+    )
+  }
+  # Refuse mixed schemas rather than silently choosing one set of outcomes.
+  canonical <- grep(
+    "^candidate_[1-9][0-9]*_(pick|log_probability)$", names(data), value = TRUE
+  )
+  if ("result_status" %in% names(data) || length(canonical) > 0L) {
+    .experiment_results_abort(
+      source_file, "AuditKit input must not also contain canonical status/result columns."
+    )
+  }
+  .experiment_results_validate_nonblank(data, c("experiment_id", "request_id"), source_file)
+  failed <- nzchar(trimws(data$error_type)) | nzchar(trimws(data$error_message))
+  data$result_status <- ifelse(failed, "failed", "completed")
+  data <- .experiment_results_validate_frame(data, config, source_file)
+
+  picks <- grep("^pick[1-9][0-9]*$", names(data), value = TRUE)
+  slots <- seq_along(picks)
+  logprobs <- grep("^logprob[1-9][0-9]*$", names(data), value = TRUE)
+  if (
+    length(picks) != max(as.integer(data$candidate_count)) ||
+      !setequal(picks, paste0("pick", slots)) ||
+      !setequal(logprobs, paste0("logprob", slots))
+  ) {
+    .experiment_results_abort(
+      source_file,
+      "AuditKit pick/logprob families must expose indices 1 through max(candidate_count)."
+    )
+  }
+  for (slot in slots) {
+    # Copy the emitted-answer probability unchanged; do not complement P(No).
+    data[[sprintf("candidate_%d_pick", slot)]] <- data[[paste0("pick", slot)]]
+    data[[sprintf("candidate_%d_log_probability", slot)]] <- data[[paste0("logprob", slot)]]
+  }
+  data
+}
+
 .experiment_results_bind <- function(frames) {
   all_columns <- Reduce(
     function(existing, frame) c(existing, setdiff(names(frame), existing)),
@@ -239,7 +282,11 @@ EXPERIMENT_RESULT_ENVELOPE_COLUMNS <- c(
 }
 
 .experiment_results_validate_audit_scope <- function(data, config) {
-  for (field in c("persona_id", "model_config_id")) {
+  fields <- c("persona_id", "model_config_id")
+  if (identical(config$input_format, "auditkit")) {
+    fields <- c(fields, "experiment_id")
+  }
+  for (field in fields) {
     values <- sort(unique(data[[field]]), method = "radix")
     if (length(values) == 1L) {
       next
@@ -326,6 +373,9 @@ EXPERIMENT_RESULT_ENVELOPE_COLUMNS <- c(
   Map(
     function(path, source_file) {
       data <- .experiment_results_strict_read(path, source_file)
+      if (identical(config$input_format, "auditkit")) {
+        data <- .experiment_results_normalize_auditkit(data, config, source_file)
+      }
       data <- .experiment_results_validate_frame(data, config, source_file)
       data.frame(
         source_file = rep(source_file, nrow(data)),

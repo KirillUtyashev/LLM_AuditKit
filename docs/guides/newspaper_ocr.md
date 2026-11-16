@@ -142,7 +142,8 @@ a complete successful run; interruption therefore loses that invocation's progre
 `Text` contains cleaned ad text; `raw_text` preserves verbatim assigned OCR
 segments (joined by newlines). `ad_id`, `source_id`, `page_id`, `page_number`,
 `source_path`, `metadata_json`, and `source_spans_json` trace an ad back to its
-scan and block/character ranges. Request/model IDs record inference provenance.
+scan and block/character ranges. `ocr_request_id` and `ocr_model_config_id`
+record OCR inference provenance without colliding with experiment IDs later.
 Metadata and spans are JSON strings, not nested DataFrame objects.
 
 ```python

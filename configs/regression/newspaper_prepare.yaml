@@ -1,0 +1,12 @@
+input_format: auditkit
+input_paths:
+  - ../../outputs/pipeline/experiments.csv
+output_path: ../../outputs/pipeline/regression_ready.csv
+# Replace with your stable identity for this model/persona/run, before use.
+audit_id: example_newspaper_run
+top_share: 0.08
+probability_threshold: 0.99
+ranking_group_variables: [city, year]
+scenario_covariates: []
+# Example numeric indicator supplied by the researcher in candidates.csv.
+candidate_covariates: [treatment]

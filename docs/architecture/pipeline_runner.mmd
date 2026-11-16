@@ -1,0 +1,18 @@
+flowchart TD
+    M[Master YAML references existing stage configs] --> V[Validate wiring and protected paths]
+    V --> P{Explicit phase selection}
+    P --> O[ocr: Vision and shared-inference reconstruction]
+    O --> G1[Stop: inspect ads against scans]
+    P --> T[templates: DatasetLoader and TemplateGenerator]
+    T --> G2[Stop: inspect layouts and supply candidate assignments]
+    P --> U[population: TemplatePopulator and atomic CSV]
+    U --> G3[Stop: inspect completed resumes and candidate metadata]
+    P --> E[experiments: native experiment command]
+    E --> R[R preparation: input_format auditkit]
+    R --> G4[Stop: inspect regression-ready CSV]
+    P --> A[analysis: R estimation then rendering]
+    A --> F[Coefficient CSV and PNG]
+    G1 -. next explicit invocation .-> P
+    G2 -. next explicit invocation .-> P
+    G3 -. next explicit invocation .-> P
+    G4 -. next explicit invocation .-> P

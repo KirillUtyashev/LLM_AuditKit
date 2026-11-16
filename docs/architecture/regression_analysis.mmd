@@ -6,6 +6,7 @@ classDiagram
     class PreparationConfig {
         <<YAML>>
         +input_paths: List~Path~
+        +input_format: canonical_or_auditkit = canonical
         +output_path: Path
         +audit_id: str
         +top_share: float = 0.08
@@ -135,7 +136,7 @@ classDiagram
 
     PreparationCLI --> PreparationConfig : loads
     PreparationCLI --> RegressionDataPreparation : invokes
-    RegressionDataPreparation --> RawExperimentResults : reads
+    RegressionDataPreparation --> RawExperimentResults : validates configured format and normalizes AuditKit fields
     RegressionDataPreparation --> RegressionReadyData : writes
 
     RegressionCLI --> RegressionConfig : loads

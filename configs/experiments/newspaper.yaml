@@ -1,0 +1,29 @@
+experiment_id: newspaper-hiring-v1
+dataset:
+  path: ../../outputs/pipeline/populated.csv
+  job_posting_column: Text
+  resume_columns: [resume_1, resume_2]
+  context_columns:
+    city: city
+    year: year
+prompt:
+  template_path: ../../examples/experiment_execution/prompts/newspaper_question.txt
+output:
+  path: ../../outputs/pipeline/experiments.csv
+execution:
+  mode: async
+  batch_size: 5
+  save_after_each_batch: true
+personas:
+  - id: newspaper-reviewer
+    name: Hiring manager
+    trait_template_path: ../../examples/experiment_execution/prompts/hiring_manager_trait.txt
+    instruction_path: ../../examples/experiment_execution/prompts/hiring_manager_instruction.txt
+inference:
+  models:
+    - config_id: gpt-4o-august-review
+      provider: openai
+      model: gpt-4o-2024-08-06
+      parameters:
+        temperature: 0
+        logprobs: true
