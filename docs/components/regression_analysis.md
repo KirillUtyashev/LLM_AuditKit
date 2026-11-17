@@ -63,7 +63,7 @@ selection outcomes.
 
 Each raw row represents one completed or attempted `ExperimentJobKey`. The
 production writer is owned by [experiment execution](experiment_execution.md),
-and the preparation consumer requires these columns:
+and the preparation consumer's canonical format requires these columns:
 
 | Column | Type | Contract |
 | --- | --- | --- |
@@ -78,6 +78,26 @@ and the preparation consumer requires these columns:
 | `candidate_<i>_pick` | integer | Raw binary selection for candidate `i`; required on completed rows and ignored if present on unsuccessful rows. |
 | `candidate_<i>_log_probability` | double | Natural-log probability of the emitted binary answer for candidate `i`: `log(P(Yes))` when `pick == 1` and `log(P(No))` when `pick == 0`; unsuccessful rows may be empty. |
 | `candidate_<i>_<covariate>` | scalar | Optional structured candidate covariates named in `candidate_covariates`. |
+
+For native AuditKit experiment checkpoints, configure `input_format: auditkit`.
+The production loader reads `pick1` through `pickN` and `logprob1` through
+`logprobN` directly and normalizes them to the candidate families above. It
+sets `result_status` to `failed` if either `error_type` or `error_message` is
+nonblank, otherwise `completed`. Missing/malformed successful outcomes still
+fail preparation validation; they are not silently repaired or excluded.
+Emitted-answer log probabilities are copied unchanged, including for `No`.
+
+Native input must also contain nonblank `experiment_id` and `request_id`, both
+error-field headers, and all other required fields above (except the canonical
+status/pick/probability columns supplied by normalization). Pick/logprob
+headers must expose exactly `1..max(candidate_count)`. Mixed native and
+canonical status/result columns are rejected rather than choosing between
+them. Stable candidate IDs, city/year, and configured covariates must already
+be present; preparation never invents them. Population output supplies
+candidate IDs/counts/covariates, and experiment execution preserves them.
+Configure experiment résumé columns in the same order as those candidate
+slots. This option does not change the Python checkpoint format or its resume
+behavior, and does not support the historical paper CSV format.
 
 Candidate indices are one-based. Every row must contain the job identities,
 `result_status`, `candidate_count`, ranking fields, candidate IDs, and configured
@@ -166,6 +186,7 @@ candidate_covariates:
 | Field | Required | Validation and meaning |
 | --- | --- | --- |
 | `input_paths` | yes | Nonempty, ordered list of distinct readable CSV paths. |
+| `input_format` | no | `canonical` (default, column families above) or `auditkit` (native experiment checkpoints, normalized by the loader). One format applies to every input file. |
 | `output_path` | yes | One CSV path distinct from every input path. |
 | `audit_id` | yes | Nonempty stable identity assigned by the researcher to the LLM audit represented by all configured inputs. |
 | `top_share` | no | Fraction in `(0, 1]`; default `0.08`. |
@@ -197,9 +218,9 @@ The software can enforce the persona and model-configuration parts only within
 each preparation or estimation input. No global registry prevents two separate
 artifacts from reusing an `audit_id`, and the current raw schema has no
 run/batch identifier from which to verify that part automatically. Researchers
-must therefore maintain that mapping outside the CSVs until the cross-stage
-handoff is finalized. The integration handoff records this limitation and the
-follow-up integration revalidation.
+must therefore maintain run/batch scope outside the CSVs. Native input's
+singleton experiment-ID check does not prove a unique execution run. The
+integration handoff records this remaining limitation.
 
 The #21 function `prepare_regression_data()` performs those candidate-level
 transformations in memory from the configured CSV paths. Both the in-memory
@@ -226,13 +247,13 @@ estimator's complete-case removals recorded in `n_missing_dropped`.
 Every row from every configured input path is in audit scope. Preparation has
 no persona/model row selector, so an aggregate experiment CSV containing
 several personas or model configurations cannot be passed unchanged to
-separate preparation calls. The verified public workflow starts with
-audit-partitioned shards. The implemented experiment writer instead permits an
-aggregate multi-persona/model checkpoint and uses a different candidate-field
-schema. A follow-up integration pass must reconcile the boundary through a
-validated production interface and validate the researcher-provided audit
-scope and run/batch provenance before production use. It must not partition
-personas or models automatically.
+separate preparation calls. The public R example starts with canonical
+audit-partitioned shards. Native writer CSVs are supported through
+`input_format: auditkit`; the loader also rejects mixed `experiment_id` values
+across their configured files. An experiment ID identifies a logical
+definition, not an execution run. Researchers remain responsible for scoping
+one distinguishable run/batch and assigning its `audit_id`; the loader does
+not partition or select experiments, personas, or models automatically.
 
 Across all configured experiment-result rows, `load_experiment_results()`
 requires exactly one nonempty `persona_id` and exactly one nonempty

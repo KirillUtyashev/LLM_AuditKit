@@ -19,7 +19,7 @@ classDiagram
         +system_prompt: Optional~str~
         +persona: Optional~str~
         +model_config_id: str
-        +response_format: Optional~DictResponseFormat~
+        +response_format: Optional~ResponseFormat~
         +metadata: Dict
         +use_cache: bool = true
     }
@@ -32,6 +32,9 @@ classDiagram
         +name: str
         +value_type: str
         +description: str
+    }
+    class StructuredResponseFormat {
+        +response_model: PydanticModel
     }
     class RenderedPrompt {
         +request_id: str
@@ -86,6 +89,8 @@ classDiagram
         +execute_batch(requests: List~InferenceRequest~, models: Dict~str, ModelConfig~) List~InferenceResult~
         +execute_batch_async(requests: List~InferenceRequest~, models: Dict~str, ModelConfig~) List~InferenceResult~
     }
+    InferenceRequest --> StructuredResponseFormat : optional strict schema
+    EDSLAdapter --> StructuredResponseFormat : QuestionPydantic and provider schema
     class EDSL {
         <<Expected Parrot>>
         +run()

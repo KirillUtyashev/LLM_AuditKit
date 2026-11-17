@@ -36,6 +36,7 @@ _GENERATION_KEYS = {
     "templates_per_scenario",
     "required_placeholders",
     "model_config_id",
+    "response_mode",
 }
 _EXECUTION_KEYS = {"mode", "batch_size", "save_after_each_result"}
 _INFERENCE_KEYS = {"models"}
@@ -76,7 +77,7 @@ def load_template_generation_run_config(
         root["generation"],
         "generation",
         allowed=_GENERATION_KEYS,
-        required=_GENERATION_KEYS,
+        required=_GENERATION_KEYS - {"response_mode"},
     )
     execution = _mapping(
         root["execution"],
@@ -148,6 +149,7 @@ def load_template_generation_run_config(
         ),
         model_config_id=generation["model_config_id"],
         save_after_each_result=execution["save_after_each_result"],
+        response_mode=generation.get("response_mode", "text"),
     )
     validate_template_generation_config(generation_config)
     return TemplateGenerationRunConfig(

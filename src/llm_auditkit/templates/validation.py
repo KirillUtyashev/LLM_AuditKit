@@ -43,6 +43,8 @@ def validate_template_generation_config(config: TemplateGenerationConfig) -> Non
         )
     _validate_dataset_schema(config.dataset_schema)
     _validate_placeholders(config.required_placeholders)
+    if config.response_mode not in ("text", "parts"):
+        raise TemplateGenerationConfigurationError("response_mode must be 'text' or 'parts'")
 
     prompt_fields = template_prompt_fields(config.prompt_template, "prompt_template")
     missing_required = sorted(_REQUIRED_PROMPT_FIELDS.difference(prompt_fields))
@@ -82,6 +84,10 @@ def validate_template_generation_config(config: TemplateGenerationConfig) -> Non
     if len(matching_models) != 1:
         raise TemplateGenerationConfigurationError(
             "model_config_id must reference exactly one inference model"
+        )
+    if config.response_mode == "parts" and matching_models[0].provider != "openai":
+        raise TemplateGenerationConfigurationError(
+            "parts response_mode currently requires the openai provider"
         )
 
 

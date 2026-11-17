@@ -7,6 +7,79 @@ output through the implemented DataFrame API. All names, institutions, jobs, and
 below are invented. Both tables are supplied by the researcher; population
 neither chooses their values nor derives one table from the other.
 
+## Automatically sample an assignment table
+
+You do not need to type assignments for every scenario. The editable
+[sampling example](../../examples/template_population/sample_candidates.py)
+creates them from explicit pools, then calls the existing population API:
+
+```bash
+python examples/template_population/sample_candidates.py --config configs/template_population/sample_candidates.yaml
+```
+
+The [example YAML](../../configs/template_population/sample_candidates.yaml)
+uses a small, manually authored synthetic table with the same shape as completed
+generation output. It makes no model calls and requires no credentials. It writes
+`examples/output/sample_candidates/candidates.csv` and `populated.csv`, both
+ignored by Git. For your run, copy the YAML and set `dataset_path` to your
+completed generation CSV, align the template/placeholder mappings, and choose
+output paths. Paths resolve relative to that YAML, not the working directory.
+Generation's original `scenario_id` values are preserved. If they are absent
+from a manually prepared table, DatasetLoader establishes them using its normal
+identity contract. Neither file names nor row positions are candidate identity.
+
+```yaml
+sampling:
+  assignment_namespace: my-study-assignments-v1
+  seed: 42
+  unique_columns: [full_name]
+  pools:
+    full_name: [Alex Rowan, Casey Brook, Jamie Vale, Morgan Reed]
+    qualification:
+      - Three years maintaining office records.
+      - One year maintaining office records.
+```
+
+Pool keys are replacement-table payload columns (e.g. `full_name`), not
+necessarily placeholder labels (`name`). Each pool contains distinct nonblank
+strings. Each template gets an independent draw per column, with repetition
+allowed unless the column appears in `unique_columns`. Unique pools must have
+at least N values and reset for each scenario. Candidate presentation order is
+shuffled separately within each scenario. N comes from your template mapping;
+the example does not require two or four candidates.
+
+The script loads templates **once**, samples a replacement DataFrame, and passes
+both in-memory tables to `TemplatePopulator`. It validates population before
+saving either table. Each CSV is written by atomic replacement, but the two
+writes are not one transaction; rerun after an interrupted save. The saved
+assignments record exactly which values and slots were chosen and can also be
+reused with the existing pipeline runner. The output preserves the original
+template columns and adds filled resumes and candidate metadata.
+
+Use a stable, researcher-chosen `assignment_namespace` for your assignment set.
+Candidate IDs are deterministic UUIDs from that namespace, sampling design,
+scenario identity, template identity and sampled values, not the candidate's
+slot or name alone. Changing the namespace, seed or pools produces new
+candidate identities. Reordering input rows or adding another scenario does
+not change existing assignments. Rerunning unchanged inputs reproduces both
+CSVs; preserve the YAML and assignments with your private research artifacts.
+Repeated names across scenarios do not imply the same logical candidate in
+this example. For intentionally recurring candidates, supply your own IDs.
+
+The standalone example and the runner's optional `population.sampling` share
+one internal sampling helper, not a new public population API. The runner can
+sample and populate automatically with `--run` or `--phase population`; see the
+[pipeline guide](pipeline.md#candidate-replacements). The paper reference at revision
+`c9391854ea55806ec252625cd2f48fb9edb156cd`,
+`jobs_to_experiment/experiment_setup.py` (`pick_names_all_genders`,
+`pick_addresses`, `pick_high_schools`, and date/experience helpers), motivated
+separating sampling from literal substitution. This small example does not
+reproduce its demographic strata, city/year-specific pools or experience
+recipes. Its pools are synthetic, sampled independently, and are **not a
+validated audit design**. To reproduce a study, explicitly adapt the script
+for its group balance, correlated profiles, dates, and treatment assignments;
+do not infer demographic labels from sampled names.
+
 ## Configuration and Both Inputs
 
 The `TemplatePopulationConfig` fields are:

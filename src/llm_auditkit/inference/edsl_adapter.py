@@ -11,6 +11,9 @@ import os
 import re
 from collections.abc import Mapping, Sequence
 from typing import Any
+from weakref import WeakValueDictionary
+
+from pydantic import ValidationError
 
 # EDSL 1.0.x loads .env with override=True at import. Restore pre-existing
 # caller settings before any adapter model/provider client is constructed;
@@ -23,6 +26,8 @@ try:
     )
     from edsl.inference_services.registry import GLOBAL_REGISTRY
     from edsl.questions.question_dict import DictResponseValidator
+    from edsl.questions.question_pydantic import QuestionPydantic
+    from edsl.questions.exceptions import QuestionAnswerValidationError
 finally:
     os.environ.update(_caller_environment)
     del _caller_environment
@@ -36,6 +41,7 @@ from .models import (
     ModelConfig,
     RenderedPrompt,
     TokenLogprob,
+    StructuredResponseFormat,
 )
 
 
@@ -53,6 +59,60 @@ _VALUE_TYPE_MAP = {
     "number": "float",
     "boolean": "bool",
 }
+_SCHEMA_MODELS: WeakValueDictionary[str, type] = WeakValueDictionary()
+
+
+def _schema_key(schema: Mapping) -> str:
+    return json.dumps(schema, sort_keys=True, separators=(",", ":"), allow_nan=False)
+
+
+class _SchemaQuestionPydantic(QuestionPydantic):
+    """Keep native schemas intact across EDSL 1.0.9 local serialization.
+
+    EDSL's schema-to-model reconstruction drops nested objects and enums. Local
+    jobs retain their original model classes; weak references avoid retaining
+    caller schemas beyond those jobs. Remote/distributed execution is disabled.
+    """
+
+    question_type = "llm_auditkit_schema"
+
+    def __init__(
+        self, question_name: str, question_text: str,
+        pydantic_model: type | None = None,
+        pydantic_model_schema: dict | None = None,
+        answering_instructions: str | None = None,
+        question_presentation: str | None = None,
+    ) -> None:
+        if pydantic_model is not None:
+            _SCHEMA_MODELS[_schema_key(pydantic_model.model_json_schema())] = pydantic_model
+        super().__init__(
+            question_name=question_name, question_text=question_text,
+            pydantic_model=pydantic_model, pydantic_model_schema=pydantic_model_schema,
+            answering_instructions=answering_instructions,
+            question_presentation=question_presentation,
+        )
+
+    @staticmethod
+    def _create_model_from_schema(schema: dict) -> type:
+        model = _SCHEMA_MODELS.get(_schema_key(schema))
+        if model is None:
+            raise InferenceBatchError("original structured response model is unavailable")
+        return model
+
+    def _validate_answer(self, answer: dict, replacement_dict: dict | None = None) -> dict:
+        # Like QuestionDict, EDSL may split pretty JSON at the first newline.
+        # Validate the complete response, without extracting JSON from prose.
+        generated = answer.get("generated_tokens")
+        if isinstance(generated, str):
+            try:
+                parsed = self.user_pydantic_model.model_validate_json(generated, strict=True)
+            except ValidationError:
+                raise QuestionAnswerValidationError(
+                    message="Response does not match the structured output schema",
+                    data={}, model=self.user_pydantic_model, pydantic_error=None,
+                ) from None
+            answer = {**answer, "answer": parsed.model_dump(mode="json")}
+        return super()._validate_answer(answer, replacement_dict)
 
 
 class _LiteralText:
@@ -72,12 +132,18 @@ class _LiteralText:
     def restore(self, text: str) -> str:
         return self._markers.sub(lambda match: self.literals[match[0]], text)
 
-    def protect_model(self, model: Any) -> None:
+    def protect_model(self, model: Any, response_format: object = None) -> None:
         original = model.async_get_response
 
         async def literal_response(
             *, user_prompt: str, system_prompt: str, **kwargs: Any,
         ) -> Any:
+            if isinstance(response_format, StructuredResponseFormat):
+                # The 1.0.9 local task executor bypasses the invigilator's schema
+                # forwarding. Supply it at the same boundary used for literals,
+                # before EDSL's native cache and provider dispatch.
+                kwargs["response_schema"] = response_format.response_model.model_json_schema()
+                kwargs["response_schema_name"] = response_format.response_model.__name__
             return await original(
                 user_prompt=self.restore(user_prompt),
                 system_prompt=self.restore(system_prompt),
@@ -245,7 +311,7 @@ def _build_job(group: AdapterJobGroup) -> object:
         service_name=group.model_config.provider,
         **group.model_config.parameters,
     )
-    _group_literals(group).protect_model(model)
+    _group_literals(group).protect_model(model, group.response_format)
     agents = [_build_agent(request) for request in group.requests]
     scenarios = [
         Scenario(
@@ -294,6 +360,15 @@ def _build_question(group: AdapterJobGroup) -> object:
         return QuestionFreeText(
             question_name=_QUESTION_NAME,
             question_text=_QUESTION_PROMPT_TEMPLATE,
+        )
+
+    if isinstance(group.response_format, StructuredResponseFormat):
+        return _SchemaQuestionPydantic(
+            question_name=_QUESTION_NAME,
+            question_text=_QUESTION_PROMPT_TEMPLATE,
+            pydantic_model=group.response_format.response_model,
+            question_presentation=_QUESTION_PROMPT_TEMPLATE,
+            answering_instructions="Return only JSON matching this schema:\n{{ json_schema }}",
         )
 
     return _RecoverableQuestionDict(
@@ -480,6 +555,36 @@ def _result_response(
         return response, None, None
 
     generated_content = _result_generated_content(result, request.request_id)
+    if isinstance(request.response_format, StructuredResponseFormat):
+        # No dictionary repair/prose extraction for schema-constrained output.
+        # EDSL owns provider retries; invalid/incomplete output stays a failure.
+        model = request.response_format.response_model
+        raw = _result_data_section(result, "raw_model_response", request.request_id)
+        raw_response = None if raw is None else raw.get(_QUESTION_NAME)
+        if isinstance(raw_response, Mapping):
+            choices = raw_response.get("choices")
+            if isinstance(choices, list) and choices and isinstance(choices[0], Mapping):
+                choice = choices[0]
+                message = choice.get("message")
+                if choice.get("finish_reason") not in (None, "stop") or (
+                    isinstance(message, Mapping) and message.get("refusal")
+                ):
+                    return None, None, None
+        try:
+            if response is None:
+                if generated_content is None:
+                    return None, None, None
+                parsed = model.model_validate_json(generated_content, strict=True)
+            else:
+                parsed = model.model_validate(response, strict=True)
+        except ValidationError:
+            return None, None, None
+        if generated_content is None:
+            raise InferenceBatchError(
+                f"EDSL structured result for request {request.request_id!r} is missing "
+                "generated response content"
+            )
+        return generated_content, parsed.model_dump(mode="json"), None
     if response is None:
         if generated_content is None:
             return None, None, None

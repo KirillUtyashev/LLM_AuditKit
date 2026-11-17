@@ -63,6 +63,25 @@ def test_resume_skips_ocr_and_inference_and_preserves_ids(documents, tmp_path):
     assert len(adapter.sync_calls) == 3 and not adapter.async_calls
 
 
+def test_export_namespaces_inference_ids_and_upgrades_old_export_on_resume(documents, tmp_path):
+    backend, adapter = Backend(), Adapter()
+    pipeline = make_pipeline(tmp_path, backend, adapter)
+    first = pipeline.run(documents, config())
+    assert {"request_id", "model_config_id"}.isdisjoint(first.columns)
+    assert first.ocr_request_id.tolist() == [batch[0].request_id for batch in adapter.sync_calls]
+    assert first.ocr_model_config_id.eq(config().inference.models[0].config_id).all()
+    # Old page checkpoints remain readable; re-export replaces only the CSV
+    # header without losing provenance or issuing new provider calls.
+    first.rename(columns={"ocr_request_id": "request_id", "ocr_model_config_id": "model_config_id"}).to_csv(
+        pipeline.store.output_path, index=False
+    )
+    resumed = asyncio.run(pipeline.run_async(documents, config()))
+    pd.testing.assert_frame_equal(first, resumed)
+    assert "ocr_request_id" in pd.read_csv(pipeline.store.output_path)
+    assert backend.sync_calls == 3 and not backend.async_calls
+    assert len(adapter.sync_calls) == 3 and not adapter.async_calls
+
+
 def test_page_batch_size_not_ad_count(documents, tmp_path):
     adapter = Adapter()
     cfg = config()
@@ -88,7 +107,7 @@ def test_fail_fast_retains_raw_and_failed_output_then_resume(documents, tmp_path
         seen.append(request.request_id)
         if len(seen) == 2:
             if bad == "parse":
-                result.content = '{"ads":[],"blocks":[]}'
+                result.content = '{"ads":[{"text":""}]}'
             else:
                 result.content = None
                 result.error = InferenceError("provider", "synthetic failure")
@@ -181,10 +200,30 @@ def test_corrupt_success_checkpoint_cannot_skip_validation(documents, tmp_path):
     pipeline.run(documents, config())
     checkpoint = next(path for path in pipeline.store.directory.glob("*.json") if path.name != "manifest.json")
     record = json.loads(checkpoint.read_text())
-    record["outcome"]["response"] = '{"ads":[],"blocks":[]}'
+    record["outcome"]["response"] = '{"ads":"not-a-list"}'
     checkpoint.write_text(json.dumps(record))
-    with pytest.raises(OCRException, match="omitted"):
+    with pytest.raises(OCRException, match="lists"):
         pipeline.run(documents, config())
+
+
+@pytest.mark.parametrize("mode", ["sync", "async"])
+def test_corrected_ads_without_mappings_export_page_provenance_and_resume(documents, tmp_path, mode):
+    def corrected(request, result):
+        result.content = '{"ads":[{"text":"Corrected field experience, wages $1.75."}]}'
+        return result
+    backend, adapter = Backend(), Adapter(corrected)
+    pipeline = make_pipeline(tmp_path, backend, adapter)
+    execute = lambda: (pipeline.run(documents, config()) if mode == "sync" else
+                       asyncio.run(pipeline.run_async(documents, config())))
+    result = execute()
+    assert len(result) == 3 and result.review_required.all()
+    assert result.raw_text.eq("CLERK\nSend resume to Box 17.").all()
+    assert result.source_spans_json.eq("[]").all()
+    assert result.Text.eq("Corrected field experience, wages $1.75.").all()
+    calls = len(adapter.sync_calls) + len(adapter.async_calls)
+    pd.testing.assert_frame_equal(result, execute())
+    assert len(adapter.sync_calls) + len(adapter.async_calls) == calls
+    assert backend.sync_calls + backend.async_calls == 3
 
 
 def test_duplicate_sources_refused_before_paid_calls(documents, tmp_path):

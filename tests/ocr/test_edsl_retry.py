@@ -72,7 +72,7 @@ def test_explicit_resume_refreshes_only_failed_page_with_real_edsl_cache(tmp_pat
     failed_id = next(record["outcome"]["request_id"] for record in records if record["outcome"]["status"] == "failed")
     result = execute()
     assert calls == ["first", "retry", "retry"]
-    assert failed_id in result.request_id.tolist()
+    assert failed_id in result.ocr_request_id.tolist()
     assert len(result) == 2
     assert len(execute()) == 2
     assert calls == ["first", "retry", "retry"]  # successful resume never calls a provider

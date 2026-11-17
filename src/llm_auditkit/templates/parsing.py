@@ -9,6 +9,7 @@ from llm_auditkit.inference import InferenceResult
 from .exceptions import TemplateResponseParseError, TemplateResultAssociationError
 from .identity import build_generation_fingerprint, build_template_request_id
 from .models import TemplateGenerationConfig, TemplateOutputRecord
+from .parts import render_template_parts
 from .prompts import (
     canonicalize_placeholders,
     extract_placeholder_names,
@@ -119,6 +120,14 @@ def parse_template_contents(
     config: TemplateGenerationConfig,
 ) -> list[str]:
     """Validate ordered structured template strings from one successful result."""
+
+    if config.response_mode == "parts":
+        templates = render_template_parts(
+            result.structured_content, config.templates_per_scenario,
+            config.required_placeholders,
+        )
+        validate_template_contents(templates, config.required_placeholders)
+        return templates
 
     expected_fields = [
         f"template_{position}"

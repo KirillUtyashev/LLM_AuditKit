@@ -23,6 +23,7 @@ from .models import (
     RenderedPrompt,
     ResponseField,
     ResponseValueType,
+    StructuredResponseFormat,
     TokenLogprob,
 )
 from .orchestrator import InferenceOrchestrator
@@ -49,5 +50,6 @@ __all__ = [
     "RenderedPrompt",
     "ResponseField",
     "ResponseValueType",
+    "StructuredResponseFormat",
     "TokenLogprob",
 ]

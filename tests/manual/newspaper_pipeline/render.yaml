@@ -1,0 +1,12 @@
+results_paths:
+  - local/chicago-1950-smoke/regression/regression_results.csv
+output_path: local/chicago-1950-smoke/regression.png
+outcome_variable: pick
+term: treatment
+confidence_level: 0.95
+period_variable: year
+y_limits: [-1.5, 1.5]
+y_break_interval: 0.5
+width: 8
+height: 5
+dpi: 150

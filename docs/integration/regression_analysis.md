@@ -1,7 +1,7 @@
 # Regression Analysis Integration Handoff
 
-This handoff records what regression-analysis subissue #24 verified, what must
-be reconciled against the implemented experiment-execution stage (#13), and
+This handoff records what regression-analysis subissue #24 verified, how the
+implemented experiment-execution stage (#13) connects during integration #17, and
 what repository CI (#5) must eventually run. The detailed, authoritative
 schemas remain in the
 [regression-analysis component contract](../components/regression_analysis.md).
@@ -200,36 +200,35 @@ its own candidate result column names. The writer can aggregate personas and
 model configurations. Its `experiment_id` identifies the logical experiment
 definition, and its use as run-level audit provenance remains open.
 
-Even successful native Python checkpoint rows are not accepted directly by the
-current R preparation command. The R preparation stage is implemented and
-tested against its own documented schema; its public end-to-end test begins
-with audit-partitioned fixtures in that schema rather than output produced by
-the Python writer. This is a known temporary cross-component integration gap.
+Native checkpoints are now accepted directly with `input_format: auditkit`
+in preparation YAML. The default `canonical` format preserves the original
+public R examples. Production normalization is owned by the R raw-results
+loader, not a caller script or a checkpoint-writer change:
 
-After all baseline pipeline components are implemented, this boundary will be
-reconciled during the repository-wide holistic integration pass. The solution
-design remains open; this handoff does not prescribe a writer change, adapter,
-or other mechanism. This scheduling note records the regression workstream's
-scope decision, does not represent collaborator or reviewer approval, and does
-not resolve any open pull-request review concern. That integration pass must:
+- `pick<i>` becomes `candidate_<i>_pick`; `logprob<i>` becomes
+  `candidate_<i>_log_probability`, without changing emitted-answer semantics.
+- Either nonblank writer error field means `failed`; both blank means
+  `completed`. Successful rows still require valid decisions/probabilities.
+- Candidate counts, IDs, ranking fields and configured scalar covariates must
+  already exist and are preserved. Candidate order must match the configured
+  experiment résumé order; no identity or substantive indicator is inferred.
+- Native input requires nonblank experiment/request IDs, complete pick/logprob
+  header families, and both error-field headers. Mixed canonical/native
+  status or result columns are rejected.
+- Singleton experiment ID, persona and model configuration are validated
+  across configured native files. No automatic partitioning or selectors are
+  added. Experiment IDs identify logical definitions, not distinct runs;
+  researchers still establish run/batch scope and assign `audit_id`.
 
-- reconcile the writer and preparation schemas, including candidate identity
-  and slot mapping, candidate count, ranking fields, run provenance, and
-  translation of writer error rows into the preparation status contract;
-- exercise an actual native-writer-to-preparer cross-stage path, in addition to
-  the existing R-schema fixture tests;
-- validate researcher-created single-audit inputs without adding automatic
-  audit, persona, or model partitioning or selectors;
-- preserve researcher-supplied numerical predictors, indicators, and
-  interactions without inferring substantive variables from resume text or
-  candidate position;
-- prove that shared scenarios and candidate assignments align across audits;
-  and
-- rerun the public boundary tests with the resulting production interface.
+The [full-pipeline test](../../tests/integration/test_full_pipeline.py) starts
+with a real synthetic PDF, exercises the native Python writer, and sends its
+unchanged CSV to public R preparation, estimation and rendering in both sync
+and async modes. It has no fixture-only schema adapter. The separate two-audit
+R test still checks shared candidate assignments and comparable audit fits.
+See [verification instructions and limitations](full_pipeline.md).
 
-The temporary private-sample adapter is not the production adapter decision.
-`audit_id` remains researcher-assigned and must not be inferred by experiment
-execution or by preparation.
+The temporary private-paper-sample adapter above is historical only and is
+not used by this production path.
 
 Researchers remain responsible for splitting aggregate outputs into
 single-audit inputs and for creating substantive numerical predictors,
@@ -238,10 +237,8 @@ identity/error rows with empty result fields, while preparation currently
 excludes rows whose mapped `result_status` is not `completed`. The selected R
 preparation policy is that those input jobs contribute no candidate
 observations to the regression-ready dataset, with one warning that reports
-input-job and candidate-observation counts by status. This decision does not
-resolve how Python writer error fields will be translated into the R status
-contract; that cross-stage translation remains part of the holistic
-integration pass.
+input-job and candidate-observation counts by status. Native writer errors
+are translated by the explicit format normalization described above.
 
 ### Repository CI (#5)
 
@@ -258,10 +255,6 @@ checks.
 
 ## Remaining Limitations
 
-- Direct native-writer-to-preparer compatibility is deferred until the
-  holistic integration pass after all baseline pipeline components are
-  implemented; that pass must reconcile the boundary and include an actual
-  cross-stage check.
 - No global registry prevents reuse of one `audit_id` for different
   persona/model/run combinations.
 - The current raw schema cannot itself prove run/batch identity.

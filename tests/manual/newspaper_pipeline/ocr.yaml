@@ -1,0 +1,33 @@
+# Paid test: one complete newspaper page copied from the existing research scans.
+# The source PDF, checkpoints and results stay local and are ignored by Git.
+documents:
+  - path: local/chicago-1950-smoke/source/chicago-daily-tribune-1950-04-02-page-a6.pdf
+    metadata:
+      newspaper: Chicago Daily Tribune
+      city: Chicago
+      year: 1950
+      publication_date: "1950-04-02"
+      archive_page: A6
+      source_collection: "ProQuest Historical Newspapers: Chicago Tribune"
+      source_document: Classified Ad 36 -- No Title
+      source_note: Complete one-page PDF copied from the existing research scans; no cropping or changes.
+output:
+  path: local/chicago-1950-smoke/ads-v3.csv
+  checkpoint_directory: local/chicago-1950-smoke/ocr-checkpoints-v3
+execution:
+  mode: sync
+  batch_size: 5
+  save_after_each_batch: true
+ocr:
+  dpi: 300
+  language_hints: [en]
+  timeout: 120
+  max_page_characters: 40000
+inference:
+  model:
+    config_id: newspaper-extraction
+    provider: openai
+    model: gpt-4o-2024-08-06
+    parameters:
+      temperature: 0
+      max_tokens: 16384

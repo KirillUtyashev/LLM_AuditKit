@@ -5,6 +5,8 @@ from __future__ import annotations
 import math
 from collections.abc import Sequence
 
+from pydantic import BaseModel
+
 from .exceptions import (
     InferenceConfigurationError,
     InferenceRequestValidationError,
@@ -16,6 +18,7 @@ from .models import (
     JSONValue,
     ModelConfig,
     ResponseField,
+    StructuredResponseFormat,
 )
 
 
@@ -84,7 +87,7 @@ def validate_inference_requests(
             "requests must be a sequence of InferenceRequest values"
         )
 
-    known_model_ids = {model.config_id for model in config.models}
+    known_models = {model.config_id: model for model in config.models}
     seen_request_ids: set[str] = set()
 
     for index, request in enumerate(requests):
@@ -127,13 +130,20 @@ def validate_inference_requests(
             field_name=f"request {request.request_id!r} model_config_id",
             exception_type=InferenceRequestValidationError,
         )
-        if request.model_config_id not in known_model_ids:
+        if request.model_config_id not in known_models:
             raise InferenceRequestValidationError(
                 f"request {request.request_id!r} references unknown model "
                 f"configuration ID {request.model_config_id!r}"
             )
 
         _validate_response_format(request)
+        if isinstance(request.response_format, StructuredResponseFormat):
+            provider = known_models[request.model_config_id].provider
+            if provider != "openai":
+                raise InferenceRequestValidationError(
+                    "StructuredResponseFormat currently requires the openai provider; "
+                    "prompt-only fallback is not supported"
+                )
 
         if not isinstance(request.metadata, dict):
             raise InferenceRequestValidationError(
@@ -201,14 +211,51 @@ def _validate_model_config(model_config: ModelConfig, *, index: int) -> None:
     )
 
 
+def _validate_strict_objects(node: object) -> None:
+    """Reject object schemas unsupported by OpenAI's strict response contract."""
+
+    if isinstance(node, dict):
+        if node.get("type") == "object" and (
+            node.get("additionalProperties") is not False
+            or set(node.get("required", [])) != set(node.get("properties", {}))
+        ):
+            raise InferenceRequestValidationError(
+                "structured schemas require all object fields and extra='forbid', "
+                "including nested objects"
+            )
+        for key in ("properties", "$defs", "definitions"):
+            for value in node.get(key, {}).values():
+                _validate_strict_objects(value)
+        for key in ("items", "additionalProperties"):
+            _validate_strict_objects(node.get(key))
+        for key in ("anyOf", "oneOf", "allOf"):
+            for value in node.get(key, []):
+                _validate_strict_objects(value)
+
+
 def _validate_response_format(request: InferenceRequest) -> None:
     response_format = request.response_format
     if response_format is None:
         return
+    if isinstance(response_format, StructuredResponseFormat):
+        model = response_format.response_model
+        if not isinstance(model, type) or not issubclass(model, BaseModel):
+            raise InferenceRequestValidationError(
+                "structured response_model must be a Pydantic BaseModel subclass"
+            )
+        try:
+            schema = model.model_json_schema()
+            _validate_json_value(schema, location="response schema", ancestors=set())
+        except Exception as error:
+            raise InferenceRequestValidationError("invalid structured response schema") from error
+        if schema.get("type") != "object":
+            raise InferenceRequestValidationError("structured response schema root must be an object")
+        _validate_strict_objects(schema)
+        return
     if not isinstance(response_format, DictResponseFormat):
         raise InferenceRequestValidationError(
             f"request {request.request_id!r} response_format must be a "
-            "DictResponseFormat or None"
+            "DictResponseFormat, StructuredResponseFormat or None"
         )
     if not _is_sequence(response_format.fields) or not response_format.fields:
         raise InferenceRequestValidationError(

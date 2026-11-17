@@ -12,24 +12,35 @@ python -m pip install -e ".[ocr]"
 
 PDFs also require system [Poppler](https://pdf2image.readthedocs.io/en/latest/installation.html)
 (`brew install poppler` on macOS). Single-page PNG/JPEG images do not need it.
-Google Vision needs an enabled project/billing and
-[Application Default Credentials](https://docs.cloud.google.com/vision/docs/authentication).
-For example, point `GOOGLE_APPLICATION_CREDENTIALS` at a service-account JSON
-file outside the repository. Configure the inference provider separately:
+Google Vision needs the Cloud Vision API and billing enabled on its project.
+For API-key authentication, configure a dedicated key in your local `.env`:
 
 ```dotenv
-GOOGLE_APPLICATION_CREDENTIALS=/absolute/path/outside/repository/vision-service-account.json
+GOOGLE_VISION_API_KEY=your-vision-key
 OPENAI_API_KEY=your-key
 ```
 
-The CLI loads `.env` without overriding existing environment variables. Never
+Restrict the key to the Cloud Vision API and apply suitable application
+restrictions. Both sync and async clients use that key through Google's SDK;
+no service-account JSON is required for this mode. Generic `GOOGLE_API_KEY` and
+Vertex-specific keys are not read by this backend.
+
+When `GOOGLE_VISION_API_KEY` is unset or blank, the backend instead uses
+[Application Default Credentials](https://docs.cloud.google.com/vision/docs/authentication).
+For example, set `GOOGLE_APPLICATION_CREDENTIALS` to a service-account JSON
+path outside the repository. A nonblank Vision key takes precedence over ADC;
+an invalid key fails normally rather than silently switching credentials.
+
+The CLI loads `.env` without overriding existing environment variables; library
+callers must load `.env` themselves or export the variable before constructing
+`GoogleVisionOCRBackend`. The backend reads the key at construction time. Never
 commit credentials, scans, OCR checkpoints, or generated CSVs. Sending scans to
 Google and extracted text to a model provider requires appropriate permissions;
 both services can incur charges. Tests mock both services and require neither.
 
 ## Configure and run
 
-Copy [the YAML example](../../configs/ocr/newspaper.yaml) and replace its input
+Copy [the YAML example](../../tests/manual/newspaper_pipeline/ocr.yaml) and replace its input
 path and source metadata with your own. Paths are relative to the YAML file.
 
 ```yaml
@@ -63,12 +74,14 @@ inference:
 
 The model is an explicit example, not a promise of ongoing provider availability.
 Choose a model supported by your EDSL/provider configuration with enough input
-and output capacity to reproduce the full page. No private sample scan is shipped.
+and output capacity to reproduce the full page. The manual test references a
+local-only Chicago source PDF; its attribution and required path are documented
+in the [test README](../../tests/manual/newspaper_pipeline/README.md). No scan is shipped.
 
 ```bash
-llm-auditkit-ocr --config configs/ocr/newspaper.yaml
+llm-auditkit-ocr --config tests/manual/newspaper_pipeline/ocr.yaml
 # Equivalent without the installed command:
-python -m llm_auditkit.ocr.cli --config configs/ocr/newspaper.yaml
+python -m llm_auditkit.ocr.cli --config tests/manual/newspaper_pipeline/ocr.yaml
 ```
 
 Use `mode: async` for the matching asynchronous OCR and shared-inference APIs.
@@ -96,15 +109,13 @@ validation; the input size check alone does not guarantee success.
 ## Inspect and resume
 
 Checkpoints contain the raw Google response, normalized blocks with polygons and
-confidence, raw model response, exact source partition, and success/failure state.
-Every character in each normalized block must be assigned to an ad or explicitly
-excluded with a reason. Invalid JSON, unknown references, lost/altered text, and
-unreferenced ads fail validation and stop later LLM batches.
-Cleanup must preserve the case-folded sequence of source letters/digits; only
-spacing, word joining and punctuation changes are accepted automatically. Actual
-misrecognized letters/numbers must be reviewed rather than silently guessed.
-Currency symbols, decimals/grouping, numeric signs/ranges and percentages must
-also stay unchanged. NULs and invalid UTF-8 text fail before a success checkpoint.
+confidence, raw model response, and success/failure state. The model returns
+`{"ads": [{"text": "cleaned advertisement"}]}` and may correct OCR errors.
+There is no character-equality, numeric-format, complete-source-partition or
+mandatory per-ad mapping check. One whole-response JSON Markdown fence is
+accepted; arbitrary surrounding prose is not. Malformed JSON/schema, blank or
+non-string ad text, NULs and invalid UTF-8 still fail validation. Duplicate ad
+text on one page is rejected rather than assigned positional identities.
 
 With incremental saving enabled, raw OCR is saved per page and reconstructed
 outcomes/CSV are saved after each logical batch. A failed run can leave a partial
@@ -122,6 +133,13 @@ The manifest binds the original output path; do not redirect a resumed run over
 another file.
 Changing execution mode, batch size, or incremental saving does not invalidate
 completed results. Moving identical inputs preserves IDs when metadata is unchanged.
+The relaxed v3 extraction prompt/parser changes the run fingerprint. Use new
+output/checkpoint paths for earlier strict runs; the checked-in Chicago example
+already uses `ads-v3.csv` and `ocr-checkpoints-v3/`. The checkpoint file schema
+itself remains v2. Old model responses are not relabeled as answers to the new
+prompt. The existing local Chicago raw Vision page was copied into the new
+store only after matching its source identity/hash and metadata; extraction is
+still pending, and rerunning needs no new Vision call for that page.
 Concurrent writers to the same store or output are rejected; after a killed
 process, inspect and explicitly remove stale `.lock` files before resuming.
 The persistent `<output.csv>.owner` file reserves the CSV for its original
@@ -139,10 +157,12 @@ a complete successful run; interruption therefore loses that invocation's progre
 
 ## Use the CSV
 
-`Text` contains cleaned ad text; `raw_text` preserves verbatim assigned OCR
-segments (joined by newlines). `ad_id`, `source_id`, `page_id`, `page_number`,
-`source_path`, `metadata_json`, and `source_spans_json` trace an ad back to its
-scan and block/character ranges. Request/model IDs record inference provenance.
+`Text` contains cleaned ad text. `raw_text` contains the **entire page's OCR text**
+(blocks joined by newlines), repeated for each ad, not a verified raw version of
+that individual ad. `source_spans_json` is `[]`; no exact per-ad mapping is claimed.
+`ad_id`, `source_id`, `page_id`, `page_number`, `source_path`, and `metadata_json`
+provide page-level provenance. `ocr_request_id` and `ocr_model_config_id`
+record OCR inference provenance without colliding with experiment IDs later.
 Metadata and spans are JSON strings, not nested DataFrame objects.
 
 ```python
@@ -158,12 +178,12 @@ job-posting column as `Text`. If downstream prompts need city/date as individual
 columns, explicitly unpack your chosen keys from `metadata_json` in your code;
 OCR does not invent a global historical-source schema.
 
-Every ad has `review_required=true`. Exact source coverage is not proof that ads
+Every ad has `review_required=true`. Successful execution does not prove that ads
 were grouped correctly, that OCR read the scan correctly, or that cleanup made
-no semantic changes. Compare raw/cleaned text with scans before research use,
+no semantic changes. Compare cleaned ads and full raw pages with scans before research use,
 particularly contact details, numerical requirements and demographic language.
-Keep rejected/non-ad segments available for inspection too: they may reveal
-missed ads. No real-scan accuracy claim is made by the mocked test suite.
+Raw page checkpoints also retain material omitted by the model. No real-scan
+accuracy claim is made by the mocked test suite.
 
 See the [component contract](../components/newspaper_ocr.md) for the exact
 reconstruction response and identity/checkpoint rules.

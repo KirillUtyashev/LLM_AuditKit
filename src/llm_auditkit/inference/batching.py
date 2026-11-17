@@ -2,14 +2,19 @@
 
 from __future__ import annotations
 
+import json
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 
 from .exceptions import InferenceConfigurationError, InferenceRequestValidationError
-from .models import DictResponseFormat, InferenceRequest, ModelConfig
+from .models import DictResponseFormat, StructuredResponseFormat, InferenceRequest, ModelConfig
 
 
-ResponseFormatKey = tuple[bool, bool, tuple[tuple[str, str, str], ...]] | None
+ResponseFormatKey = (
+    tuple[str, str]
+    | tuple[str, bool, bool, tuple[tuple[str, str, str], ...]]
+    | None
+)
 
 
 @dataclass(frozen=True, slots=True)
@@ -31,7 +36,7 @@ class AdapterJobGroup:
     """
 
     model_config: ModelConfig
-    response_format: DictResponseFormat | None
+    response_format: DictResponseFormat | StructuredResponseFormat | None
     requests: tuple[InferenceRequest, ...]
     use_cache: bool = True
 
@@ -111,11 +116,17 @@ def group_requests_by_compatibility(
 
 
 def _response_format_key(
-    response_format: DictResponseFormat | None,
+    response_format: DictResponseFormat | StructuredResponseFormat | None,
 ) -> ResponseFormatKey:
     if response_format is None:
         return None
+    if isinstance(response_format, StructuredResponseFormat):
+        return ("schema", json.dumps(
+            response_format.response_model.model_json_schema(),
+            sort_keys=True, separators=(",", ":"), allow_nan=False,
+        ))
     return (
+        "dict",
         response_format.include_comment,
         response_format.include_type_hints,
         tuple(

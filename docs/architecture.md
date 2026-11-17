@@ -32,6 +32,10 @@ inference for ad reconstruction/cleanup; it does not generate new ads or apply
 research-specific selection rules. The existing loader remains the tabular
 path-to-DataFrame boundary.
 
+OCR validates basic response shape and preserves full raw pages for review;
+it does not enforce exact source partitions, character equality or per-ad source
+mappings. Exports retain page-level provenance and require human review.
+
 The package uses `pandas.DataFrame` as the common tabular representation passed between
 Python pipeline stages. Dataset loading is the single tabular path-to-DataFrame boundary;
 downstream stage APIs accept DataFrames. A user-facing pipeline run configuration may
@@ -47,6 +51,26 @@ order to keep each decision with its intended candidate. Researchers can
 also supply a DataFrame they populated in EDSL to the experiment runner, or
 use AuditKit's population output in their own EDSL experiment. See the
 [population-to-experiment walkthrough](guides/template_population.md#pass-the-populated-table-to-experiment-execution).
+
+## Repository Pipeline Runner
+
+[`scripts/run_pipeline.py`](../scripts/run_pipeline.py) composes the existing
+stages from a master YAML referencing their own configurations. `--run` continues
+through configured OCR, templates, population, experiments, and R preparation
+without intermediate pauses; explicit `ocr`, `templates`, `population`,
+`experiments` (including R preparation), and `analysis` phases remain available
+for review. The runner never automatically continues from preparation into
+estimation. It validates path/schema wiring,
+supports configured scalar extraction from OCR metadata, delegates native
+sync/async execution and resume to the existing stages, and atomically persists
+the population output. Optional configured pools generate and persist exact
+candidate assignments with stable IDs before filling the same in-memory
+templates. Existing sampled assignments must match the deterministic design
+and scenario set on resume. Without sampling, supplied assignments remain
+unchanged. It does not introduce new inference workers, retries,
+audit partitioning, or inferred substantive predictors. This
+repository workflow covers one persona/model configuration per audit. See the
+[user guide](guides/pipeline.md) and [phase diagram](architecture/pipeline_runner.mmd).
 
 ## Shared Inference Layer
 
@@ -66,6 +90,13 @@ Batches are submitted sequentially. A calling stage validates and checkpoints th
 
 The shared inference layer provides equivalent synchronous and asynchronous batch APIs. Each delegates to the corresponding EDSL execution method while preserving the same validation, batching, normalization, and failure contract.
 
+Optional schema-constrained responses use provider-neutral Pydantic models
+through the EDSL adapter (currently OpenAI only). Template generation's opt-in
+`parts` mode separates model-generated prose from configured field references;
+the stage renders those references into canonical placeholders deterministically.
+The population API and template CSV columns remain unchanged. Existing `text`
+mode and its checkpoints remain supported; switching modes requires a new checkpoint.
+
 ## Logging and Observability
 
 A repository-wide logging contract is still to be designed before the pipeline is considered complete. It should cover the shared inference layer and every pipeline stage, including template generation and experiment execution, rather than introducing unrelated stage-specific logging behavior.
@@ -75,21 +106,19 @@ The design must decide how progress, batch timing, checkpoint activity, terminal
 ## Python-to-R Regression Boundary
 
 User-facing template-generation and experiment runs are configured in YAML and produce
-CSV checkpoints. CSV is the intended Python-to-R boundary; no in-memory
-Python-to-R object exchange is required. The implemented experiment checkpoint
-is not yet a direct input to the current regression-data preparation command.
-It can aggregate multiple personas and model configurations, writes `pick1`
-through `pickN` and `logprob1` through `logprobN`, and reports failures through
-error fields, while preparation requires an audit-partitioned CSV with its
-documented status, candidate-count, durable candidate-identity, dynamic
-candidate-family, ranking-field, and explicitly supplied scalar-covariate
-contract. Researchers are responsible for creating that single-audit input;
-preparation validates singleton persona/model scope rather than selecting
-personas or models, while researchers retain responsibility for run/batch
-scope. No production writer change or adapter currently reconciles those
-interfaces. The [regression integration handoff](integration/regression_analysis.md)
-records the verified downstream workflow and the remaining production boundary
-work.
+CSV checkpoints. CSV is the Python-to-R boundary; no in-memory Python-to-R
+object exchange is required. With `input_format: auditkit`, R preparation
+reads native experiment checkpoints and normalizes their `pick<i>`,
+`logprob<i>`, and error fields to its canonical candidate/status contract.
+The default `canonical` format remains supported. Researchers supply
+candidate counts, durable candidate IDs, city/year, configured covariates,
+and one audit-scoped input; population output carries candidate metadata
+through experiment execution. Preparation rejects mixed experiment IDs (for
+native input), personas, or model configurations rather than selecting or
+partitioning them. Researchers retain responsibility for distinguishable
+run/batch scope and the assigned `audit_id`. The
+[regression integration handoff](integration/regression_analysis.md) records
+the mapping, validation policy, and cross-language verification.
 
 Within the R-based regression-analysis stage, a YAML-configured preparation
 command writes a candidate-level regression-ready CSV for researcher inspection

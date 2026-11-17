@@ -10,6 +10,7 @@ testthat::test_that("minimal preparation config applies exact defaults", {
   )
   testthat::expect_equal(config$output_path, "output/regression_ready.csv")
   testthat::expect_identical(config$audit_id, "fixture_audit")
+  testthat::expect_identical(config$input_format, "canonical")
   testthat::expect_equal(config$top_share, 0.08)
   testthat::expect_equal(config$probability_threshold, 0.99)
   testthat::expect_identical(
@@ -19,6 +20,23 @@ testthat::test_that("minimal preparation config applies exact defaults", {
   testthat::expect_identical(config$scenario_covariates, character())
   testthat::expect_identical(config$candidate_covariates, character())
   testthat::expect_true(all(file.exists(config$resolved_input_paths)))
+})
+
+testthat::test_that("input format is explicit and strictly validated", {
+  for (format in c("canonical", "auditkit")) {
+    path <- write_test_config(
+      regression_fixture("raw_jobs_a.csv"), tempfile(fileext = ".csv"),
+      paste0("input_format: ", format)
+    )
+    testthat::expect_identical(load_preparation_config(path)$input_format, format)
+  }
+  for (value in c("unknown", "null", "true", "[]", "[auditkit]", "{}")) {
+    path <- write_test_config(
+      regression_fixture("raw_jobs_a.csv"), tempfile(fileext = ".csv"),
+      paste0("input_format: ", value)
+    )
+    testthat::expect_error(load_preparation_config(path), "input_format")
+  }
 })
 
 testthat::test_that("fully specified preparation config preserves overrides", {

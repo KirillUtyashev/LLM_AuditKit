@@ -9,6 +9,10 @@ Template generation and experiment execution use shared inference to run EDSL
 jobs and save progress to CSV checkpoints. Both accept YAML run configurations.
 Experiment execution also has a command-line entry point.
 
+Template generation can use schema-enforced text/field parts with OpenAI
+(`generation.response_mode: parts`), inserting configured placeholders in code
+while retaining generated resume prose. Existing text-mode configs remain supported.
+
 [Template population](docs/components/template_population.md) fills each applicant
 template with researcher-supplied values. The [worked example](docs/guides/template_population.md#pass-the-populated-table-to-experiment-execution)
 shows how to pass the populated table directly to experiment execution and keep
@@ -38,6 +42,31 @@ python examples/template_population/preview.py
 
 It fills two synthetic job scenarios and prints their candidate IDs,
 names, and experiment questions in presentation order.
+
+To sample candidate assignments from editable synthetic pools and fill templates
+offline, run:
+
+```bash
+python examples/template_population/sample_candidates.py --config configs/template_population/sample_candidates.yaml
+```
+
+See the [sampling walkthrough](docs/guides/template_population.md#automatically-sample-an-assignment-table)
+to use generated templates, configure pools and a random seed, and preserve
+candidate identities without preparing assignments manually.
+
+For a configured newspaper workflow, run all stages through cleaned experiment
+data without intermediate review pauses:
+
+```bash
+python scripts/run_pipeline.py --config tests/manual/newspaper_pipeline/pipeline.yaml --run
+```
+
+This makes paid OCR/model calls and requires a local source image, credentials
+and an R environment. The current local example uses a copied Chicago Daily
+Tribune page from April 2, 1950, with synthetic candidate pools; the guide
+documents the local-only source and its attribution. It is not a validated research design.
+Regression estimation stays separate; individual `--phase`
+commands remain available. See the [pipeline guide](docs/guides/pipeline.md).
 
 To make a real OpenAI request using the shared-inference example, copy
 `.env.example` to `.env` and add your key:
@@ -84,12 +113,24 @@ atomic CSV checkpoints, and resume behavior. A runnable paid OpenAI configuratio
 The R regression stage independently includes a locked environment, separate
 preparation and fixed-effects estimation runners, tidy result export, and
 in-memory or PNG rendering. A public two-audit synthetic walkthrough verifies
-those R entry points together. The implemented experiment-execution CSV and the
-current regression-preparation schema are not yet directly compatible; their
-mapping and validation of researcher-created audit partitions remain explicit
-follow-up integration work.
+those R entry points together. Set `input_format: auditkit` in preparation
+YAML to read native experiment CSVs directly. Inputs must already be scoped
+to one experiment/persona/model and carry stable candidate IDs, counts,
+city/year, and researcher-supplied covariates.
 
 ## Documentation
+
+To run the connected workflow locally, use the
+[YAML-driven pipeline runner](docs/guides/pipeline.md):
+
+```bash
+python scripts/run_pipeline.py --config tests/manual/newspaper_pipeline/pipeline.yaml --check
+```
+
+Use `--run` through prepared data, or its five individual phases when you want
+intermediate review, after configuring inputs and credentials. The runner reuses
+the existing stage configurations and supports starting from a dataset without
+OCR. See the guide for candidate assignments, output paths and resume behavior.
 
 The [package architecture](docs/architecture.md) describes the planned hiring pipeline.
 The [dataset loading component contract](docs/components/dataset_loading.md) and
@@ -148,9 +189,10 @@ Prepare CSVs that satisfy the current regression-preparation schema with:
 Rscript scripts/prepare_regression_data.R --config path/to/preparation.yaml
 ```
 
-The implemented experiment checkpoint cannot yet be passed directly to this
-command; the explicit production mapping and validation work is documented in
-the regression integration handoff.
+For native experiment checkpoints, add `input_format: auditkit` to that YAML.
+The loader normalizes pick/logprob/error fields; it does not infer candidate
+identities, research indicators, or audit partitions. See the
+[native checkpoint example](examples/regression/README.md#prepare-native-auditkit-experiments).
 
 The researcher assigns one stable `audit_id` in each preparation config. The
 software never generates or infers it from filenames, model metadata, or other
@@ -176,9 +218,9 @@ explanatory variable receives its own estimate, standard error, p-value, and
 The regression YAML contract and tidy result schema are documented in the
 [regression analysis guide](docs/components/regression_analysis.md#2-fixed-effects-estimation).
 The [regression integration handoff](docs/integration/regression_analysis.md)
-records the walkthrough evidence and the assumptions that will be reconciled
-and revalidated against the implemented experiment writer during the holistic
-integration pass after all baseline pipeline components are implemented.
+records the production mapping and walkthrough evidence. The
+[full-pipeline verification](docs/integration/full_pipeline.md) additionally
+exercises native Python output through R preparation, estimation, and rendering.
 
 For an interactive estimate-and-plot workflow, start R from the repository and
 load the public R interface once:

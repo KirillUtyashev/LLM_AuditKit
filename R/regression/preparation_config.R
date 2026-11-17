@@ -1,5 +1,6 @@
 PREPARATION_CONFIG_KEYS <- c(
   "input_paths",
+  "input_format",
   "output_path",
   "audit_id",
   "top_share",
@@ -357,6 +358,17 @@ load_preparation_config <- function(config_path) {
     "audit_id",
     config_path
   )
+  input_format <- if ("input_format" %in% names(config)) {
+    .preparation_scalar_string(config$input_format, "input_format", config_path)
+  } else {
+    "canonical"
+  }
+  if (!input_format %in% c("canonical", "auditkit")) {
+    .preparation_abort(
+      config_path,
+      "'input_format' must be 'canonical' or 'auditkit'."
+    )
+  }
   top_share <- if ("top_share" %in% names(config)) {
     .preparation_probability(config$top_share, "top_share", config_path)
   } else {
@@ -531,6 +543,7 @@ load_preparation_config <- function(config_path) {
       output_path = unname(output_label),
       resolved_output_path = unname(resolved_output_path),
       audit_id = audit_id,
+      input_format = input_format,
       top_share = top_share,
       probability_threshold = probability_threshold,
       ranking_group_variables = ranking_group_variables,

@@ -1,0 +1,12 @@
+input_format: auditkit
+input_paths:
+  - local/chicago-1950-smoke/experiments.csv
+output_path: local/chicago-1950-smoke/regression_ready.csv
+# Explicit mechanics-test scope, not a substantive hiring audit.
+audit_id: chicago_1950_synthetic_candidates_smoke_v1
+top_share: 0.08
+probability_threshold: 0.99
+ranking_group_variables: [city, year]
+scenario_covariates: []
+# Example numeric indicator supplied by the researcher in candidates.csv.
+candidate_covariates: [treatment]

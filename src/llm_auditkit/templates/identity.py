@@ -67,6 +67,10 @@ def build_generation_fingerprint(config: TemplateGenerationConfig) -> str:
             "parameters": model.parameters,
         },
     }
+    # Preserve fingerprints for existing text-mode checkpoints. Parts responses
+    # are a distinct generation contract, never compatible with earlier runs.
+    if config.response_mode == "parts":
+        payload["response_contract"] = "template-parts-v1"
     try:
         encoded = json.dumps(
             payload,

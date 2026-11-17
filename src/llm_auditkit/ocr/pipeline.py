@@ -124,7 +124,7 @@ class NewspaperOCRPipeline:
                 if request is not None:
                     request.use_cache = False
             if request is None:
-                record["outcome"] = self._outcome(None, '{"ads":[],"blocks":[]}', None)
+                record["outcome"] = self._outcome(None, '{"ads":[]}', None)
                 ads[page_id] = []
             else:
                 requests.append(request)
@@ -204,8 +204,8 @@ class NewspaperOCRPipeline:
                     "page_number": number, "source_path": str(plan.path),
                     "metadata_json": canonical_json(plan.metadata), "raw_text": ad["raw_text"],
                     "Text": ad["Text"], "source_spans_json": canonical_json(ad["source_spans"]),
-                    "request_id": record["outcome"]["request_id"],
-                    "model_config_id": config.inference.models[0].config_id, "review_required": True,
+                    "ocr_request_id": record["outcome"]["request_id"],
+                    "ocr_model_config_id": config.inference.models[0].config_id, "review_required": True,
                 })
         return rows
 

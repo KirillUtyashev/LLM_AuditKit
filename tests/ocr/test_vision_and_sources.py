@@ -1,6 +1,7 @@
 import asyncio
 import shutil
 from types import SimpleNamespace
+from unittest.mock import AsyncMock, Mock
 
 import pytest
 
@@ -54,11 +55,77 @@ def test_provider_errors_not_treated_as_blank_pages():
         decode_annotation({"full_text_annotation": {"text": "lost text"}}, "page")
 
 
+@pytest.mark.parametrize("key", [None, "", " \t ", "synthetic-vision-key", " synthetic-vision-key "])
+def test_api_key_or_adc_options_match_in_both_modes(monkeypatch, key):
+    monkeypatch.delenv("GOOGLE_VISION_API_KEY", raising=False)
+    if key is not None:
+        monkeypatch.setenv("GOOGLE_VISION_API_KEY", key)
+    # Other Google keys must not accidentally select key-based Vision auth.
+    monkeypatch.setenv("GOOGLE_API_KEY", "unrelated-key")
+    monkeypatch.setenv("GOOGLE_API_KEY_VERTEX", "unrelated-vertex-key")
+    monkeypatch.setenv("GOOGLE_APPLICATION_CREDENTIALS", "/synthetic/adc.json")
+    response = object()
+    sync_client = SimpleNamespace(batch_annotate_images=Mock(return_value=response),
+                                  transport=SimpleNamespace(close=Mock()))
+    async_client = SimpleNamespace(batch_annotate_images=AsyncMock(return_value=response),
+                                   transport=SimpleNamespace(close=AsyncMock()))
+    sdk = SimpleNamespace(
+        ImageAnnotatorClient=Mock(return_value=sync_client),
+        ImageAnnotatorAsyncClient=Mock(return_value=async_client),
+        AnnotateImageRequest=lambda **kwargs: kwargs,
+        Feature=SimpleNamespace(Type=SimpleNamespace(DOCUMENT_TEXT_DETECTION="document-text")),
+    )
+    backend = GoogleVisionOCRBackend()
+    monkeypatch.setattr(backend, "_sdk", lambda: sdk)
+    decoded = object()
+    monkeypatch.setattr(backend, "_decode_batch", Mock(return_value=decoded))
+    for _ in range(2):
+        assert backend.recognize(b"scan", "page", config(language_hints=("en",))) is decoded
+
+    async def execute():
+        for _ in range(2):
+            assert await backend.recognize_async(b"scan", "page", config(language_hints=("en",))) is decoded
+        await backend.close_async()
+
+    asyncio.run(execute())
+    backend.close()
+    expected = {"client_options": {"api_key": key.strip()}} if key and key.strip() else {}
+    sdk.ImageAnnotatorClient.assert_called_once_with(**expected)
+    sdk.ImageAnnotatorAsyncClient.assert_called_once_with(**expected)
+    request = {"image": {"content": b"scan"}, "features": [{"type_": "document-text"}],
+               "image_context": {"language_hints": ["en"]}}
+    for client in (sync_client, async_client):
+        assert client.batch_annotate_images.call_count == 2
+        client.batch_annotate_images.assert_called_with(requests=[request], timeout=120)
+    sync_client.transport.close.assert_called_once()
+    async_client.transport.close.assert_awaited_once()
+    assert backend._client is backend._async_client is None
+
+
+@pytest.mark.parametrize("mode", ["sync", "async"])
+def test_configured_api_key_failure_does_not_fall_back_to_adc(monkeypatch, mode, capsys):
+    monkeypatch.setenv("GOOGLE_VISION_API_KEY", "synthetic-invalid-key")
+    sdk = SimpleNamespace(
+        ImageAnnotatorClient=Mock(side_effect=RuntimeError("rejected")),
+        ImageAnnotatorAsyncClient=Mock(side_effect=RuntimeError("rejected")),
+    )
+    backend = GoogleVisionOCRBackend()
+    monkeypatch.setattr(backend, "_sdk", lambda: sdk)
+    with pytest.raises(RuntimeError, match="rejected"):
+        if mode == "sync":
+            backend.recognize(b"scan", "page", config())
+        else:
+            asyncio.run(backend.recognize_async(b"scan", "page", config()))
+    constructor = sdk.ImageAnnotatorClient if mode == "sync" else sdk.ImageAnnotatorAsyncClient
+    constructor.assert_called_once_with(client_options={"api_key": "synthetic-invalid-key"})
+    captured = capsys.readouterr()
+    assert "synthetic-invalid-key" not in captured.out + captured.err
+
+
 def test_sync_async_sdk_paths_without_credentials_or_network():
     vision = pytest.importorskip("google.cloud.vision")
     from google.auth.credentials import AnonymousCredentials
     from google.api_core.gapic_v1.method import DEFAULT
-    from unittest.mock import AsyncMock, Mock
 
     response = vision.BatchAnnotateImagesResponse(responses=[vision.AnnotateImageResponse(**annotation())])
     backend = GoogleVisionOCRBackend()

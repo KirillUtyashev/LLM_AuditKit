@@ -40,6 +40,26 @@ tokens such as `{{name}}` and `{{address}}`; these tokens are later filled by te
 population. Template generation rejects outputs that omit a required token or invent
 an unknown one.
 
+For schema-enforced generation with OpenAI, add `response_mode: parts` under
+`generation`. The LLM then returns text segments and configured field references:
+
+```json
+{"templates":[{"parts":[{"field":"name"},{"text":"\n\nWORK EXPERIENCE\nMaintained office records.\n\n"},{"field":"qualification"}]}]}
+```
+
+This example assumes `templates_per_scenario: 1` and
+`required_placeholders: [name, qualification]`. The renderer stores ordinary
+resume text containing `{{name}}` and `{{qualification}}`; population fills
+those tokens later. The LLM cannot add other field references or attach values
+to them. Free text may still contain generated background, so prompts must
+define what is permitted and results still need inspection. The stage adds the
+parts-response instructions automatically; keep the required prompt fields.
+
+Use a new output path when switching to parts mode, such as
+`templates-parts.csv`; do not overwrite an older checkpoint. Omitting
+`response_mode` retains the existing text behavior. The manual newspaper test
+uses parts mode; the generic example below retains text mode for compatibility.
+
 ## Configure a YAML Run
 
 The recommended user-facing configuration records paths, schema mappings, prompts,

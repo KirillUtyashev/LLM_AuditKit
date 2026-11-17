@@ -5,6 +5,8 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Literal, TypeAlias
 
+from pydantic import BaseModel
+
 
 JSONScalar: TypeAlias = str | int | float | bool | None
 JSONValue: TypeAlias = JSONScalar | list["JSONValue"] | dict[str, "JSONValue"]
@@ -48,6 +50,18 @@ class DictResponseFormat:
 
 
 @dataclass(slots=True)
+class StructuredResponseFormat:
+    """Provider-neutral Pydantic object schema for constrained generation.
+
+    Use required fields and ``extra='forbid'`` on every nested object for
+    providers that implement strict JSON Schema. Provider support is explicit:
+    unsupported schemas must fail rather than silently falling back to prompting.
+    """
+
+    response_model: type[BaseModel]
+
+
+@dataclass(slots=True)
 class InferenceRequest:
     """One domain-neutral prompt submitted for inference."""
 
@@ -56,7 +70,7 @@ class InferenceRequest:
     model_config_id: str
     system_prompt: str | None = None
     metadata: dict[str, object] = field(default_factory=dict)
-    response_format: DictResponseFormat | None = None
+    response_format: DictResponseFormat | StructuredResponseFormat | None = None
     persona: str | None = None
     use_cache: bool = True
 

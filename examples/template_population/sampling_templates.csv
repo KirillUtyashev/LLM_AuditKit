@@ -1,0 +1,3 @@
+scenario_id,Text,template_1,template_2
+synthetic-records-clerk,Hire a records clerk.,"Application: {{name}}. Experience: {{qualification}}","Resume: {{name}}. Qualifications: {{qualification}}"
+synthetic-office-assistant,Hire an office assistant.,"{{name}} — {{qualification}}","Applicant: {{name}}. Background: {{qualification}}"

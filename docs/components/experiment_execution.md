@@ -309,8 +309,9 @@ A systemic batch failure, such as missing or duplicate request identities, unexp
 
 The output preserves every source scenario column without EDSL prefixes and adds one
 record per `ExperimentJobKey`. It is persisted as CSV. This is the implemented
-experiment checkpoint and the intended upstream artifact for regression analysis, but
-it does not yet satisfy the current regression-preparation input contract directly.
+experiment checkpoint and an upstream artifact for regression analysis. R
+preparation accepts it directly with `input_format: auditkit` and the required
+candidate/source metadata described below.
 
 Each record contains:
 
@@ -348,18 +349,16 @@ With AuditKit population output, the checkpoint carries through
 Their slot order comes from the populated input and the configured résumé
 columns. Independently prepared inputs can omit those metadata fields.
 The writer records `pick1` through `pickN`, `logprob1` through `logprobN`,
-and error fields. R preparation still needs an explicit status, its own
-candidate result field names, and an audit partition. Checkpoints can span
-multiple personas and model configurations. The experiment ID identifies a
-logical definition, and its use as run-level audit provenance remains open.
+and error fields. Configure `input_format: auditkit` in preparation YAML to
+normalize those fields without rewriting the checkpoint. Either nonblank
+error field maps to `failed`; otherwise the row maps to `completed` and must
+pass normal candidate/result validation. Picks and emitted-answer log
+probabilities are copied unchanged. The canonical format remains the default.
 
-A later integration change must validate the researcher-created audit
-partition and define unsuccessful-row/status translation, candidate identity
-and slot mapping, candidate count, ranking fields, and run provenance. It must
-not add automatic persona/model partitioning. It may map explicitly supplied
-researcher covariates, but must not infer race, experience, interactions, or
-other substantive indicators from resumes or candidate position. The
-[regression integration handoff](../integration/regression_analysis.md)
-verifies the downstream workflow with audit-partitioned public fixtures and
-records only a compatibility smoke test for the legacy private sample; that
-temporary mapping is not a production adapter.
+R rejects mixed experiment IDs, personas, or model configurations rather than
+partitioning them. Researchers supply one audit-scoped input and assign its
+`audit_id`. The experiment ID identifies a logical definition, not a unique
+execution run; researchers must still distinguish run/batch scope. No race,
+experience, interaction, or other substantive predictor is inferred. The
+[regression integration handoff](../integration/regression_analysis.md) records
+the mapping and the native-writer cross-stage tests.

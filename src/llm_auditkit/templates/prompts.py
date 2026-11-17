@@ -46,11 +46,30 @@ def build_template_prompt(
 ) -> str:
     """Render one user prompt from a source scenario and generation config."""
 
-    return _render(
+    rendered = _render(
         config.prompt_template,
         row,
         config,
         "prompt_template",
+    )
+    if config.response_mode == "parts":
+        rendered += _parts_instructions(config.required_placeholders)
+    return rendered
+
+
+def _parts_instructions(names: list[str]) -> str:
+    """Clarify the parts contract without replacing researcher prompt content."""
+
+    return (
+        "\n\nResponse contract: Return the schema's templates array, each with a parts array. "
+        "A part is either {\"text\": \"literal resume prose/formatting\"} or "
+        "{\"field\": \"configured_field_name\"}, never both. "
+        f"Allowed field names: {', '.join(names)}. Include every configured field in every resume. "
+        "Do not supply values for fields, invent other fields, or write double-brace tokens "
+        "inside text. The application inserts the literal placeholders at field references. "
+        "References to placeholder tokens in the preceding instructions mean these field parts. "
+        "Generate free-text background only as permitted by the research instructions; "
+        "do not invent values for controlled attributes in prose."
     )
 
 

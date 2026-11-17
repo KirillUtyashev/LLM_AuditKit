@@ -1,5 +1,44 @@
 # Regression examples
 
+## Prepare native AuditKit experiments
+
+Point preparation directly at an experiment checkpoint with population's
+candidate IDs/counts and your city/year and candidate covariates intact:
+
+```yaml
+input_format: auditkit
+input_paths:
+  - outputs/experiments.csv
+output_path: outputs/regression_ready.csv
+audit_id: my_inspected_model_persona_run
+candidate_covariates: [treatment]
+```
+
+Save this as `prepare.yaml` at the repository root (paths resolve relative to
+the YAML), then run:
+
+```bash
+Rscript scripts/prepare_regression_data.R --config prepare.yaml
+```
+
+`treatment` is an example
+researcher-supplied numeric indicator: the input must already contain
+`candidate_<i>_treatment`, or change/omit the configured covariates. The
+loader maps native pick/logprob/error columns internally; do not rename them.
+Both error fields empty means completed, while either nonblank field means
+failed and excluded with the normal preparation warning. Missing or malformed
+successful values remain errors.
+
+Inputs must represent one experiment ID, persona, model configuration, and
+distinguishable run/batch. Mixed IDs are rejected, not automatically split;
+you remain responsible for run/batch scope and assigning `audit_id`. Candidate
+IDs/counts/covariates and city/year must already exist. Configure experiment
+résumé order to match the population candidate slots. Inspect the resulting
+regression-ready CSV before using the separate estimation command.
+
+The canonical examples below retain the default `input_format: canonical`;
+their existing YAML files do not need to change.
+
 ## Complete synthetic workflow
 
 This public example starts with raw wide experiment CSV shards for two

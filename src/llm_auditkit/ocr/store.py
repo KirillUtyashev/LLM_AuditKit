@@ -16,7 +16,7 @@ from .models import OCRBlock, OCRException, OCRPage, canonical_json, identity, v
 
 CSV_COLUMNS = [
     "ad_id", "source_id", "page_id", "page_number", "source_path", "metadata_json",
-    "raw_text", "Text", "source_spans_json", "request_id", "model_config_id", "review_required",
+    "raw_text", "Text", "source_spans_json", "ocr_request_id", "ocr_model_config_id", "review_required",
 ]
 
 

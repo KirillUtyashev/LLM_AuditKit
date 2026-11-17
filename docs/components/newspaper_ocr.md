@@ -13,7 +13,14 @@ selection, scoring, or fuzzy deduplication in this feature.
 
 `NewspaperOCRPipeline` accepts explicit `SourceDocument` paths and scalar source
 metadata, an `OCRConfig`, an `OCRStore`, and the shared `InferenceOrchestrator`.
-`GoogleVisionOCRBackend` isolates the Google SDK. Optional PDF/image dependencies
+`GoogleVisionOCRBackend` isolates the Google SDK. A nonblank
+`GOOGLE_VISION_API_KEY` environment variable, read at backend construction,
+configures both SDK clients via `client_options.api_key`; otherwise they retain
+Application Default Credentials. A configured key takes precedence and failures
+do not silently fall back to another identity. Keys are not OCR configuration,
+checkpoint or CSV fields and are never printed by the backend. The CLI loads
+`.env` without overriding the shell; library callers manage their environment.
+Optional PDF/image dependencies
 are imported only when used; importing the package requires no credentials.
 PDF pages are rendered individually at configured DPI, and all pages are visited.
 Both provider paths use `batch_annotate_images` with one document-text request,
@@ -38,28 +45,32 @@ overlap heuristics or silent truncation. `max_page_characters` bounds the comple
 user prompt; oversized pages fail before LLM execution. Cross-page ads are not
 automatically joined. OCR provider reading order is retained, not assumed perfect.
 
-The response is strict JSON with `ads` and `blocks`. Each ad has a temporary `key`
-and cleaned `text`. Each block has its original `block_id` and an ordered
-`segments` list, each with verbatim `text`, an `ad_key` or null, and a `reason`
-(required for excluded non-ad text). Concatenating a block's segment texts must
-reproduce that block **exactly**. Every block must appear once; references must
-resolve; every ad must own nonempty source text. This supports splitting one
-block and merging several blocks, while detecting dropped/duplicated/altered
-source text. Raw ad text and source spans are derived locally, never trusted from
-an LLM-supplied raw-text field. All excluded text/reasons remain in checkpoints.
+The response is strict JSON with an `ads` list, optionally enclosed in one
+whole-response Markdown JSON code fence. Only that unambiguous presentation
+wrapper is removed for parsing; surrounding prose, malformed JSON and duplicate
+keys remain errors. The original model response is retained in checkpoints.
+Each ad contains nonblank cleaned `text`. The model may repair OCR errors as
+well as spacing and punctuation. No character-equality, numeric-format,
+complete-block-partition or mandatory per-ad source-mapping check is performed.
+Prompts still instruct the model not to invent facts or alter the meaning of
+requirements/contact details or historical language; this is not a software
+guarantee. Malformed schemas, non-string/blank ad text, invalid UTF-8 and NULs
+remain errors. Identical ad text on the same page is rejected because it cannot
+be assigned distinct content-based IDs without positional identity; no fuzzy
+deduplication is performed.
 
-Cleanup is additionally validated to preserve the case-folded sequence of source
-letters and digits: added, removed, substituted or reordered content fails.
-Cleanup may repair OCR spacing, broken words and punctuation, but must not add
-facts, alter requirements/contact details, or normalize historical demographic
-language. Source-coverage validation cannot establish semantic fidelity or correct
-ad boundaries. Every exported ad is marked `review_required=true`: researchers
-must compare a sample (and uncertain cases) with scans. The software does not
-claim validated extraction accuracy or automatic research readiness.
-Currency symbols and meaningful numeric punctuation (including decimals,
-grouping, signs, percentages and ranges) must also be preserved. NUL characters
-and lone Unicode surrogates in raw or cleaned text fail before success is saved.
-Ambiguous numeric changes require source review, not automatic guessing.
+For offline inspection of earlier saved responses, the parser also accepts
+the former `blocks` list and ad `key` fields, but does not trust or enforce those
+mappings. Full-page OCR text is joined locally and repeated as `raw_text` for
+each ad; it is **not** the verified raw text of that individual ad.
+`source_spans_json` is retained as an empty list for CSV compatibility. Original
+provider responses, blocks and geometry remain in page checkpoints. A page with
+zero returned ads is valid and still retains its OCR checkpoint.
+
+Every exported ad is `review_required=true`: review is necessary to detect
+omissions, incorrect splits/merges, changed details or hallucinations. Successful
+execution means basic output validation passed, not verified extraction accuracy
+or automatic research readiness.
 
 Sync and async methods use the matching shared inference APIs. OCR acquisition
 has explicit sync/async provider methods; async execution does not wrap blocking
@@ -103,8 +114,9 @@ change. Both sync and async paths use this same policy.
 
 The CSV may be partial following failure; CLI failure and checkpoint status must
 not be interpreted as completion. Stable request IDs include page identity,
-OCR content and configuration. Ad IDs include source spans and page identity,
-not response order. Moving identical files without changing metadata preserves
+OCR content and configuration. Ad IDs hash page identity and cleaned text,
+not response order or temporary model keys. Changed text changes ad identity.
+Moving identical files without changing metadata preserves
 identity. Checkpoints contain source text and model output and must be treated
 as sensitive local research artifacts, not logs or repository fixtures.
 
@@ -112,7 +124,14 @@ as sensitive local research artifacts, not logs or repository fixtures.
 
 One row per extracted ad: `ad_id`, `source_id`, `page_id`, `page_number`,
 `source_path`, `metadata_json`, `raw_text`, `Text` (cleaned text),
-`source_spans_json`, `request_id`, `model_config_id`, `review_required`.
+`source_spans_json`, `ocr_request_id`, `ocr_model_config_id`, `review_required`.
+OCR inference provenance is namespaced so downstream experiment request/model
+IDs can coexist without renaming or dropping source fields. Existing page
+checkpoints retain their internal IDs; resuming re-exports the new CSV names
+without rerunning successful OCR or inference. Previously loaded downstream
+datasets/checkpoints are not silently migrated to a different source schema.
+`raw_text` is full-page OCR repeated per ad and `source_spans_json` is `[]`;
+source/page IDs, path and metadata provide page-level provenance only.
 JSON-valued columns are encoded strings, so `DatasetLoader` retains scalar cells.
 No `scenario_id` is invented here; the loader establishes it normally.
 An empty successful run writes the same CSV header with zero records.

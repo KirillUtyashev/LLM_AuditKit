@@ -13,12 +13,14 @@ from llm_auditkit.inference import (
     InferenceOrchestrator,
     InferenceRequest,
     ResponseField,
+    StructuredResponseFormat,
 )
 
 from .exceptions import TemplateGenerationIdentityError
 from .identity import build_generation_fingerprint, build_template_request_id
 from .models import TemplateGenerationConfig
 from .prompts import build_template_prompt, build_template_system_prompt
+from .parts import template_parts_model
 from .validation import validate_template_generation_inputs
 
 
@@ -40,18 +42,23 @@ def build_template_requests(
         )
 
     fingerprint = build_generation_fingerprint(config)
-    response_format = DictResponseFormat(
-        fields=[
-            ResponseField(
-                name=f"template_{position}",
-                value_type="string",
-                description="One complete resume template",
-            )
-            for position in range(1, config.templates_per_scenario + 1)
-        ],
-        include_comment=False,
-        include_type_hints=False,
-    )
+    if config.response_mode == "parts":
+        response_format = StructuredResponseFormat(
+            response_model=template_parts_model(
+                config.templates_per_scenario, tuple(config.required_placeholders),
+            ),
+        )
+    else:
+        response_format = DictResponseFormat(
+            fields=[
+                ResponseField(
+                    name=f"template_{position}", value_type="string",
+                    description="One complete resume template",
+                )
+                for position in range(1, config.templates_per_scenario + 1)
+            ],
+            include_comment=False, include_type_hints=False,
+        )
 
     requests: list[InferenceRequest] = []
     for scenario_id, row in zip(

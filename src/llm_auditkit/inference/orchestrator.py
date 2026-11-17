@@ -6,6 +6,8 @@ import math
 from collections.abc import AsyncIterator, Iterator, Mapping, Sequence
 from time import perf_counter
 
+from pydantic import ValidationError
+
 from .adapter import InferenceAdapter
 from .batching import RequestBatch, build_request_batches
 from .exceptions import InferenceBatchError, InferenceValidationError
@@ -19,6 +21,7 @@ from .models import (
     ModelConfig,
     RenderedPrompt,
     TokenLogprob,
+    StructuredResponseFormat,
 )
 from .validation import validate_inference_inputs
 
@@ -330,6 +333,14 @@ def _verify_terminal_outcome(
             f"structured result for request {result.request_id!r} has no "
             "structured content"
         )
+    if isinstance(request.response_format, StructuredResponseFormat):
+        if result.comment is not None:
+            raise InferenceBatchError("schema-constrained result contains an unexpected comment")
+        try:
+            request.response_format.response_model.model_validate(result.structured_content, strict=True)
+        except ValidationError as error:
+            raise InferenceBatchError("structured result does not match its response schema") from error
+        return
     expected_fields = [field.name for field in request.response_format.fields]
     if list(result.structured_content) != expected_fields:
         raise InferenceBatchError(
