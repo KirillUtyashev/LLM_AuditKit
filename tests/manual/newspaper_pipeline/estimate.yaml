@@ -1,4 +1,4 @@
-data_path: ../../outputs/pipeline/regression_ready.csv
+data_path: local/chicago-1950-smoke/regression_ready.csv
 dataset_id: inspected_newspaper_slice
 model_id: example_treatment_fe
 outcome_variable: pick
@@ -7,4 +7,4 @@ control_variables: []
 fixed_effects: [scenario_id]
 cluster_variables: [scenario_id]
 estimation_group_variables: [city, year]
-output_directory: ../../outputs/pipeline/regression
+output_directory: local/chicago-1950-smoke/regression

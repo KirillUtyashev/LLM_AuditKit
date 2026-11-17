@@ -32,6 +32,10 @@ inference for ad reconstruction/cleanup; it does not generate new ads or apply
 research-specific selection rules. The existing loader remains the tabular
 path-to-DataFrame boundary.
 
+OCR validates basic response shape and preserves full raw pages for review;
+it does not enforce exact source partitions, character equality or per-ad source
+mappings. Exports retain page-level provenance and require human review.
+
 The package uses `pandas.DataFrame` as the common tabular representation passed between
 Python pipeline stages. Dataset loading is the single tabular path-to-DataFrame boundary;
 downstream stage APIs accept DataFrames. A user-facing pipeline run configuration may
@@ -51,14 +55,20 @@ use AuditKit's population output in their own EDSL experiment. See the
 ## Repository Pipeline Runner
 
 [`scripts/run_pipeline.py`](../scripts/run_pipeline.py) composes the existing
-stages from a master YAML referencing their own configurations. Explicit
-`ocr`, `templates`, `population`, `experiments` (including R preparation), and
-`analysis` phases exit at inspection boundaries; the runner never automatically
-continues from preparation into estimation. It validates path/schema wiring,
+stages from a master YAML referencing their own configurations. `--run` continues
+through configured OCR, templates, population, experiments, and R preparation
+without intermediate pauses; explicit `ocr`, `templates`, `population`,
+`experiments` (including R preparation), and `analysis` phases remain available
+for review. The runner never automatically continues from preparation into
+estimation. It validates path/schema wiring,
 supports configured scalar extraction from OCR metadata, delegates native
 sync/async execution and resume to the existing stages, and atomically persists
-the population output. It does not introduce new inference workers, retries,
-audit partitioning, substantive predictors, or candidate identities. This
+the population output. Optional configured pools generate and persist exact
+candidate assignments with stable IDs before filling the same in-memory
+templates. Existing sampled assignments must match the deterministic design
+and scenario set on resume. Without sampling, supplied assignments remain
+unchanged. It does not introduce new inference workers, retries,
+audit partitioning, or inferred substantive predictors. This
 repository workflow covers one persona/model configuration per audit. See the
 [user guide](guides/pipeline.md) and [phase diagram](architecture/pipeline_runner.mmd).
 
@@ -79,6 +89,13 @@ The inference layer owns generic model and response-format configuration, determ
 Batches are submitted sequentially. A calling stage validates and checkpoints the current completed batch before requesting the next one, which bounds uncheckpointed work and prevents a systemic prompt or integration error from consuming tokens across the remaining dataset. Template generation validates a complete logical batch and, when `save_after_each_result` is enabled, performs one atomic CSV replacement for each handled scenario result. Experiment execution applies all outcomes from a completed logical batch and performs one atomic CSV replacement before advancing when `save_after_each_batch` is enabled.
 
 The shared inference layer provides equivalent synchronous and asynchronous batch APIs. Each delegates to the corresponding EDSL execution method while preserving the same validation, batching, normalization, and failure contract.
+
+Optional schema-constrained responses use provider-neutral Pydantic models
+through the EDSL adapter (currently OpenAI only). Template generation's opt-in
+`parts` mode separates model-generated prose from configured field references;
+the stage renders those references into canonical placeholders deterministically.
+The population API and template CSV columns remain unchanged. Existing `text`
+mode and its checkpoints remain supported; switching modes requires a new checkpoint.
 
 ## Logging and Observability
 

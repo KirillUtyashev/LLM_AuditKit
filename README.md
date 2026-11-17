@@ -9,6 +9,10 @@ Template generation and experiment execution use shared inference to run EDSL
 jobs and save progress to CSV checkpoints. Both accept YAML run configurations.
 Experiment execution also has a command-line entry point.
 
+Template generation can use schema-enforced text/field parts with OpenAI
+(`generation.response_mode: parts`), inserting configured placeholders in code
+while retaining generated resume prose. Existing text-mode configs remain supported.
+
 [Template population](docs/components/template_population.md) fills each applicant
 template with researcher-supplied values. The [worked example](docs/guides/template_population.md#pass-the-populated-table-to-experiment-execution)
 shows how to pass the populated table directly to experiment execution and keep
@@ -38,6 +42,31 @@ python examples/template_population/preview.py
 
 It fills two synthetic job scenarios and prints their candidate IDs,
 names, and experiment questions in presentation order.
+
+To sample candidate assignments from editable synthetic pools and fill templates
+offline, run:
+
+```bash
+python examples/template_population/sample_candidates.py --config configs/template_population/sample_candidates.yaml
+```
+
+See the [sampling walkthrough](docs/guides/template_population.md#automatically-sample-an-assignment-table)
+to use generated templates, configure pools and a random seed, and preserve
+candidate identities without preparing assignments manually.
+
+For a configured newspaper workflow, run all stages through cleaned experiment
+data without intermediate review pauses:
+
+```bash
+python scripts/run_pipeline.py --config tests/manual/newspaper_pipeline/pipeline.yaml --run
+```
+
+This makes paid OCR/model calls and requires a local source image, credentials
+and an R environment. The current local example uses a copied Chicago Daily
+Tribune page from April 2, 1950, with synthetic candidate pools; the guide
+documents the local-only source and its attribution. It is not a validated research design.
+Regression estimation stays separate; individual `--phase`
+commands remain available. See the [pipeline guide](docs/guides/pipeline.md).
 
 To make a real OpenAI request using the shared-inference example, copy
 `.env.example` to `.env` and add your key:
@@ -95,11 +124,11 @@ To run the connected workflow locally, use the
 [YAML-driven pipeline runner](docs/guides/pipeline.md):
 
 ```bash
-python scripts/run_pipeline.py --config configs/pipeline/newspaper.yaml --check
+python scripts/run_pipeline.py --config tests/manual/newspaper_pipeline/pipeline.yaml --check
 ```
 
-Run its five explicit phases after configuring your inputs and credentials;
-each invocation stops for inspection before the next phase. The runner reuses
+Use `--run` through prepared data, or its five individual phases when you want
+intermediate review, after configuring inputs and credentials. The runner reuses
 the existing stage configurations and supports starting from a dataset without
 OCR. See the guide for candidate assignments, output paths and resume behavior.
 

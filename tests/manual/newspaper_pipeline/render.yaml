@@ -1,6 +1,6 @@
 results_paths:
-  - ../../outputs/pipeline/regression/regression_results.csv
-output_path: ../../outputs/pipeline/regression.png
+  - local/chicago-1950-smoke/regression/regression_results.csv
+output_path: local/chicago-1950-smoke/regression.png
 outcome_variable: pick
 term: treatment
 confidence_level: 0.95

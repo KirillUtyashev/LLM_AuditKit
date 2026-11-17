@@ -6,6 +6,7 @@ import math
 import os
 import re
 import shutil
+import subprocess
 import sys
 from pathlib import Path
 from types import SimpleNamespace
@@ -18,6 +19,41 @@ from llm_auditkit.inference import InferenceResult, RenderedPrompt, TokenLogprob
 
 
 ROOT = Path(__file__).resolve().parents[1]
+
+
+def test_repository_launcher_works_without_editable_import_path(tmp_path):
+    source = str(ROOT / "src")
+    script = str(ROOT / "scripts/run_pipeline.py")
+    configuration = str(ROOT / "tests/manual/newspaper_pipeline/pipeline.yaml")
+    code = f'''
+import runpy
+import socket
+import sys
+
+source = {source!r}
+sys.path[:] = [entry for entry in sys.path if entry != source]
+
+class MissingEditableImport:
+    def find_spec(self, fullname, path=None, target=None):
+        if fullname == "llm_auditkit" and source not in sys.path:
+            raise ModuleNotFoundError("Simulated missing editable import path")
+
+def forbid_network(*args, **kwargs):
+    raise AssertionError("Configuration check must not contact a service")
+
+socket.getaddrinfo = forbid_network
+socket.socket.connect = forbid_network
+sys.meta_path.insert(0, MissingEditableImport())
+sys.argv = [{script!r}, "--config", {configuration!r}, "--check"]
+runpy.run_path({script!r}, run_name="__main__")
+'''
+    environment = os.environ.copy()
+    environment.pop("PYTHONPATH", None)
+    environment.update({"PYTHON_DOTENV_DISABLED": "1", "EDSL_FETCH_TOKEN_PRICES": "False"})
+    result = subprocess.run([sys.executable, "-I", "-c", code], cwd=tmp_path,
+                            env=environment, capture_output=True, text=True, timeout=30)
+    assert result.returncode == 0, result.stderr
+    assert "configuration wiring is valid" in result.stdout
 
 
 @pytest.fixture
@@ -211,7 +247,7 @@ def test_bad_wiring_stops_before_any_provider_call(runner, workflow, change):
     elif change == "overwrite_prompt":
         configs["render"]["output_path"] = "question.txt"
     else:
-        root["ocr"] = str(ROOT / "configs/ocr/newspaper.yaml")
+        root["ocr"] = str(ROOT / "tests/manual/newspaper_pipeline/ocr.yaml")
     for name, value in configs.items():
         write_yaml(workflow.directory / f"{name}.yaml", value)
     with pytest.raises(runner.PipelineError):
@@ -232,10 +268,35 @@ def test_config_duplicates_and_unknown_keys_are_not_ignored(runner, workflow):
 
 
 def test_checked_in_newspaper_workflow_is_wired_without_loading_private_inputs(runner):
-    config = runner.load_config(ROOT / "configs/pipeline/newspaper.yaml")
-    assert config.ocr_path == ROOT / "configs/ocr/newspaper.yaml"
+    config = runner.load_config(ROOT / "tests/manual/newspaper_pipeline/pipeline.yaml")
+    assert config.ocr_path == ROOT / "tests/manual/newspaper_pipeline/ocr.yaml"
     assert config.templates.mode == config.experiments.mode == "async"
     assert config.population_path == config.experiments.dataset_path
+    ocr = runner.load_ocr_run_config(config.ocr_path)
+    assert len(ocr.documents) == 1
+    document = ocr.documents[0]
+    assert document.path.suffix == ".pdf"
+    assert document.metadata["newspaper"] == "Chicago Daily Tribune"
+    assert document.metadata["city"] == "Chicago"
+    assert document.metadata["year"] == 1950
+    assert document.metadata["publication_date"] == "1950-04-02"
+    assert document.metadata["archive_page"] == "A6"
+    assert document.metadata["source_document"] == "Classified Ad 36 -- No Title"
+    assert "ProQuest" in document.metadata["source_collection"]
+    assert "source_region" not in document.metadata  # Complete PDF, not a crop.
+    output = ROOT / "tests/manual/newspaper_pipeline/local/chicago-1950-smoke"
+    assert document.path.parent == output / "source"
+    assert ocr.output_path.parent == config.templates.output_path.parent == output
+    assert config.templates.output_path == output / "templates-gpt55-medium-parts.csv"
+    assert config.templates.generation_config.response_mode == "parts"
+    template_model, = config.templates.generation_config.inference.models
+    assert template_model.model == "gpt-5.5"
+    assert template_model.parameters == {
+        "reasoning_effort": "medium", "max_tokens": 16000,
+    }
+    assert config.population_path.parent == config.prepared_path.parent == output
+    assert config.sampling["unique_columns"] == ["name"]
+    assert all("advertised work" in value for value in config.sampling["pools"]["qualification"])
 
 
 @pytest.mark.parametrize("bad", ["overwrite", "missing_key", "not_object", "invalid_json", "missing_year_mapping"])
@@ -323,6 +384,240 @@ def test_r_commands_use_argument_lists_and_the_repository_environment(runner, wo
                         str(workflow.directory / 'a config.yaml')],), {"cwd": ROOT, "check": True})]
 
 
+def enable_sampling(workflow):
+    population = workflow.configs["pipeline"]["population"]
+    population["replacements_path"] = "sampled.csv"
+    population["sampling"] = {
+        "assignment_namespace": "synthetic-continuous-test-v1", "seed": 42,
+        "unique_columns": ["name", "group"],
+        "pools": {"name": ["Synthetic Alex", "Synthetic Casey", "Synthetic Jamie"],
+                  "group": ["0", "1"], "treatment": ["0", "1"]},
+    }
+    write_yaml(workflow.path, workflow.configs["pipeline"])
+
+
+@pytest.mark.parametrize("mode", ["sync", "async"])
+def test_continuous_sampling_real_python_stages_and_checkpoint_resume(runner, workflow, monkeypatch, mode):
+    enable_sampling(workflow)
+    for stage in ("templates", "experiments"):
+        workflow.configs[stage]["execution"]["mode"] = mode
+        write_yaml(workflow.directory / f"{stage}.yaml", workflow.configs[stage])
+    loads = []
+    original_load = runner._load_dataset
+
+    def record_load(path, required):
+        loads.append(path)
+        return original_load(path, required)
+
+    monkeypatch.setattr(runner, "_load_dataset", record_load)
+    command = ["--config", str(workflow.path), "--run"]
+    assert runner.main(command) == 0
+    assert loads == [workflow.directory / "jobs.csv"]  # No CSV handoffs after generation.
+    assert len(workflow.adapter.calls) == 32
+    assert {call[0] for call in workflow.adapter.calls} == {mode}
+    assert [call[0] for call in workflow.r_calls] == ["prepare_regression_data.R"]
+    assignments = pd.read_csv(workflow.directory / "sampled.csv", dtype={"scenario_id": str})
+    populated = pd.read_csv(workflow.directory / "populated.csv", dtype={"scenario_id": str})
+    native = pd.read_csv(workflow.directory / "experiments.csv", dtype={"scenario_id": str})
+    assert assignments.candidate_id.nunique() == 32 and len(populated) == len(native) == 16
+    for assignment in assignments.itertuples():
+        job = native.set_index("scenario_id").loc[assignment.scenario_id]
+        assert job[f"candidate_{assignment.candidate_order}_id"] == assignment.candidate_id
+        assert assignment.name in job[f"resume_{assignment.candidate_order}"]
+    paths = [workflow.directory / name for name in ("sampled.csv", "populated.csv", "experiments.csv")]
+    before = [path.read_bytes() for path in paths]
+    assert runner.main(command) == 0
+    assert [path.read_bytes() for path in paths] == before
+    assert len(workflow.adapter.calls) == 32  # Stage-owned resume; no new model requests.
+    assert [call[0] for call in workflow.r_calls] == ["prepare_regression_data.R"] * 2
+    assert not (workflow.directory / "regression").exists()
+
+
+def test_continuous_mode_supports_supplied_assignments(runner, workflow):
+    assert runner.main(["--config", str(workflow.path), "--run"]) == 0
+    native = pd.read_csv(workflow.directory / "experiments.csv")
+    assert native.candidate_1_id.iloc[0] == "assigned-person-001-1"
+    assert len(workflow.adapter.calls) == 32
+    assert [call[0] for call in workflow.r_calls] == ["prepare_regression_data.R"]
+
+
+def test_continuous_mode_runs_configured_ocr_first(runner, workflow, monkeypatch):
+    enable_sampling(workflow)
+    config = runner.load_config(workflow.path)
+    # Mock only the external OCR command boundary. Its output is then consumed
+    # by the real loader, generation, sampling, population and experiment APIs.
+    jobs = (workflow.directory / "jobs.csv").read_bytes()
+    (workflow.directory / "jobs.csv").unlink()
+    config.ocr_path = workflow.directory / "ocr.yaml"
+    calls = []
+
+    def ocr(args):
+        assert not workflow.adapter.calls
+        calls.append(args)
+        (workflow.directory / "jobs.csv").write_bytes(jobs)
+        return 0
+
+    monkeypatch.setattr(runner, "ocr_main", ocr)
+    runner.run_continuous(config)
+    assert calls == [["--config", str(config.ocr_path)]]
+    assert len(workflow.adapter.calls) == 32 and len(workflow.r_calls) == 1
+
+
+@pytest.mark.parametrize("missing", ["Rscript", "assignments"])
+def test_continuous_preflight_stops_before_paid_work(runner, workflow, monkeypatch, missing):
+    if missing == "Rscript":
+        monkeypatch.setattr(runner.shutil, "which", lambda name: None)
+    else:
+        (workflow.directory / "replacements.csv").unlink()
+    monkeypatch.setattr(runner, "ocr_main", lambda args: pytest.fail("OCR must not run"))
+    assert runner.main(["--config", str(workflow.path), "--run"]) == 1
+    assert not workflow.adapter.calls and not workflow.r_calls
+
+
+@pytest.mark.parametrize("bad", ["pool", "seed", "missing_pool", "overwrite_source", "overwrite_stage", "unknown"])
+def test_sampling_configuration_is_checked_before_loading_data(runner, workflow, bad):
+    enable_sampling(workflow)
+    population = workflow.configs["pipeline"]["population"]
+    if bad == "pool":
+        population["sampling"]["pools"]["name"] = ["Only one"]
+    elif bad == "seed":
+        population["sampling"]["seed"] = True
+    elif bad == "missing_pool":
+        del population["sampling"]["pools"]["name"]
+    elif bad == "overwrite_source":
+        population["replacements_path"] = "jobs.csv"
+    elif bad == "overwrite_stage":
+        population["replacements_path"] = "templates.csv"
+    else:
+        population["sampling"]["typo"] = True
+    write_yaml(workflow.path, workflow.configs["pipeline"])
+    assert runner.main(["--config", str(workflow.path), "--check"]) == 1
+    assert not workflow.adapter.calls and not workflow.r_calls
+
+
+@pytest.mark.parametrize("change", ["seed", "payload", "order"])
+def test_changed_sampled_assignments_are_not_silently_overwritten(runner, workflow, change):
+    enable_sampling(workflow)
+    command = ["--config", str(workflow.path), "--run"]
+    assert runner.main(command) == 0
+    assignments = workflow.directory / "sampled.csv"
+    if change == "seed":
+        workflow.configs["pipeline"]["population"]["sampling"]["seed"] = 17
+        write_yaml(workflow.path, workflow.configs["pipeline"])
+    else:
+        values = pd.read_csv(assignments, dtype=str)
+        if change == "payload":
+            values.loc[0, "name"] = "Intentionally changed"
+        else:
+            values.loc[0, "candidate_order"] = "9"
+        values.to_csv(assignments, index=False)
+    before = assignments.read_bytes()
+    populated = (workflow.directory / "populated.csv").read_bytes()
+    assert runner.main(command) == 1
+    assert assignments.read_bytes() == before
+    assert (workflow.directory / "populated.csv").read_bytes() == populated
+    assert len(workflow.adapter.calls) == 32 and len(workflow.r_calls) == 1
+
+
+@pytest.mark.parametrize("stage", ["ocr", "templates", "population", "experiments", "preparation"])
+def test_continuous_failure_never_runs_a_later_stage(runner, workflow, monkeypatch, stage):
+    config = runner.load_config(workflow.path)
+    config.ocr_path = workflow.directory / "ocr.yaml"
+    calls = []
+
+    def step(name, result):
+        def execute(*args, **kwargs):
+            calls.append(name)
+            if name == stage:
+                raise RuntimeError("private input and secret token")
+            return result
+        return execute
+
+    monkeypatch.setattr(runner, "ocr_main", step("ocr", 0))
+    monkeypatch.setattr(runner, "_templates", step("templates", pd.DataFrame()))
+    monkeypatch.setattr(runner, "_populate", step("population", pd.DataFrame()))
+    async def experiment(*args):
+        return step("experiments", pd.DataFrame({"error_type": [None], "error_message": [None]}))()
+
+    monkeypatch.setattr(runner, "ExperimentRunner", lambda *args: SimpleNamespace(run_async=experiment))
+    monkeypatch.setattr(runner, "_r_command", step("preparation", None))
+    with pytest.raises(RuntimeError):
+        runner.run_continuous(config)
+    order = ["ocr", "templates", "population", "experiments", "preparation"]
+    assert calls == order[:order.index(stage) + 1]
+
+
+def test_continuous_failed_job_does_not_start_r_preparation(runner, workflow, monkeypatch):
+    original = workflow.adapter.results
+
+    def fail_one(requests, mode):
+        results = original(requests, mode)
+        if requests[0].model_config_id == "review":
+            # Structurally valid inference, but a domain-invalid decision.
+            results[0].structured_content["Applicant 1"] = "Maybe"
+            results[0].content = json.dumps(results[0].structured_content)
+        return results
+
+    monkeypatch.setattr(workflow.adapter, "results", fail_one)
+    assert runner.main(["--config", str(workflow.path), "--run"]) == 1
+    assert not workflow.r_calls
+    assert pd.read_csv(workflow.directory / "experiments.csv").error_type.notna().any()
+
+
+def test_continuous_failed_template_does_not_start_population(runner, workflow, monkeypatch):
+    enable_sampling(workflow)
+    original = workflow.adapter.results
+
+    def invalid_template(requests, mode):
+        results = original(requests, mode)
+        results[0].structured_content = {"template_1": "Missing placeholders", "template_2": "Also missing"}
+        results[0].content = json.dumps(results[0].structured_content)
+        return results
+
+    monkeypatch.setattr(workflow.adapter, "results", invalid_template)
+    assert runner.main(["--config", str(workflow.path), "--run"]) == 1
+    assert not (workflow.directory / "sampled.csv").exists()
+    assert not (workflow.directory / "populated.csv").exists()
+    assert not workflow.r_calls
+    assert {call[1] for call in workflow.adapter.calls} == {"templates"}
+
+
+def test_reordered_sampled_assignment_csv_is_reused(runner, workflow):
+    enable_sampling(workflow)
+    command = ["--config", str(workflow.path), "--run"]
+    assert runner.main(command) == 0
+    path = workflow.directory / "sampled.csv"
+    saved = pd.read_csv(path, dtype=str)
+    saved.iloc[::-1, ::-1].to_csv(path, index=False)
+    before = path.read_bytes()
+    assert runner.main(command) == 0
+    assert path.read_bytes() == before
+    assert len(workflow.adapter.calls) == 32
+
+
+def test_population_resumes_after_assignment_save_but_population_write_failure(runner, workflow, monkeypatch):
+    enable_sampling(workflow)
+    config = runner.load_config(workflow.path)
+    templates = runner._templates(config)
+    original_write = runner._atomic_csv
+
+    def fail_population(table, path):
+        if path == config.population_path:
+            raise OSError("Synthetic interruption after assignment save")
+        original_write(table, path)
+
+    monkeypatch.setattr(runner, "_atomic_csv", fail_population)
+    with pytest.raises(OSError):
+        runner._populate(config, templates)
+    saved = config.replacements_path.read_bytes()
+    assert not config.population_path.exists()
+    monkeypatch.setattr(runner, "_atomic_csv", original_write)
+    populated = runner._populate(config, templates)
+    assert len(populated) == 16
+    assert config.replacements_path.read_bytes() == saved
+    assert len(workflow.adapter.calls) == 16 and not workflow.r_calls
+
+
 @pytest.mark.skipif(os.environ.get("LLM_AUDITKIT_RUN_R_INTEGRATION") != "1", reason="opt in to restored R environment")
 def test_phase_runner_through_real_r_and_png(runner, workflow, monkeypatch):
     if not workflow.real_which("Rscript"):
@@ -340,3 +635,19 @@ def test_phase_runner_through_real_r_and_png(runner, workflow, monkeypatch):
     assert coefficients.estimate.tolist() == pytest.approx([0.5] * 3)
     assert coefficients.n_used.eq(32).all()
     assert (workflow.directory / "regression.png").read_bytes().startswith(b"\x89PNG\r\n\x1a\n")
+
+
+@pytest.mark.skipif(os.environ.get("LLM_AUDITKIT_RUN_R_INTEGRATION") != "1", reason="opt in to restored R environment")
+def test_continuous_sampled_workflow_through_real_r_preparation(runner, workflow, monkeypatch):
+    if not workflow.real_which("Rscript"):
+        pytest.skip("Rscript is not installed")
+    enable_sampling(workflow)
+    monkeypatch.setattr(runner, "_r_command", workflow.real_r)
+    monkeypatch.setattr(runner.shutil, "which", workflow.real_which)
+    assert runner.main(["--config", str(workflow.path), "--run"]) == 0
+    prepared = pd.read_csv(workflow.directory / "ready.csv", dtype={"scenario_id": str})
+    assignments = pd.read_csv(workflow.directory / "sampled.csv", dtype={"scenario_id": str})
+    assert len(prepared) == 32
+    assert set(prepared.candidate_id) == set(assignments.candidate_id)
+    assert set(prepared.audit_id) == {"researcher-assigned-runner-fixture"}
+    assert not (workflow.directory / "regression").exists()

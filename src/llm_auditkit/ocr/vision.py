@@ -2,15 +2,23 @@
 
 from __future__ import annotations
 
+import os
+
 from .models import OCRBlock, OCRConfig, OCRException, OCRPage, identity
 
 
 class GoogleVisionOCRBackend:
-    """Use Application Default Credentials and the SDK's transport retries."""
+    """Use a Vision API key when configured, otherwise default credentials."""
 
     def __init__(self) -> None:
+        self._api_key = os.environ.get("GOOGLE_VISION_API_KEY", "").strip()
         self._client = None
         self._async_client = None
+
+    def _client_options(self) -> dict:
+        # Passing the key through SDK options preserves native sync/async
+        # transports and retries. Do not log these credential-bearing options.
+        return {"client_options": {"api_key": self._api_key}} if self._api_key else {}
 
     @staticmethod
     def _sdk():
@@ -22,7 +30,7 @@ class GoogleVisionOCRBackend:
 
     def recognize(self, image: bytes, page_id: str, config: OCRConfig) -> OCRPage:
         if self._client is None:
-            self._client = self._sdk().ImageAnnotatorClient()
+            self._client = self._sdk().ImageAnnotatorClient(**self._client_options())
         response = self._client.batch_annotate_images(
             requests=[self._request(image, config)], timeout=config.timeout,
         )
@@ -30,7 +38,7 @@ class GoogleVisionOCRBackend:
 
     async def recognize_async(self, image: bytes, page_id: str, config: OCRConfig) -> OCRPage:
         if self._async_client is None:
-            self._async_client = self._sdk().ImageAnnotatorAsyncClient()
+            self._async_client = self._sdk().ImageAnnotatorAsyncClient(**self._client_options())
         response = await self._async_client.batch_annotate_images(
             requests=[self._request(image, config)], timeout=config.timeout,
         )

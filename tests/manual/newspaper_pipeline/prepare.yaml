@@ -1,9 +1,9 @@
 input_format: auditkit
 input_paths:
-  - ../../outputs/pipeline/experiments.csv
-output_path: ../../outputs/pipeline/regression_ready.csv
-# Replace with your stable identity for this model/persona/run, before use.
-audit_id: example_newspaper_run
+  - local/chicago-1950-smoke/experiments.csv
+output_path: local/chicago-1950-smoke/regression_ready.csv
+# Explicit mechanics-test scope, not a substantive hiring audit.
+audit_id: chicago_1950_synthetic_candidates_smoke_v1
 top_share: 0.08
 probability_threshold: 0.99
 ranking_group_variables: [city, year]

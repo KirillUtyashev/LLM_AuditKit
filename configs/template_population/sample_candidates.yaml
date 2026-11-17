@@ -1,0 +1,25 @@
+# Offline synthetic example. Paths are relative to this YAML.
+# For a live run, point dataset_path at the completed generation CSV and
+# align the columns, pools, and output paths with your pipeline configuration.
+dataset_path: ../../examples/template_population/sampling_templates.csv
+population:
+  job_posting_column: Text
+  template_columns:
+    layout-a: template_1
+    layout-b: template_2
+  placeholder_columns:
+    name: full_name
+    qualification: qualification
+sampling:
+  assignment_namespace: synthetic-sampling-example-v1
+  seed: 42
+  # Names cannot repeat within a scenario; qualifications can.
+  unique_columns: [full_name]
+  pools:
+    full_name: [Alex Rowan, Casey Brook, Jamie Vale, Morgan Reed]
+    qualification:
+      - Three years maintaining office records.
+      - One year maintaining office records.
+output:
+  candidates_path: ../../examples/output/sample_candidates/candidates.csv
+  populated_path: ../../examples/output/sample_candidates/populated.csv

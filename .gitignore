@@ -43,6 +43,8 @@ htmlcov/
 
 # Generated research datasets, regression results, and figures
 /outputs/
+# Private manual-test scans, checkpoints and generated results
+/tests/manual/newspaper_pipeline/local/
 
 # Generated example outputs
 /examples/output/

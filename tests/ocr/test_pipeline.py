@@ -107,7 +107,7 @@ def test_fail_fast_retains_raw_and_failed_output_then_resume(documents, tmp_path
         seen.append(request.request_id)
         if len(seen) == 2:
             if bad == "parse":
-                result.content = '{"ads":[],"blocks":[]}'
+                result.content = '{"ads":[{"text":""}]}'
             else:
                 result.content = None
                 result.error = InferenceError("provider", "synthetic failure")
@@ -200,10 +200,30 @@ def test_corrupt_success_checkpoint_cannot_skip_validation(documents, tmp_path):
     pipeline.run(documents, config())
     checkpoint = next(path for path in pipeline.store.directory.glob("*.json") if path.name != "manifest.json")
     record = json.loads(checkpoint.read_text())
-    record["outcome"]["response"] = '{"ads":[],"blocks":[]}'
+    record["outcome"]["response"] = '{"ads":"not-a-list"}'
     checkpoint.write_text(json.dumps(record))
-    with pytest.raises(OCRException, match="omitted"):
+    with pytest.raises(OCRException, match="lists"):
         pipeline.run(documents, config())
+
+
+@pytest.mark.parametrize("mode", ["sync", "async"])
+def test_corrected_ads_without_mappings_export_page_provenance_and_resume(documents, tmp_path, mode):
+    def corrected(request, result):
+        result.content = '{"ads":[{"text":"Corrected field experience, wages $1.75."}]}'
+        return result
+    backend, adapter = Backend(), Adapter(corrected)
+    pipeline = make_pipeline(tmp_path, backend, adapter)
+    execute = lambda: (pipeline.run(documents, config()) if mode == "sync" else
+                       asyncio.run(pipeline.run_async(documents, config())))
+    result = execute()
+    assert len(result) == 3 and result.review_required.all()
+    assert result.raw_text.eq("CLERK\nSend resume to Box 17.").all()
+    assert result.source_spans_json.eq("[]").all()
+    assert result.Text.eq("Corrected field experience, wages $1.75.").all()
+    calls = len(adapter.sync_calls) + len(adapter.async_calls)
+    pd.testing.assert_frame_equal(result, execute())
+    assert len(adapter.sync_calls) + len(adapter.async_calls) == calls
+    assert backend.sync_calls + backend.async_calls == 3
 
 
 def test_duplicate_sources_refused_before_paid_calls(documents, tmp_path):

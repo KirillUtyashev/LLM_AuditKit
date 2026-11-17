@@ -125,7 +125,7 @@ passes the request collection and configuration together to preview or execute i
 `prompt` is always a string. A system instruction uses the normal EDSL agent-instruction component; persona text uses an explicit trait-presentation template. If no system prompt is supplied, EDSL uses its default agent instruction. The request ID remains in the request's scenario. Caller user, system, and persona text is protected with opaque markers during EDSL rendering and restored at the model-response boundary before EDSL computes cache keys or calls the provider. Preview and normalized result prompts apply the same restoration. Literal `{{...}}` and `{%...%}` text is therefore preserved rather than interpreted as EDSL template syntax.
 
 `response_format=None` requests free text and preserves the existing
-`QuestionFreeText` behavior. The supported generic structured format is
+`QuestionFreeText` behavior. The backward-compatible dictionary format is
 `DictResponseFormat`, which contains an ordered list of `ResponseField` definitions,
 whether a comment is included, and whether the backend should include explicit
 value-type hints in the rendered question. Each response field has a JSON-compatible
@@ -133,6 +133,29 @@ value type supported by the adapter, and a human-readable description. Disabling
 hints omits them from EDSL's prompt but does not change the normalized field contract.
 The EDSL adapter maps this generic format to `QuestionDict`; callers never construct or
 receive an EDSL question type directly.
+
+`StructuredResponseFormat(response_model=...)` accepts a Pydantic `BaseModel`
+class for nested JSON objects, arrays, enums and other supported JSON Schema
+constraints. Pydantic is an explicit package dependency. Define all fields as
+required and use `ConfigDict(extra="forbid")` on every object model for strict
+provider schemas. The initial supported provider is `openai`; other providers
+are rejected before any batch runs rather than silently falling back to prompts.
+Unsupported provider schema keywords can still cause a provider error.
+
+The adapter uses EDSL's `QuestionPydantic` and OpenAI's native strict JSON-schema
+response format. EDSL 1.0.9 loses nested types during question reconstruction and
+its local executor omits schema forwarding. Adapter-only compatibility shims
+retain original Pydantic models through weak, in-process schema references and
+supply the schema at the existing model-response boundary. Remote/distributed
+EDSL execution remains disabled. Complete JSON is validated without dictionary
+repair or extracting answers from surrounding prose. Successful results retain
+the raw response string plus a validated nested `structured_content` dictionary,
+and no separate comment. Invalid or incomplete schema responses remain failures.
+The orchestrator also validates schema-shaped successful outcomes from adapters.
+
+Equivalent schema formats share a job group by canonical JSON schema, not Python
+class identity; different schemas and dictionary formats remain separate. This
+adds no scheduling, rate limiting, cache, or retry system alongside EDSL.
 
 Only model configuration and response format determine adapter job compatibility.
 Different instructions or personas can run concurrently in that job, with one

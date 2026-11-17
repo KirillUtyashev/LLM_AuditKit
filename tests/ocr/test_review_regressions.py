@@ -185,12 +185,13 @@ def test_output_claim_does_not_break_dataset_directory_loading(tmp_path):
     ("Age 18–25.", "Age 1825."),
     ("Bonus 10%.", "Bonus 10."),
 ])
-def test_numeric_and_currency_changes_rejected(original, cleaned):
+def test_numeric_and_currency_changes_require_review_but_do_not_block_output(original, cleaned):
     source = page(texts=(original,))
     response = response_for([asdict(block) for block in source.blocks])
     response["ads"][0]["text"] = cleaned
-    with pytest.raises(OCRException, match="numeric"):
-        parse_response(json.dumps(response), source)
+    result = parse_response(json.dumps(response), source)
+    assert result[0]["raw_text"] == original
+    assert result[0]["Text"] == cleaned
 
 
 @pytest.mark.parametrize("mode", ["sync", "async"])
@@ -226,11 +227,13 @@ def test_cli_import_and_main_keep_shell_credentials(tmp_path):
     # override the environment before our own load_dotenv(override=False).
     (tmp_path / ".env").write_text(
         "GOOGLE_APPLICATION_CREDENTIALS=/synthetic/dotenv.json\n"
+        "GOOGLE_VISION_API_KEY=dotenv-vision-sentinel\n"
         "OPENAI_API_KEY=dotenv-sentinel\nOCR_DOTENV_ONLY=loaded\n"
     )
     environment = os.environ.copy()
     environment.update({"PYTHONPATH": str(Path(__file__).resolve().parents[2] / "src"),
                         "GOOGLE_APPLICATION_CREDENTIALS": "/synthetic/shell.json",
+                        "GOOGLE_VISION_API_KEY": "shell-vision-sentinel",
                         "OPENAI_API_KEY": "shell-sentinel"})
     environment.pop("PYTHON_DOTENV_DISABLED", None)
     environment.pop("OCR_DOTENV_ONLY", None)
@@ -238,10 +241,12 @@ def test_cli_import_and_main_keep_shell_credentials(tmp_path):
 import os
 from llm_auditkit.ocr.cli import main
 assert os.environ["GOOGLE_APPLICATION_CREDENTIALS"] == "/synthetic/shell.json"
+assert os.environ["GOOGLE_VISION_API_KEY"] == "shell-vision-sentinel"
 assert os.environ["OPENAI_API_KEY"] == "shell-sentinel"
 assert os.environ["OCR_DOTENV_ONLY"] == "loaded"
 assert main(["--config", "missing.yaml"]) == 1
 assert os.environ["GOOGLE_APPLICATION_CREDENTIALS"] == "/synthetic/shell.json"
+assert os.environ["GOOGLE_VISION_API_KEY"] == "shell-vision-sentinel"
 '''
     subprocess.run([sys.executable, "-c", code], cwd=tmp_path, env=environment,
                    check=True, capture_output=True, text=True, timeout=30)

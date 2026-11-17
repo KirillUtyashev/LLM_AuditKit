@@ -1,0 +1,34 @@
+# Paid workflow. Run --check first; --run continues through prepared data.
+# --phase remains available for optional intermediate review.
+ocr: ocr.yaml
+templates: templates.yaml
+metadata_columns:
+  city: city
+  year: year
+population:
+  # With sampling this is an output; omit sampling to supply your own assignments.
+  replacements_path: local/chicago-1950-smoke/candidates.csv
+  output_path: local/chicago-1950-smoke/populated.csv
+  template_columns:
+    layout-a: template_1
+    layout-b: template_2
+  placeholder_columns:
+    name: name
+    qualification: qualification
+  # Synthetic independent pools for a mechanics test, NOT a validated audit design.
+  sampling:
+    assignment_namespace: chicago-1950-synthetic-candidates-smoke-v1
+    seed: 42
+    unique_columns: [name]
+    pools:
+      name: [Alex Rowan, Casey Brook, Jamie Vale, Morgan Reed]
+      qualification:
+        - Seven years of experience relevant to the advertised work; references available.
+        - Three years of experience relevant to the advertised work; references available.
+      # Illustrative numeric smoke-test label, unrelated to qualifications.
+      treatment: ["0", "1"]
+experiments: experiments.yaml
+regression:
+  preparation: prepare.yaml
+  estimation: estimate.yaml
+  rendering: render.yaml

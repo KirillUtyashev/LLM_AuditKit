@@ -55,6 +55,8 @@ supply a table with the same shape directly to the population stage.
 - `model_config_id`: the one model configuration used for generation;
 - `save_after_each_result`: whether each handled row result is atomically persisted
   before the next result is applied.
+- `response_mode`: `text` (backward-compatible default) or `parts` (schema-enforced
+  text/field parts with deterministic placeholder rendering; currently OpenAI only).
 
 The selected model configuration ID must reference exactly one model in the shared
 inference configuration. Other configured models remain available to other callers but
@@ -130,6 +132,10 @@ that can change generated content:
 - ordered required placeholders; and
 - the selected model configuration, including provider, model, and parameters.
 
+Parts mode includes a versioned response contract in this fingerprint. Switching
+modes requires a separate output path; existing text-mode checkpoints and their
+fingerprints remain compatible with unchanged text-mode configuration.
+
 Batch size and checkpoint frequency are excluded because they do not define generated
 content. The fingerprint is persisted in output and combined with `scenario_id` to
 derive a stable request ID. A changed prompt, placeholder contract, selected model, or
@@ -158,6 +164,39 @@ For every incomplete scenario, `TemplateGenerator` builds one generic
 The shared inference adapter maps this generic response format to EDSL's standard
 dictionary-question behavior. Template generation never parses an EDSL object and does
 not invent a delimiter protocol for multiple free-text templates.
+
+### Schema-enforced parts mode
+
+Set `generation.response_mode: parts` in YAML (or `response_mode="parts"` in
+Python) to request a generic `StructuredResponseFormat` instead of string fields.
+Its Pydantic schema contains exactly `N` entries in a `templates` array. Each
+entry contains a nonempty `parts` array with either `{"text": "resume prose"}`
+or `{"field": "configured_name"}`. Only configured placeholder names are allowed
+as field references. Objects forbid additional properties; a reference cannot
+also supply a value or text. Cardinality and field names come from configuration,
+not hard-coded resume counts or applicant attributes.
+
+The renderer joins text verbatim and inserts canonical `{{configured_name}}`
+tokens at references. It never samples values, infers missing fields, or repairs
+model content. Every template must reference every required field. Literal text
+cannot contain double-brace tokens, so fields cannot bypass the reference schema.
+The same distinctness and placeholder checks apply to the resulting strings;
+population and the persisted `template_1`..`template_N` contract do not change.
+
+Free-text descriptions, work history and headings remain model-generated where
+the research instructions permit them. Schema adherence does not establish
+historical/factual accuracy or prevent prose from mentioning a controlled
+attribute. Researchers must specify the permitted background and inspect it.
+Parts-mode instructions are appended to the researcher prompt to explain that
+its configured placeholder list denotes field references, not literal text tokens.
+The stage does not supply controlled values to the LLM.
+
+The adapter uses EDSL's Pydantic question/provider-schema path, with local
+compatibility shims that preserve nested models through EDSL serialization,
+forward schemas at the provider boundary, and validate complete JSON responses.
+EDSL still owns scheduling, caching and provider retries. No caller retry loop
+or automatic prompt-only fallback is introduced. Non-OpenAI providers are rejected
+before inference for this mode; existing text mode remains available for them.
 
 A successful domain result must contain exactly `N` nonempty strings in configured
 order. Templates must be pairwise distinct after surrounding whitespace is removed.

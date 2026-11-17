@@ -124,7 +124,7 @@ class NewspaperOCRPipeline:
                 if request is not None:
                     request.use_cache = False
             if request is None:
-                record["outcome"] = self._outcome(None, '{"ads":[],"blocks":[]}', None)
+                record["outcome"] = self._outcome(None, '{"ads":[]}', None)
                 ads[page_id] = []
             else:
                 requests.append(request)

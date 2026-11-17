@@ -1,11 +1,18 @@
 flowchart TD
     M[Master YAML references existing stage configs] --> V[Validate wiring and protected paths]
     V --> P{Explicit phase selection}
+    V --> C[Explicit --run: no intermediate review pauses]
+    C --> CO[Configured OCR, if present]
+    CO --> CT[Generate or resume templates]
+    CT --> CU[Sample or load assignments and populate in memory]
+    CU --> CE[Run or resume experiments]
+    CE --> CR[R preparation only]
+    CR --> G4
     P --> O[ocr: Vision and shared-inference reconstruction]
     O --> G1[Stop: inspect ads against scans]
     P --> T[templates: DatasetLoader and TemplateGenerator]
-    T --> G2[Stop: inspect layouts and supply candidate assignments]
-    P --> U[population: TemplatePopulator and atomic CSV]
+    T --> G2[Stop: inspect layouts and assignment design]
+    P --> U[population: optional sampling, TemplatePopulator and atomic CSVs]
     U --> G3[Stop: inspect completed resumes and candidate metadata]
     P --> E[experiments: native experiment command]
     E --> R[R preparation: input_format auditkit]

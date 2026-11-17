@@ -15,10 +15,38 @@ def test_preserves_short_headings_and_merges_blocks():
     source = page()
     parsed = parse_response(json.dumps(response_for([asdict(block) for block in source.blocks])), source)
     assert parsed[0]["raw_text"] == "CLERK\nSend resume to Box 17."
-    assert [span["block_id"] for span in parsed[0]["source_spans"]] == [block.block_id for block in source.blocks]
+    assert parsed[0]["source_spans"] == []  # Page provenance, not verified per-ad spans.
 
 
-def test_splits_block_and_keeps_exclusions_and_exact_offsets():
+@pytest.mark.parametrize("opening,newline", [("```json", "\n"), ("```JSON", "\r\n"), ("```", "\n")])
+def test_single_json_presentation_fence_preserves_the_exact_result(opening, newline):
+    source = page()
+    response = json.dumps(response_for([asdict(block) for block in source.blocks]))
+    fenced = f"  {opening}{newline}{response}{newline}```\n"
+    assert parse_response(fenced, source) == parse_response(response, source)
+
+
+@pytest.mark.parametrize("wrapper", [
+    "Here is the JSON:\n```json\n{}\n```",
+    "```json\n{}\n```\nExplanation follows.",
+    "```python\n{}\n```",
+    "```json\n{}\n```\n```json\n{{}}\n```",
+    "```json\n{}", "```json {} ```",
+])
+def test_presentation_wrapper_does_not_allow_arbitrary_prose_or_multiple_objects(wrapper):
+    source = page()
+    response = json.dumps(response_for([asdict(block) for block in source.blocks]))
+    with pytest.raises(OCRException):
+        parse_response(wrapper.format(response), source)
+
+
+def test_fenced_json_still_rejects_duplicate_keys():
+    with pytest.raises(OCRException, match="strict JSON") as failure:
+        parse_response('```json\n{"ads":[],"ads":[],"blocks":[]}\n```', page())
+    assert "duplicate keys" in str(failure.value.__cause__)
+
+
+def test_multiple_ads_keep_page_raw_text_without_claiming_exact_offsets():
     source = page(texts=("CLERK. Cook needed. News.",))
     value = {
         "ads": [{"key": "cook", "text": "Cook needed."}, {"key": "clerk", "text": "CLERK."}],
@@ -29,18 +57,20 @@ def test_splits_block_and_keeps_exclusions_and_exact_offsets():
         ]}],
     }
     parsed = parse_response(json.dumps(value), source)
-    assert [ad["Text"] for ad in parsed] == ["CLERK.", "Cook needed."]
-    assert parsed[1]["source_spans"][0] == {"block_id": source.blocks[0].block_id, "start": 7, "end": 20}
+    assert {ad["Text"] for ad in parsed} == {"CLERK.", "Cook needed."}
+    assert all(ad["raw_text"] == source.blocks[0].text for ad in parsed)
+    assert all(ad["source_spans"] == [] for ad in parsed)
     value["ads"].reverse()
     assert parse_response(json.dumps(value), source) == parsed
 
 
-def test_zero_ads_requires_complete_excluded_text():
+def test_zero_ads_does_not_require_a_complete_source_partition():
     source = page(texts=("Weather forecast",))
     value = {"ads": [], "blocks": [{"block_id": source.blocks[0].block_id, "segments": [
         {"text": source.blocks[0].text, "ad_key": None, "reason": "weather report"},
     ]}]}
     assert parse_response(json.dumps(value), source) == []
+    assert parse_response('{"ads":[]}', source) == []
 
 
 def test_equivalent_adjacent_segmentation_preserves_ad_identity_and_raw_text():
@@ -56,12 +86,13 @@ def test_equivalent_adjacent_segmentation_preserves_ad_identity_and_raw_text():
 
 @pytest.mark.parametrize("cleaned", ["CLERK Send resume to Box 18.", "COOK Send resume to Box 17.",
                                      "CLERK Send resume to Box 17. No experience needed."])
-def test_cleanup_cannot_invent_content_or_change_contacts(cleaned):
+def test_text_changes_are_accepted_for_human_review_not_compared_character_by_character(cleaned):
     source = page()
     value = response_for([asdict(block) for block in source.blocks])
     value["ads"][0]["text"] = cleaned
-    with pytest.raises(OCRException, match="letters/digits"):
-        parse_response(json.dumps(value), source)
+    parsed = parse_response(json.dumps(value), source)
+    assert parsed[0]["Text"] == cleaned
+    assert parsed[0]["raw_text"] == "\n".join(block.text for block in source.blocks)
 
 
 def test_cleanup_can_join_broken_words_and_fix_punctuation():
@@ -81,16 +112,54 @@ def test_cleanup_can_join_broken_words_and_fix_punctuation():
     lambda value: value["blocks"][0]["segments"][0].update(ad_key=None, reason=""),
     lambda value: value["blocks"][0]["segments"].clear(),
     lambda value: value["ads"].append({"key": "orphan", "text": "invented ad"}),
-    lambda value: value["ads"].append(copy.deepcopy(value["ads"][0])),
-    lambda value: value["ads"][0].update(text=" "),
-    lambda value: value.update(extra=True),
+    lambda value: value.pop("blocks"),
 ])
-def test_rejects_lost_duplicated_invented_or_untraceable_source(mutation):
+@pytest.mark.parametrize("fenced", [False, True])
+def test_source_partition_and_per_ad_mapping_are_not_required(mutation, fenced):
     source = page()
     value = response_for([asdict(block) for block in source.blocks])
     mutation(value)
+    response = json.dumps(value)
+    if fenced:
+        response = f"```json\n{response}\n```"
+    parsed = parse_response(response, source)
+    assert len(parsed) == len(value["ads"])
+    assert all(ad["raw_text"] == "\n".join(block.text for block in source.blocks) for ad in parsed)
+    assert all(ad["source_spans"] == [] for ad in parsed)
+
+
+@pytest.mark.parametrize("mutation", [
+    lambda value: value["ads"].append(copy.deepcopy(value["ads"][0])),
+    lambda value: value["ads"][0].update(text=" "),
+    lambda value: value["ads"][0].update(text=123),
+    lambda value: value.update(extra=True),
+    lambda value: value.update(ads="not a list"),
+    lambda value: value["ads"][0].update(extra=True),
+])
+def test_basic_response_shape_and_text_validation_remain(mutation):
+    value = response_for([asdict(block) for block in page().blocks])
+    mutation(value)
     with pytest.raises(OCRException):
-        parse_response(json.dumps(value), source)
+        parse_response(json.dumps(value), page())
+
+
+def test_simple_ad_response_has_stable_content_ids_independent_of_order_or_legacy_keys():
+    source = page()
+    value = {"ads": [{"text": "First corrected ad."}, {"text": "Second corrected ad."}]}
+    expected = parse_response(json.dumps(value), source)
+    value["ads"].reverse()
+    for index, ad in enumerate(value["ads"]):
+        ad["key"] = f"temporary-{index}"
+    assert parse_response(json.dumps(value), source) == expected
+    other_page = replace(source, page_id="another-page")
+    assert {ad["ad_id"] for ad in parse_response(json.dumps(value), other_page)}.isdisjoint(
+        ad["ad_id"] for ad in expected
+    )
+
+
+def test_identical_ads_cannot_be_given_position_based_identities():
+    with pytest.raises(OCRException, match="duplicate ad content"):
+        parse_response('{"ads":[{"text":"Same ad"},{"text":"Same ad"}]}', page())
 
 
 @pytest.mark.parametrize("value", [None, "```json\n{}\n```", "[]", '{"ads":[],"ads":[],"blocks":[]}', '{"ads":NaN,"blocks":[]}'])

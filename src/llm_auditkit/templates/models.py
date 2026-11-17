@@ -32,6 +32,7 @@ class TemplateGenerationConfig:
     model_config_id: str
     system_prompt_template: str | None = None
     save_after_each_result: bool = True
+    response_mode: Literal["text", "parts"] = "text"
 
 
 @dataclass(slots=True)

@@ -1,8 +1,0 @@
-Create {templates_per_scenario} distinct, equally qualified resume templates for
-this job posting in {city} in {year}:
-
-{job_posting}
-
-Every template must preserve these tokens literally: {required_placeholders}.
-Use the qualification placeholder for researcher-supplied qualification details;
-do not invent different substantive qualifications between the templates.

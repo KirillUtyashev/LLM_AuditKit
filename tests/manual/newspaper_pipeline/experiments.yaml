@@ -1,15 +1,15 @@
-experiment_id: newspaper-hiring-v1
+experiment_id: chicago-1950-synthetic-candidates-smoke-v1
 dataset:
-  path: ../../outputs/pipeline/populated.csv
+  path: local/chicago-1950-smoke/populated.csv
   job_posting_column: Text
   resume_columns: [resume_1, resume_2]
   context_columns:
     city: city
     year: year
 prompt:
-  template_path: ../../examples/experiment_execution/prompts/newspaper_question.txt
+  template_path: prompts/newspaper_question.txt
 output:
-  path: ../../outputs/pipeline/experiments.csv
+  path: local/chicago-1950-smoke/experiments.csv
 execution:
   mode: async
   batch_size: 5
@@ -17,8 +17,8 @@ execution:
 personas:
   - id: newspaper-reviewer
     name: Hiring manager
-    trait_template_path: ../../examples/experiment_execution/prompts/hiring_manager_trait.txt
-    instruction_path: ../../examples/experiment_execution/prompts/hiring_manager_instruction.txt
+    trait_template_path: ../../../examples/experiment_execution/prompts/hiring_manager_trait.txt
+    instruction_path: ../../../examples/experiment_execution/prompts/hiring_manager_instruction.txt
 inference:
   models:
     - config_id: gpt-4o-august-review

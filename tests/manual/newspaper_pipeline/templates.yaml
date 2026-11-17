@@ -1,17 +1,18 @@
 dataset:
-  path: ../../outputs/ocr/ads.csv
+  path: local/chicago-1950-smoke/ads-v3.csv
   job_posting_column: Text
   context_columns:
     city: city
     year: year
 prompt:
-  template_path: ../../examples/template_generation/prompts/newspaper_templates.txt
-  system_template_path: ../../examples/template_generation/prompts/resume_system.txt
+  template_path: prompts/newspaper_templates.txt
+  system_template_path: ../../../examples/template_generation/prompts/resume_system.txt
 output:
-  path: ../../outputs/pipeline/templates.csv
+  path: local/chicago-1950-smoke/templates-gpt55-medium-parts.csv
 generation:
   templates_per_scenario: 2
   required_placeholders: [name, qualification]
+  response_mode: parts
   model_config_id: resume-layouts
 execution:
   mode: async
@@ -21,7 +22,7 @@ inference:
   models:
     - config_id: resume-layouts
       provider: openai
-      model: gpt-4o-2024-08-06
+      model: gpt-5.5
       parameters:
-        temperature: 0
-        max_tokens: 4000
+        reasoning_effort: medium
+        max_tokens: 16000

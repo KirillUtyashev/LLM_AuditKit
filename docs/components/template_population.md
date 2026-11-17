@@ -74,6 +74,13 @@ Researchers have already chosen every assignment and combination. Population
 makes no model calls, samples no values, computes no dates or experience,
 constructs no quality conditions, and enumerates no combinations.
 
+An optional, editable [sampling example](../guides/template_population.md#automatically-sample-an-assignment-table)
+can prepare those exact replacement values from researcher-configured pools,
+save the assignments, and populate the same in-memory template table. The
+repository runner also supports these explicit pools via `population.sampling`.
+Sampling remains outside the population API; manual per-scenario CSV preparation
+is not required.
+
 Researchers choose values and assignments while preparing the replacement
 table. AuditKit validates those assignments and fills the templates in a
 single pass. Researchers can also populate their templates independently and

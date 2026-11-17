@@ -1,0 +1,12 @@
+Create {templates_per_scenario} distinct, equally qualified resume templates for
+this job posting in {city} in {year}:
+
+{job_posting}
+
+Every template must include field references for these configured placeholders:
+{required_placeholders}. Use only the configured field names and never supply
+their values. Put headings, resume descriptions and formatting in text parts;
+do not put double-brace tokens inside text parts. The application renders field
+references into literal placeholders and fills them later from researcher data.
+Use the qualification field for researcher-supplied qualification details; do
+not invent different substantive qualifications between the templates.
