@@ -20,6 +20,10 @@ each decision associated with its applicant.
 
 ## Quickstart
 
+The [static pipeline showcase](website/README.md) previews newspaper scans,
+job rows, editable prompts, synthetic resumes, saved model evaluations and downloadable candidate results without browser API calls. It is
+separate from the runnable pipeline.
+
 Optional [newspaper OCR preprocessing](docs/guides/newspaper_ocr.md) extracts
 job ads from local scans/PDFs before dataset loading, preserving raw OCR and
 source provenance. It has separate optional dependencies and makes paid Google

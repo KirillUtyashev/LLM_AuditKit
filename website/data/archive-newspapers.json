@@ -1,0 +1,139 @@
+{
+  "schemaVersion": 1,
+  "mode": "curated-archive-preview",
+  "transcriptionPolicy": "Raw text is an excerpt of the source archive OCR, including its errors. Readable text is an editorial transcription checked against the linked scan; line-end hyphens are joined and advertisement reference codes may be omitted. All records still require researcher review. This is not AuditKit OCR output or a complete extraction of the page.",
+  "newspapers": [
+    {
+      "id": "omaha-bee-1900",
+      "title": "Omaha Daily Bee",
+      "city": "Omaha",
+      "region": "Nebraska",
+      "date": "1900-01-01",
+      "pageLabel": "Page 7",
+      "archive": "Nebraska Newspapers · University of Nebraska–Lincoln Libraries",
+      "sourceUrl": "https://nebnewspapers.unl.edu/lccn/sn99021999/1900-01-01/ed-1/seq-7/",
+      "ocrUrl": "https://nebnewspapers.unl.edu/lccn/sn99021999/1900-01-01/ed-1/seq-7/ocr.txt",
+      "altoUrl": "https://nebnewspapers.unl.edu/lccn/sn99021999/1900-01-01/ed-1/seq-7/ocr.xml",
+      "metadataUrl": "https://nebnewspapers.unl.edu/lccn/sn99021999/1900-01-01/ed-1/seq-7.json",
+      "imageSrc": "./assets/omaha-1900.jpg",
+      "imageSourceUrl": "https://nebnewspapers.unl.edu/images/iiif/batch_nbu_emerson_ver01%2Fdata%2Fsn99021999%2F0020653946A%2F1900010101%2F0164.jp2/full/1600,/0/default.jpg",
+      "imageWidth": 5664,
+      "imageHeight": 7328,
+      "description": "Turn-of-the-century classifieds, with work advertised on commission or a delivery route.",
+      "records": [
+        {
+          "id": "sn99021999-19000101-p7-250-2380",
+          "code": "BEE · 01",
+          "title": "Paint salesmen",
+          "text": "WANTED—Paint salesmen to work on commission basis; only those with experience and references need apply. 1212 Farnam St.",
+          "rawText": "WANTED Paint palosmon to work on\ncommission basis ; only those with oxporl-\nnotnnd references need apply. 1212 1-nr-\nn-ini - HI. n-C02",
+          "reviewNote": "The scan reads ‘salesmen’, ‘experience’ and ‘Farnam St.’ where the archive OCR is damaged. The printed reference code is omitted from the readable excerpt. The highlight is an approximate source region.",
+          "bbox": [250, 2380, 720, 125],
+          "cropSrc": "./assets/omaha-salesmen.jpg",
+          "cropSourceUrl": "https://nebnewspapers.unl.edu/images/iiif/batch_nbu_emerson_ver01%2Fdata%2Fsn99021999%2F0020653946A%2F1900010101%2F0164.jp2/235,2360,750,450/full/0/default.jpg",
+          "reviewRequired": true
+        },
+        {
+          "id": "sn99021999-19000101-p7-240-1870",
+          "code": "BEE · 02",
+          "title": "Newspaper delivery",
+          "text": "WANTED, boy with horse to deliver The Bee. Call at circulation department 3 p. m.",
+          "rawText": "WANTKnT \"Joy with\" horse to dollvor The\nHoe Call nt circulation department 3",
+          "reviewNote": "The scan clarifies ‘boy’, ‘deliver’ and ‘The Bee’; it also supplies ‘p. m.’, missing from this OCR excerpt. The printed reference code is omitted. Historical wording is retained.",
+          "bbox": [240, 1870, 725, 105],
+          "cropSrc": "./assets/omaha-delivery.jpg",
+          "cropSourceUrl": "https://nebnewspapers.unl.edu/images/iiif/batch_nbu_emerson_ver01%2Fdata%2Fsn99021999%2F0020653946A%2F1900010101%2F0164.jp2/235,1870,750,220/full/0/default.jpg",
+          "reviewRequired": true
+        }
+      ]
+    },
+    {
+      "id": "bend-bulletin-1918",
+      "title": "The Bend Bulletin",
+      "city": "Bend",
+      "region": "Oregon",
+      "date": "1918-10-18",
+      "pageLabel": "Page 4",
+      "archive": "Historic Oregon Newspapers · University of Oregon Libraries",
+      "sourceUrl": "https://oregonnews.uoregon.edu/lccn/sn90051770/1918-10-18/ed-1/seq-4/",
+      "ocrUrl": "https://oregonnews.uoregon.edu/lccn/sn90051770/1918-10-18/ed-1/seq-4/ocr.txt",
+      "altoUrl": "https://oregonnews.uoregon.edu/lccn/sn90051770/1918-10-18/ed-1/seq-4/ocr.xml",
+      "metadataUrl": "https://oregonnews.uoregon.edu/lccn/sn90051770/1918-10-18/ed-1/seq-4.json",
+      "imageSrc": "./assets/bend-1918.jpg",
+      "imageSourceUrl": "https://oregonnews.uoregon.edu/images/iiif/batch_oru_20260129disk09a02_ver01%2Fdata%2Fsn90051770%2F15020700013%2F1918101801%2F0783.jp2/full/1600,/0/default.jpg",
+      "imageWidth": 3300,
+      "imageHeight": 5021,
+      "description": "Household and hotel work appear among the small advertisements of a Central Oregon newspaper.",
+      "records": [
+        {
+          "id": "sn90051770-19181018-p4-2220-1280",
+          "code": "BND · 01",
+          "title": "Housework assistant",
+          "text": "WANTED—Experienced girl to assist with housework. Tel. Red 191, Mrs. Mannheimer.",
+          "rawText": "WANTED Experienced girl to as\nsist with housework. Tel. Red\n191. Mrs. Hannhetmer. 80-283tfo",
+          "reviewNote": "The surname is transcribed as ‘Mannheimer’ from the scan. The line-end split in ‘assist’ is joined; the printed reference code is omitted. Compare names and numbers with the original before reuse.",
+          "bbox": [2220, 1280, 500, 100],
+          "cropSrc": "./assets/bend-excerpts.jpg",
+          "cropSourceUrl": "https://oregonnews.uoregon.edu/images/iiif/batch_oru_20260129disk09a02_ver01%2Fdata%2Fsn90051770%2F15020700013%2F1918101801%2F0783.jp2/2200,1260,550,650/full/0/default.jpg",
+          "reviewRequired": true
+        },
+        {
+          "id": "sn90051770-19181018-p4-2215-1745",
+          "code": "BND · 02",
+          "title": "Hotel cook",
+          "text": "WANTED—Woman cook. Riverview Hotel.",
+          "rawText": "WANTED Woman\nview Hotel.\ncook. Hiver-85-264-6p",
+          "reviewNote": "Archive OCR scrambles the reading order and damages ‘Riverview’. The readable text follows the scan; the printed reference code is omitted. The nearby ‘FOR SALE’ material is not part of this job ad.",
+          "bbox": [2215, 1745, 505, 70],
+          "cropSrc": "./assets/bend-excerpts.jpg",
+          "cropSourceUrl": "https://oregonnews.uoregon.edu/images/iiif/batch_oru_20260129disk09a02_ver01%2Fdata%2Fsn90051770%2F15020700013%2F1918101801%2F0783.jp2/2200,1260,550,650/full/0/default.jpg",
+          "reviewRequired": true
+        }
+      ]
+    },
+    {
+      "id": "sunday-oregonian-1920",
+      "title": "The Sunday Oregonian",
+      "city": "Portland",
+      "region": "Oregon",
+      "date": "1920-04-18",
+      "pageLabel": "Printed page 19 · image 43",
+      "archive": "Historic Oregon Newspapers · University of Oregon Libraries",
+      "sourceUrl": "https://oregonnews.uoregon.edu/lccn/sn83045782/1920-04-18/ed-1/seq-43/",
+      "ocrUrl": "https://oregonnews.uoregon.edu/lccn/sn83045782/1920-04-18/ed-1/seq-43/ocr.txt",
+      "altoUrl": "https://oregonnews.uoregon.edu/lccn/sn83045782/1920-04-18/ed-1/seq-43/ocr.xml",
+      "metadataUrl": "https://oregonnews.uoregon.edu/lccn/sn83045782/1920-04-18/ed-1/seq-43.json",
+      "imageSrc": "./assets/portland-1920.jpg",
+      "imageSourceUrl": "https://oregonnews.uoregon.edu/images/iiif/batch_oru_link_ver01%2Fdata%2Fsn83045782%2F00000334192%2F1920041801%2F0097.jp2/full/1600,/0/default.jpg",
+      "imageWidth": 6108,
+      "imageHeight": 6948,
+      "description": "A city classified section puts a bond-house sales role and wholesale janitorial work side by side.",
+      "records": [
+        {
+          "id": "sn83045782-19200418-p19-1605-5030",
+          "code": "ORE · 01",
+          "title": "Bond-house sales",
+          "text": "WANTED—An energetic woman for city sales force by large bond house. Earnings are better than $300 monthly. Address B 193, Oregonian.",
+          "rawText": "WANTED An energetic woman for city\nsales force by large bond house. Earn\nings are better than $300 monthly. Ad\ndress B 103, Oregonian.",
+          "reviewNote": "The scan reads ‘B 193’, not the OCR’s ‘B 103’. Line-end splits in ‘Earnings’ and ‘Address’ are joined. This correction is editorial, not a model confidence estimate.",
+          "bbox": [1605, 5030, 680, 100],
+          "cropSrc": "./assets/portland-excerpts.jpg",
+          "cropSourceUrl": "https://oregonnews.uoregon.edu/images/iiif/batch_oru_link_ver01%2Fdata%2Fsn83045782%2F00000334192%2F1920041801%2F0097.jp2/1590,4980,730,300/full/0/default.jpg",
+          "reviewRequired": true
+        },
+        {
+          "id": "sn83045782-19200418-p19-1605-5135",
+          "code": "ORE · 02",
+          "title": "Wholesale-house janitor",
+          "text": "WANTED—Strong active woman for janitor in wholesale house; $18 week; 8 hours. Telephone Tabor 676 Sunday morning 9 to 11.",
+          "rawText": "WANTED Strong active woman, for Jan\nitor In wholesale house; $18 week; 8\nhours. Telephone Tabor 76 Sunday\nmorning 0 to tl. -",
+          "reviewNote": "The scan clarifies the telephone as ‘Tabor 676’ and the hours as ‘9 to 11’. The archive OCR loses digits and confuses characters. Historical wording and the advertised pay are retained.",
+          "bbox": [1605, 5135, 680, 100],
+          "cropSrc": "./assets/portland-excerpts.jpg",
+          "cropSourceUrl": "https://oregonnews.uoregon.edu/images/iiif/batch_oru_link_ver01%2Fdata%2Fsn83045782%2F00000334192%2F1920041801%2F0097.jp2/1590,4980,730,300/full/0/default.jpg",
+          "reviewRequired": true
+        }
+      ]
+    }
+  ]
+}
