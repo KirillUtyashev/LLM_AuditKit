@@ -138,7 +138,7 @@ test(`preview rendering with reveal support ${revealSupported}, failure ${Boolea
     assert.equal(get("experiment-result").hidden, true);
     assert.equal(get("results-view").hidden, false);
     assert.equal(get("results-connector").hidden, false);
-    assert.equal(get("results-count").textContent, "6 candidate evaluations · 3 resume prompts");
+    assert.ok(!nodes.has("results-count"));
     assert.equal(get("final-output-rows").children.length, 6);
     assert.deepEqual(get("final-output-rows").children[0].children.map(node => node.textContent), ["Strong fit", "Alex Morgan", "Yes", "90.5%", "synthetic-test-model", "…", "…", "…"]);
     assert.ok(get("final-output-rows").children[0].children.slice(5).every(node => node.attributes["aria-label"].includes("full value available in the CSV")));
@@ -421,7 +421,6 @@ test(`preview rendering with reveal support ${revealSupported}, failure ${Boolea
     assert.equal(get("experiment-prompt").value, "");
     assert.equal(get("experiment-model").textContent, "");
     assert.equal(get("results-view").hidden, true);
-    assert.equal(get("results-count").textContent, "");
     assert.equal(get("final-output-rows").children.length, 0);
     assert.equal(get("populated-document").children.length, 0);
     globalThis.location.href = "https://example.org/kit/?paper=" + bundle.newspapers[0].id + "#resumes";
@@ -447,7 +446,6 @@ test(`preview rendering with reveal support ${revealSupported}, failure ${Boolea
     assert.equal(get("experiment-explanation").textContent, secondDemo.experimentDemo.examples[0].explanation);
     assert.equal(get("results-view").hidden, false);
     assert.equal(get("final-output-rows").children.length, 2);
-    assert.equal(get("results-count").textContent, "2 candidate evaluations · 1 resume prompt");
     get("variant-prompt").value = "Edited summary";
     get("variant-prompt").fire("input", "Edited summary");
     assert.equal(get("generate-resume").disabled, true);
@@ -519,7 +517,6 @@ test(`preview rendering with reveal support ${revealSupported}, failure ${Boolea
     assert.equal(get("final-output-rows").children.length, 4);
     assert.equal(get("experiment-decisions").children.length, 4);
     assert.equal(get("final-output-rows").children[0].children[0].textContent, "Role-play");
-    assert.equal(get("results-count").textContent, "4 candidate evaluations · Role-play");
     URL.createObjectURL = blob => {downloadBlob = blob; return createUrl(blob);};
     try {get("download-results").fire("click");} finally {URL.createObjectURL = createUrl;}
     const selectedCsv = await downloadBlob.text();
@@ -545,7 +542,6 @@ test(`preview rendering with reveal support ${revealSupported}, failure ${Boolea
     assert.equal(get("final-output-rows").children[0].children[2].textContent, "No");
     assert.equal(get("final-output-rows").children[0].children[3].textContent, "20.0%");
     assert.equal(get("final-output-rows").children[0].children[0].textContent, "Historian");
-    assert.equal(get("results-count").textContent, "4 candidate evaluations · Historian");
     assert.ok(get("final-output-rows").children.every(row => row.children.length === 8 && row.children.slice(5).every(cell => cell.textContent === "…")));
     get("run-experiment").fire("click");
     assert.match(get("experiment-explanation").textContent, /Perspective: historian/);

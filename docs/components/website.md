@@ -138,7 +138,8 @@ The `#resumes` bookmark is accepted only when such a demo exists.
 ## Synthetic template population
 
 Below the editor, `Templates become applications.` shows all two or four typeset
-resumes in a two-column document grid, stacked on mobile. Sheets stretch to equal
+resumes in a two-column document grid, stacked on mobile. A short sentence explains
+setting fields of interest for controlled experiments. Sheets stretch to equal
 height within each row, leaving blank space beneath shorter text. Four templates produce
 four applications, not a paired subset. Each document has a `View full resume`
 button. The grid has no introductory count/instruction or synthetic-example
@@ -272,7 +273,7 @@ Yes/No decision, `Answer probability` and model follow. `Comments`, `Request ID`
 and `Candidate ID` preview additional exported fields with `…` placeholders;
 titles and accessible labels explain that full values are in the CSV. Those
 placeholders do not replace actual exported values or mean missing data. The
-toolbar shows the selected perspective beside the candidate count. The percentage is
+toolbar contains only the CSV button, with no evaluation-count caption. The percentage is
 `100 * exp(logprob)` for the emitted answer-token span, not calibrated confidence
 that the decision is correct or the applicant should be hired. It is not a
 self-reported LLM confidence score. No answers are not inverted into hire

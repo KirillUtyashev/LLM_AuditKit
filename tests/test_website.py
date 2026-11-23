@@ -54,7 +54,8 @@ def test_website_local_references_and_accessible_targets():
     assert "resume-output" not in page.ids
     assert {"population-view", "population-connector", "reset-candidates", "candidate-status", "populated-document", "candidate-field-dialog"} <= set(page.ids)
     assert {"experiment-view", "experiment-connector", "experiment-prompt", "run-experiment", "experiment-result", "experiment-explanation"} <= set(page.ids)
-    assert {"results-view", "results-connector", "results-heading", "results-count", "final-output-rows", "download-results"} <= set(page.ids)
+    assert {"results-view", "results-connector", "results-heading", "final-output-rows", "download-results"} <= set(page.ids)
+    assert "results-count" not in page.ids
     assert "Prompt highlights" not in (WEBSITE / "index.html").read_text()
     assert "résumé" not in (WEBSITE / "index.html").read_text()
 
@@ -165,6 +166,7 @@ def test_population_section_continues_the_scroll_flow_with_synthetic_candidates(
     assert html.index('id="resume-view"') < html.index('id="population-connector"') < html.index('id="population-view"')
     section = html.split('id="population-view"', 1)[1].split("</section>", 1)[0]
     assert "Templates become applications." in section
+    assert "Set fields of interest—such as names, addresses, and education—to compare model decisions in controlled experiments." in section
     assert "Click highlighted details to change them." not in section
     assert "Same qualifications" not in html
     assert "Synthetic examples." not in section
@@ -236,6 +238,8 @@ def test_final_table_hands_off_to_analysis_without_claiming_regression_results()
     assert "Answer probability measures" not in section
     assert "CSV retains raw log probabilities" not in section
     assert 'class="logprob-note"' not in section
+    assert "results-count" not in section
+    assert "justify-content:flex-end" in re.search(r"\.results-toolbar\s*\{([^}]+)\}", (WEBSITE / "styles.css").read_text()).group(1)
     assert "thousands of applications" in section and "own analysis" in section
     assert "Download CSV" in section
     assert '<a href="https://github.com/KirillUtyashev/LLM_AuditKit">Run your own audit</a>' in section

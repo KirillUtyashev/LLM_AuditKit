@@ -1,4 +1,4 @@
-import {csvForRecords, jobPreview, cropStyle, stateFromUrl, loadBundle, resumeDemo, savedResumeVariant, resumePromptText, inlineResumeVariant, resumeBlocks, resumeTextParts, populationExamples, resumeTemplates, experimentExample, experimentPerspectives, experimentPromptText, formatAnswerProbability, finalOutputRows, resultCsv, candidateFieldPresets, replaceCandidateFields} from "./lib.mjs?v=clean-results-33";
+import {csvForRecords, jobPreview, cropStyle, stateFromUrl, loadBundle, resumeDemo, savedResumeVariant, resumePromptText, inlineResumeVariant, resumeBlocks, resumeTextParts, populationExamples, resumeTemplates, experimentExample, experimentPerspectives, experimentPromptText, formatAnswerProbability, finalOutputRows, resultCsv, candidateFieldPresets, replaceCandidateFields} from "./lib.mjs?v=minimal-results-34";
 
 const $ = id => document.getElementById(id);
 const state = {papers: [], paperId: null, step: "archive", query: "", variantId: null, perspectiveId: null};
@@ -286,9 +286,6 @@ function renderFinalOutput(enabled) {
   $("results-view").hidden = !rows.length;
   $("results-connector").hidden = !rows.length;
   $("download-results").disabled = !rows.length;
-  const count = new Set(rows.map(row => row.variant_id)).size;
-  const context = rows[0]?.prompt_style || `${count} resume prompt${count === 1 ? "" : "s"}`;
-  $("results-count").textContent = rows.length ? `${rows.length} candidate evaluations · ${context}` : "";
   $("final-output-rows").replaceChildren(...rows.map(row => {
     const tr = document.createElement("tr");
     const values = [row.prompt_style || row.preset, row.candidate_name, row.answer, formatAnswerProbability(row.logprob), row.model === "gpt-4o-2024-08-06" ? "GPT-4o" : row.model];
@@ -484,7 +481,7 @@ function setupScrollFlow() {
 
 async function start() {
   const bundle = await loadBundle(fetch, location.hostname,
-    new URL("./data/newspapers.json?v=clean-results-33", import.meta.url), new URL("./local/newspapers.json", import.meta.url));
+    new URL("./data/newspapers.json?v=minimal-results-34", import.meta.url), new URL("./local/newspapers.json", import.meta.url));
   state.papers = bundle.newspapers;
   Object.assign(state, stateFromUrl(location.href, state.papers));
   $("paper-select").replaceChildren(...state.papers.map(item => {

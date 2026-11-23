@@ -6,8 +6,8 @@
 <meta name="description" content="Follow a newspaper scan as it becomes a dataset of job advertisements.">
 <title>LLM AuditKit · Pipeline</title>
 <link rel="icon" href="./assets/mark.svg" type="image/svg+xml">
-<link rel="stylesheet" href="./styles.css?v=clean-results-33">
-<script type="module" src="./app.mjs?v=clean-results-33"></script>
+<link rel="stylesheet" href="./styles.css?v=minimal-results-34">
+<script type="module" src="./app.mjs?v=minimal-results-34"></script>
 </head>
 <body>
 <a class="skip-link" href="#main">Skip to pipeline</a>
@@ -56,6 +56,7 @@
 <div id="population-connector" class="flow-connector" aria-hidden="true" hidden><span class="flow-line"></span></div>
 <section id="population-view" class="flow-stage reveal" aria-labelledby="population-heading" hidden>
   <div class="stage-heading"><h2 id="population-heading" tabindex="-1">Templates become applications.</h2><button id="reset-candidates" type="button" disabled>Reset details</button></div>
+  <p class="quiet">Set fields of interest—such as names, addresses, and education—to compare model decisions in controlled experiments.</p>
   <p id="population-caption" class="population-caption" hidden></p>
   <p id="candidate-status" class="sr-only" role="status"></p>
   <div id="populated-document" class="resume-grid" role="group" aria-label="Ready applications"></div>
@@ -79,7 +80,7 @@
 <div id="results-connector" class="flow-connector" aria-hidden="true" hidden><span class="flow-line"></span></div>
 <section id="results-view" class="flow-stage reveal" aria-labelledby="results-heading" hidden>
   <div class="stage-heading"><h2 id="results-heading">From decisions to data.</h2></div>
-  <div class="results-toolbar"><p id="results-count" class="quiet"></p><button id="download-results" type="button" aria-label="Download candidate results CSV">Download CSV</button></div>
+  <div class="results-toolbar"><button id="download-results" type="button" aria-label="Download candidate results CSV">Download CSV</button></div>
   <div class="results-table-scroll" role="region" aria-label="Candidate results table" tabindex="0">
     <table class="results-table"><caption class="sr-only">Candidate-level outputs for the selected newspaper.</caption><thead><tr><th scope="col">Prompt</th><th scope="col">Candidate</th><th scope="col">Decision</th><th scope="col">Answer probability</th><th scope="col">Model</th><th scope="col">Comments</th><th scope="col">Request ID</th><th scope="col">Candidate ID</th></tr></thead><tbody id="final-output-rows"></tbody></table>
   </div>
