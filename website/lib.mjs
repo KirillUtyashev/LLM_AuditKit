@@ -158,6 +158,12 @@ export function resumeTemplates(variant) {
 export function populationExamples(variant) {
   const templates = resumeTemplates(variant);
   const assignments = variant?.assignments;
+  const pools = variant?.populationPools;
+  if (pools !== undefined && (!pools || ![pools.addresses, pools.schools].every(values => Array.isArray(values)
+      && values.length && values.every(value => typeof value === "string" && value.trim()))
+      || !Array.isArray(pools.dates) || !pools.dates.length || pools.dates.some(preset => !preset
+        || typeof preset.label !== "string" || !preset.label.trim() || !preset.values || typeof preset.values !== "object"
+        || Array.isArray(preset.values) || Object.values(preset.values).some(value => typeof value !== "string" || !value.trim())))) return null;
   const count = templates.length;
   if (![2, 4].includes(count) || !Array.isArray(assignments)
       || assignments.length !== count || assignments.some(assignment => !assignment)
@@ -169,7 +175,16 @@ export function populationExamples(variant) {
     const values = assignment?.values ?? {};
     if (variant.placeholderFields && (Object.keys(values).length !== variant.placeholderFields.length - 2
         || Object.keys(values).some(field => !variant.placeholderFields.includes(field)))) return null;
-    const populated = {...candidate, values};
+    const address = assignment?.address ?? candidate.address;
+    if (typeof address !== "string" || !address.trim()
+        || (pools && !pools.addresses.includes(address))) return null;
+    if (pools) {
+      const school = values.university ?? values.high_school;
+      const dates = Object.fromEntries(Object.entries(values).filter(([key]) => key === "work_end" || /_(month|year)$/.test(key)));
+      if (!pools.schools.includes(school) || !pools.dates.some(preset => Object.keys(preset.values).length === Object.keys(dates).length
+        && Object.entries(dates).every(([key, value]) => preset.values[key] === value))) return null;
+    }
+    const populated = {...candidate, address, values};
     const resume = populateResumeExample(template?.text, populated);
     return resume === null ? null : {...populated, templateId: template.id, template: template.text, resume};
   });
@@ -197,8 +212,17 @@ export function populateResumeExample(template, candidate) {
 }
 
 // Small explicit presentation presets, never researcher sampling assignments.
-export function candidateFieldPresets(candidate, population, field) {
+export function candidateFieldPresets(candidate, population, field, pools = null) {
   if (!candidate || !population?.some(item => item.id === candidate.id)) return [];
+  if (pools && field === "address") return (pools.addresses ?? []).map(value => ({label: value, changes: {address: value}}));
+  if (pools && ["university", "high_school"].includes(field))
+    return (pools.schools ?? []).map(value => ({label: value, changes: {values: {[field]: value}}}));
+  if (pools && (field === "work_end" || /_(month|year)$/.test(field))) {
+    const fields = Object.keys(candidate.values).filter(key => key === "work_end" || /_(month|year)$/.test(key));
+    return (pools.dates ?? []).filter(preset => preset && typeof preset.label === "string" && preset.values
+      && Object.keys(preset.values).length === fields.length && fields.every(key => typeof preset.values[key] === "string" && preset.values[key].trim()))
+      .map(preset => ({label: preset.label, changes: {values: {...preset.values}}}));
+  }
   if (field === "name" || field === "address") return DEMO_CANDIDATES.map(profile => ({
     label: profile[field], changes: {[field]: profile[field]},
   }));

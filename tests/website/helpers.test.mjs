@@ -2,10 +2,32 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import {readFile} from "node:fs/promises";
 import {CSV_COLUMNS, chooseRecord, csvForRecords, filterRecords, formatDate, normalizedBox, stateFromUrl, cropStyle, loadBundle, jobPreview, resumeDemo, savedResumeVariant, resumePromptText, inlineResumeVariant, resumeBlocks, resumeTextParts, DEMO_CANDIDATES, populateResumeExample, populationExamples, resumeTemplates, experimentExample, finalOutputRows, resultCsv, RESULT_COLUMNS, candidateFieldPresets, replaceCandidateFields} from "../../website/lib.mjs";
-import {syntheticExperiment, pairedVariant, inlineVariants, withControlledFields} from "./experiment-fixture.mjs";
+import {syntheticExperiment, pairedVariant, inlineVariants, withControlledFields, withPopulationPools} from "./experiment-fixture.mjs";
 
 const bundle = JSON.parse(await readFile(new URL("../../website/data/archive-newspapers.json", import.meta.url), "utf8"));
 const papers = bundle.newspapers;
+
+test("declared replacement pools bind default addresses and offer only recorded date presets", () => {
+  const variant = withPopulationPools(withControlledFields(inlineVariants()[0]));
+  const population = populationExamples(variant);
+  assert.equal(population[0].address, "10 Test Road");
+  assert.ok(population[0].resume.includes("10 Test Road"));
+  const pools = variant.populationPools;
+  assert.deepEqual(candidateFieldPresets(population[0], population, "address", pools).map(p => p.label), pools.addresses);
+  const dates = candidateFieldPresets(population[0], population, "work_start_year", pools);
+  assert.deepEqual(dates.map(p => p.changes.values), pools.dates.map(p => p.values));
+  assert.deepEqual(dates.map(p => p.label), ["Recorded dates A", "Recorded dates B"]);
+  for (const mutate of [
+    v => {v.assignments[0].address = "Outside pool";},
+    v => {v.assignments[0].values.university = "Outside school pool";},
+    v => {v.assignments[0].values.work_start_year = "1800";},
+    v => {v.populationPools.addresses = "not a list";},
+    v => {v.populationPools.dates = [];},
+    v => {v.populationPools = null;},
+  ]) {const changed = structuredClone(variant); mutate(changed); assert.equal(populationExamples(changed), null);}
+  const present = {...population[0], values: {work_end: "Present"}};
+  assert.equal(candidateFieldPresets(present, [present], "work_end", {dates: [{label: "As recorded", values: {work_end: "Present"}}]})[0].changes.values.work_end, "Present");
+});
 
 test("replacement presets preserve prose and stable IDs, and shift date ranges together", () => {
   const variant = withControlledFields(inlineVariants().find(v => v.settings.resumes === 4));

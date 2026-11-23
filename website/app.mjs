@@ -1,4 +1,4 @@
-import {csvForRecords, jobPreview, cropStyle, stateFromUrl, loadBundle, resumeDemo, savedResumeVariant, resumePromptText, inlineResumeVariant, resumeBlocks, resumeTextParts, populationExamples, resumeTemplates, experimentExample, finalOutputRows, resultCsv, candidateFieldPresets, replaceCandidateFields} from "./lib.mjs?v=ready-resumes-25";
+import {csvForRecords, jobPreview, cropStyle, stateFromUrl, loadBundle, resumeDemo, savedResumeVariant, resumePromptText, inlineResumeVariant, resumeBlocks, resumeTextParts, populationExamples, resumeTemplates, experimentExample, finalOutputRows, resultCsv, candidateFieldPresets, replaceCandidateFields} from "./lib.mjs?v=paper-values-27";
 
 const $ = id => document.getElementById(id);
 const state = {papers: [], paperId: null, step: "archive", query: "", variantId: null};
@@ -202,10 +202,10 @@ function openCandidateField(saved, candidateId, field, trigger) {
   const baseline = populationExamples(saved);
   const original = baseline.find(candidate => candidate.id === candidateId);
   const candidate = currentPopulation(saved).find(candidate => candidate.id === candidateId);
-  const presets = candidateFieldPresets(original, baseline, field);
+  const presets = candidateFieldPresets(original, baseline, field, saved.populationPools);
   if (!presets.length) return;
   activeFieldTrigger = trigger;
-  $("candidate-field-title").textContent = /_(month|year)$/.test(field) ? "Change dates" : `Change ${field === "high_school" ? "school" : field}`;
+  $("candidate-field-title").textContent = field === "work_end" || /_(month|year)$/.test(field) ? "Change dates" : `Change ${field === "high_school" ? "school" : field}`;
   $("candidate-field-options").replaceChildren(...presets.map(preset => {
     const button = document.createElement("button"); button.type = "button"; button.textContent = preset.label;
     button.addEventListener("click", () => {
@@ -475,7 +475,7 @@ function setupScrollFlow() {
 
 async function start() {
   const bundle = await loadBundle(fetch, location.hostname,
-    new URL("./data/newspapers.json?v=ready-resumes-25", import.meta.url), new URL("./local/newspapers.json", import.meta.url));
+    new URL("./data/newspapers.json?v=paper-values-27", import.meta.url), new URL("./local/newspapers.json", import.meta.url));
   state.papers = bundle.newspapers;
   Object.assign(state, stateFromUrl(location.href, state.papers));
   $("paper-select").replaceChildren(...state.papers.map(item => {

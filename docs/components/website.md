@@ -69,7 +69,8 @@ CSV exports. They are not shown in an on-page accordion.
 A third scroll section appears only when the selected paper includes a valid
 `resumeDemo` bound to an existing job ID. Each newspaper uses a year-specific
 job-agency prompt with eight supported combinations of template count (2/4),
-job-related skill count (2/4) and experience (entry-level/experienced).
+job-related skill count (2/4) and experience wording (entry-level/experienced).
+Writing guidance does not select or alter the independently populated paper dates.
 The source job image appears on the left, preserving its crop aspect
 ratio; clicking enlarges it. Jobs without a source region show extracted text
 instead. On the right, `Prompt summary` embeds three highlighted native selects
@@ -137,7 +138,8 @@ The `#resumes` bookmark is accepted only when such a demo exists.
 ## Synthetic template population
 
 Below the editor, `Templates become applications.` shows all two or four typeset
-resumes in a two-column document grid, stacked on mobile. Four templates produce
+resumes in a two-column document grid, stacked on mobile. Sheets stretch to equal
+height within each row, leaving blank space beneath shorter text. Four templates produce
 four applications, not a paired subset. Each document has a `View full resume`
 button. The examples are explicitly labeled synthetic.
 The four available fixed profiles have stable synthetic IDs and deliberately illustrative
@@ -154,21 +156,25 @@ can still be previewed but cannot drive this two/four-applicant example.
 Only declared placeholder tokens are replaced within each assigned template;
 that template's prose stays unchanged. Each variant declares `placeholderFields`;
 every template must contain exactly that field set. Explicit assignment `values`
-supply school, education years and employment start/end months/years. Chicago
+supply school, education years and employment start/end values. Chicago
 uses `high_school`, Boston/Birmingham `university`; Birmingham also controls
-in-school employment dates. Names and addresses remain fixed profile values,
-not overridable by assignments. Missing, extra, blank or unresolved values reject
-population. Fixed fictional schools and era-appropriate date ranges are synthetic
-presentation assignments, not inferred research covariates. New evaluations use
+in-school employment dates. Chicago records graduation year, not an invented
+attendance range. Boston/Birmingham preserve a `work_end` value of `Present`.
+Names remain fixed fictional profile values. Assignment `address` and
+`populationPools` supply the original paper's city/year address and school values
+and selected recorded date sets. Pool membership is validated for default inputs.
+Missing, extra, blank, unresolved or out-of-pool values reject population.
+These remain illustrative assignments, not inferred research covariates. New evaluations use
 the fully populated resumes, and matching rejects changed assignment values.
 Candidates therefore have different generated backgrounds, not merely different
 personal details. It is not a same-qualification
 identity comparison, and no such claim is shown.
 Highlighted populated fields are keyboard-accessible buttons that open a native
 dialog with explicit replacement presets. Names/addresses select from the four
-fictional profiles; schools select from the current set. Date presets update a
-coherent group of education/employment fields together, keeping the final work
-end date unchanged. Edits preserve durable candidate/template IDs and generated
+fictional profiles; addresses and schools select from declared paper pools.
+Date presets select entire recorded education/employment sets, not invented year
+offsets. Legacy bundles without pools retain synthetic presentation presets.
+Edits preserve durable candidate/template IDs and generated
 prose. A brief changed-value highlight respects reduced motion; a live status
 announces edits. Close/Escape returns focus, and applying a preset focuses the
 replacement field in the rerendered document. `Reset details` restores the exact
@@ -182,6 +188,19 @@ it back. `#population` opens this section only when the paper's default preset
 supports the fixed examples; scrolling keeps the bookmark current. Hiding an
 active population section falls back to the resume section or archive bookmark.
 No candidate data is persisted.
+
+`populationSource` records `jobs_to_experiment/experiment_setup.py` at reference
+revision `c9391854ea55806ec252625cd2f48fb9edb156cd`, constant pool names and the
+relative source/date/hash of the selected recorded replacement fields. Raw
+private CSV rows, original applicant names, demographics and outcomes are not
+exported. Values are reused for the new demo jobs, not claimed as exact paper
+replications. `generationProjection` explicitly records deterministic date-label
+projection after generation, preserving original template IDs and field lists.
+Only date labels/placeholders change: Chicago keeps graduation year only;
+Boston/Birmingham retain `Present` as a single controlled end field. Other prose
+is unchanged; new content-derived IDs and fresh model evaluations bind those
+projected templates to their actual populated input. Original generated
+artifacts remain local.
 
 ## Saved experiment evaluation
 
@@ -201,7 +220,7 @@ runner validated `Yes`/`No` decisions and their emitted-token log probabilities.
 This is illustrative, not an estimate of bias or a reproduction of the paper's
 assignments. Raw checkpoints,
 YAML, persona/system text and full rendered prompts stay in the ignored local
-controlled-fields-v1 directory for two applicants and ready-resumes-v1 for four;
+paper-values-v1 directory, split into experiment-2 and experiment-4;
 earlier year, style and paired-only four-template runs remain untouched.
 Four-applicant evaluations have new experiment identities and prompt files
 listing all four resumes; they do not reuse paired decisions or logprobs.

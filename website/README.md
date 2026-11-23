@@ -53,8 +53,9 @@ year-specific job-agency prompt with eight saved setting combinations: 2/4
 templates, 2/4 job-related skills, and entry-level/experienced backgrounds.
 Every combination has genuine generated templates and a real evaluation of all two or four
 explicitly assigned candidates. Switching papers changes the complete
-walkthrough, not just its opening image. Candidate names/addresses remain the
-same fixed fictional demonstration profiles; work histories and model outcomes
+walkthrough, not just its opening image. Candidate names remain fixed fictional
+demonstration profiles; addresses, schools and dates use recorded paper values.
+Generated work histories and model outcomes
 belong to each newspaper's selected job.
 
 Chicago uses the *Chicago Tribune*, 31 May 1970, page D8. Birmingham uses
@@ -150,7 +151,9 @@ shared inference using gpt-5.5, medium reasoning, and structured parts mode.
 Name, address, school and education/employment dates remain literal placeholders
 for the later population stage. Boston and Birmingham use `{{university}}`;
 Chicago's 1970 format uses `{{high_school}}`. Date fields include education start/end
-years and work start/end months and years; Birmingham also has in-school work dates.
+years (Chicago has only a recorded graduation year) and work months/years;
+Boston/Birmingham retain `{{work_end}}` for the recorded `Present` value.
+Birmingham also has in-school work dates.
 The source is `jobs_to_experiment/prompts.py` plus the job-agency persona from
 `jobs_to_experiment/resume_creation.py`, pinned reference revision
 `c9391854ea55806ec252625cd2f48fb9edb156cd`.
@@ -199,17 +202,30 @@ reduced-motion preferences. This is not a controlled same-qualification comparis
 
 Each variant declares its exact `placeholderFields`; each candidate/template
 assignment carries explicit `values` for school and dates. Names/addresses come
-from the fixed profiles and cannot be overridden by that map. Fictional North
-Harbor/Riverbend schools are assigned, with education years followed by work
-dates ending before the newspaper date. Entry-level examples receive a one-year
-work range; experienced examples receive six years. Birmingham also receives
-an in-school work range. These illustrative assignments are deterministic,
-not a researcher sampling design. Four-template settings add fictional Elm Grove
-and Cedar Valley schools. Missing, extra or blank fields are rejected.
+from separate explicit profile fields, not that map: names remain synthetic,
+while assignment `address` and `populationPools` reuse the original paper's
+city/year address and institution pools. Boston uses University of Lowell and
+Southeastern Massachusetts University; Birmingham uses University of Montevallo
+and UAB; Chicago uses Gage Park and Jones Commercial high schools.
+Date presets are selected recorded field sets, not newly shifted years.
+Chicago records graduation only; Boston/Birmingham preserve `Present` literally.
+The experience menu controls writing guidance, independently of populated dates.
+Missing, extra, blank or out-of-pool assignment values are rejected.
+
+`populationSource` records the pinned `jobs_to_experiment/experiment_setup.py`
+revision, pool names, relative date-source file, source date and selected-value
+hash. Only requested replacement fields are reused; no original names, private
+resume rows, demographics or old outcomes are exported. These new applications
+are not exact replications of the original source jobs or researcher assignments.
+`generationProjection` documents deterministic date-label changes after generation:
+remove invented Chicago attendance starts and retain `Present` as one end field.
+It preserves original template IDs/field lists; original generation artifacts stay
+local. Other generated prose stays unchanged. These projections receive new
+content-derived template IDs and fresh evaluations.
 
 Edits exist only in page memory and keep candidate/template IDs and generated
-prose unchanged. Date presets move education and employment starts together,
-not disconnected years. Changed inputs hide the saved experiment and CSV until
+prose unchanged. Date presets choose complete recorded education/employment sets,
+not disconnected or invented years. Changed inputs hide the saved experiment and CSV until
 `Reset details` restores the evaluated resumes. Paper or generation-setting
 changes clear edits. The browser does not evaluate changed applications.
 
@@ -235,15 +251,15 @@ These small synthetic examples are not evidence
 of bias or a replication of the paper. No browser inference runs.
 
 YAML, fixed source snapshots, prompt/persona files and CSV checkpoints live under
-ignored `website/local/controlled-fields-v1/<paper>/experiment/` for two-applicant
-settings and `website/local/ready-resumes-v1/<paper>/` for four-applicant settings.
-All four templates are reused from genuine generation, with fresh four-applicant
-prompts, decisions and log probabilities—not old paired outcomes. Earlier one-template
+ignored `website/local/paper-values-v1/<paper>/experiment-2/` and `experiment-4/`.
+All templates derive from genuine generation, with explicit date-label projections
+and fresh prompts, decisions and log probabilities for the changed populated
+resumes—not earlier outcomes. Earlier one-template
 and style-comparison runs remain untouched in their old directories and are not
 reused for the new resumes. To explicitly execute a pending Boston evaluation (paid):
 
 ```bash
-EDSL_DATABASE_PATH=sqlite:///website/local/ready-resumes-v1/boston-cache.db PYTHONPATH=src .venv/bin/python website/local/ready_resumes_demo.py boston-1990
+EDSL_DATABASE_PATH=sqlite:///website/local/paper-values-v1/boston-cache.db PYTHONPATH=src .venv/bin/python website/local/paper_values_demo.py boston-1990
 ```
 
 Exported examples preserve exact input bindings, original rendered prompts,

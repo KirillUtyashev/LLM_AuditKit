@@ -6,8 +6,8 @@
 <meta name="description" content="Follow a newspaper scan as it becomes a dataset of job advertisements.">
 <title>LLM AuditKit · Pipeline</title>
 <link rel="icon" href="./assets/mark.svg" type="image/svg+xml">
-<link rel="stylesheet" href="./styles.css?v=ready-resumes-25">
-<script type="module" src="./app.mjs?v=ready-resumes-25"></script>
+<link rel="stylesheet" href="./styles.css?v=paper-values-27">
+<script type="module" src="./app.mjs?v=paper-values-27"></script>
 </head>
 <body>
 <a class="skip-link" href="#main">Skip to pipeline</a>
@@ -44,7 +44,7 @@
       <label id="prompt-summary-label" class="prompt-summary-label" for="variant-prompt">Prompt summary</label>
       <div id="interactive-prompt" class="interactive-prompt" role="group" aria-labelledby="prompt-summary-label" hidden>
         <p>Create <label class="inline-setting"><span class="sr-only">Number of resume templates</span><select id="resume-count" class="prompt-token"><option value="2">2 resumes</option><option value="4">4 resumes</option></select></label> for this job in <span id="prompt-location"></span>.</p>
-        <p>Include <label class="inline-setting"><span class="sr-only">Number of job-related skills</span><select id="job-skill-count" class="prompt-token"><option value="2">2 job-related skills</option><option value="4">4 job-related skills</option></select></label> and <label class="inline-setting"><span class="sr-only">Experience level</span><select id="experience-level" class="prompt-token"><option value="entry-level">entry-level experience</option><option value="experienced">an experienced background</option></select></label>.</p>
+        <p>Include <label class="inline-setting"><span class="sr-only">Number of job-related skills</span><select id="job-skill-count" class="prompt-token"><option value="2">2 job-related skills</option><option value="4">4 job-related skills</option></select></label> and <label class="inline-setting"><span class="sr-only">Experience wording</span><select id="experience-level" class="prompt-token"><option value="entry-level">entry-level wording</option><option value="experienced">experienced wording</option></select></label>.</p>
         <p>Leave <button id="prompt-name" class="placeholder-token" type="button" aria-expanded="false" aria-controls="population-help">name</button>, <button id="prompt-address" class="placeholder-token" type="button" aria-expanded="false" aria-controls="population-help">address</button>, <button id="prompt-education" class="placeholder-token" type="button" aria-expanded="false" aria-controls="population-help">university</button> and <button id="prompt-dates" class="placeholder-token" type="button" aria-expanded="false" aria-controls="population-help">dates</button> for the next step.</p>
         <div id="population-help" class="population-help" hidden>Filled in during template population. <button id="go-to-population" type="button">See the next step</button></div>
       </div>

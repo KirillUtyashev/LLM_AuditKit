@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import {readFile} from "node:fs/promises";
-import {syntheticExperiment, pairedVariant, inlineVariants, withControlledFields} from "./experiment-fixture.mjs";
+import {syntheticExperiment, pairedVariant, inlineVariants, withControlledFields, withPopulationPools} from "./experiment-fixture.mjs";
 
 class Element {
   constructor() {
@@ -64,7 +64,7 @@ test(`preview rendering with reveal support ${revealSupported}, failure ${Boolea
   bundle.newspapers.push(secondDemo);
   const controlledPaper = structuredClone(secondDemo);
   controlledPaper.id = "synthetic-inline-paper";
-  controlledPaper.resumeDemo = {jobId: controlledPaper.records[0].id, inlineControls: true, variants: inlineVariants().map(withControlledFields)};
+  controlledPaper.resumeDemo = {jobId: controlledPaper.records[0].id, inlineControls: true, variants: inlineVariants().map(withControlledFields).map(withPopulationPools)};
   controlledPaper.experimentDemo = syntheticExperiment(controlledPaper);
   bundle.newspapers.push(controlledPaper);
   const nodes = new Map([...html.matchAll(/id="([^"]+)"/g)].map(match => [match[1], new Element()]));
@@ -474,6 +474,10 @@ test(`preview rendering with reveal support ${revealSupported}, failure ${Boolea
     assert.match(resumeText(get("populated-document")), /Fictional College/);
     assert.match(resumeText(get("populated-document")), /June 1988–July 1990/);
     assert.ok(!resumeText(get("populated-document")).includes("{{"));
+    assert.equal(field(0, "address").textContent, "10 Test Road");
+    field(0, "address").fire("click");
+    assert.deepEqual(get("candidate-field-options").children.map(node => node.textContent), ["10 Test Road", "20 Test Road", "30 Test Road", "40 Test Road"]);
+    get("close-candidate-field").fire("click");
     assert.match(resumeText(resume(1)), /Other Fictional College/);
     get("experiment-candidate-2").fire("click");
     assert.match(resumeText(get("resume-document")), /Other Fictional College/);

@@ -178,6 +178,12 @@ def test_population_section_continues_the_scroll_flow_with_synthetic_candidates(
     assert "margin:24px 0 24px" in re.search(r"#population-view\s*\{([^}]+)\}", css).group(1)
     assert "padding-bottom:24px" in re.search(r"\.typeset-resume\.populated-resume\s*\{([^}]+)\}", css).group(1)
     assert "grid-template-columns:repeat(2,minmax(0,1fr))" in re.search(r"\.resume-grid\s*\{([^}]+)\}", css).group(1)
+    # Shorter documents leave blank space below their text, rather than ending
+    # their sheet border above the neighboring resume. No fixed/clipped height.
+    grid = re.search(r"\.resume-grid\s*\{([^}]+)\}", css).group(1)
+    sheet = re.search(r"\.resume-sheet\s*\{([^}]+)\}", css).group(1)
+    assert "align-items:stretch" in grid
+    assert not re.search(r"(?:^|;)\s*(?:max-)?height\s*:", sheet)
     assert "grid-template-columns:1fr" in css.split("@media(max-width:700px)", 1)[1]
     assert "animation:none!important" in css.split("@media(prefers-reduced-motion:reduce)", 1)[1]
 
@@ -306,8 +312,11 @@ def test_saved_school_and_dates_are_controlled_fields_with_exact_populated_input
     bundle = json.loads((WEBSITE / "data/newspapers.json").read_text())
     for paper in bundle["newspapers"]:
         school = "high_school" if paper["city"] == "Chicago" else "university"
-        fields = {"name", "address", school, "education_start_year", "education_end_year",
-                  "work_start_month", "work_start_year", "work_end_month", "work_end_year"}
+        fields = {"name", "address", school, "education_end_year", "work_start_month", "work_start_year"}
+        if paper["city"] == "Chicago":
+            fields |= {"work_end_month", "work_end_year"}
+        else:
+            fields |= {"education_start_year", "work_end"}
         if paper["city"] == "Birmingham":
             fields |= {"school_work_start_month", "school_work_start_year", "school_work_end_month", "school_work_end_year"}
         for variant in paper["resumeDemo"]["variants"]:
@@ -317,20 +326,44 @@ def test_saved_school_and_dates_are_controlled_fields_with_exact_populated_input
                 assert set(re.findall(r"\{\{([a-z_]+)\}\}", text)) == fields
             example = next(e for e in paper["experimentDemo"]["examples"] if e["variantId"] == variant["id"])
             assert len(example["candidates"]) == len(example["decisions"]) == variant["settings"]["resumes"]
-            assert example["experimentId"].endswith("controlled-fields-v1" if variant["settings"]["resumes"] == 2 else "ready-resumes-four-v1")
+            assert example["experimentId"].endswith(f"paper-values-{variant['settings']['resumes']}-v1")
             assert example["prompt"] == variant.get("experimentPrompt", paper["experimentDemo"]["prompt"])
+            pools = variant["populationPools"]
+            assert len(pools["addresses"]) == 4
+            assert variant["populationSource"]["codePath"] == "jobs_to_experiment/experiment_setup.py"
+            assert variant["populationSource"]["revision"] == "c9391854ea55806ec252625cd2f48fb9edb156cd"
+            assert variant["generationProjection"]["kind"] == "controlled-date-labels"
             for assignment in variant["assignments"]:
                 values = assignment["values"]
                 assert set(values) == fields - {"name", "address"}
                 assert all(isinstance(value, str) and value.strip() for value in values.values())
                 candidate = next(c for c in example["candidates"] if c["id"] == assignment["candidateId"])
                 assert candidate["values"] == values
+                assert candidate["address"] == assignment["address"] in pools["addresses"]
+                assert values[school] in pools["schools"]
+                dates = {k: v for k, v in values.items() if k == "work_end" or k.endswith(("_year", "_month"))}
+                assert dates in [preset["values"] for preset in pools["dates"]]
+                if paper["city"] != "Chicago":
+                    assert values["work_end"] == "Present"
                 populated = re.sub(r"\{\{([a-z_]+)\}\}",
                                    lambda match: {**values, "name": candidate["name"], "address": candidate["address"]}[match[1]],
                                    templates[assignment["templateId"]])
                 assert candidate["resume"] == populated
                 assert "{{" not in populated
                 assert populated in example["renderedUserPrompt"]
+
+
+def test_published_replacements_use_original_paper_institution_pools_not_fictional_schools():
+    bundle = json.loads((WEBSITE / "data/newspapers.json").read_text())
+    schools = {
+        "Boston": {"University of Lowell", "Southeastern Massachusetts University"},
+        "Chicago": {"Gage Park High School", "Jones Commercial High School"},
+        "Birmingham": {"University of Montevallo", "University of Alabama at Birmingham"},
+    }
+    for paper in bundle["newspapers"]:
+        for variant in paper["resumeDemo"]["variants"]:
+            assert set(variant["populationPools"]["schools"]) == schools[paper["city"]]
+            assert all(not any(word in a for word in ("Example", "Sample", "Practice", "Demo")) for a in variant["populationPools"]["addresses"])
 
 
 @pytest.mark.skipif(not shutil.which("node"), reason="Node.js is required for the offline website JS tests")

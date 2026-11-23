@@ -56,7 +56,8 @@ use AuditKit's population output in their own EDSL experiment. See the
 
 The independent [static website](components/website.md) illustrates scans,
 job rows, an optional editable resume prompt beside its source posting, and
-two or four typeset applications with editable synthetic identity, school and date presets,
+two or four typeset applications with synthetic names and editable paper address,
+school and recorded-date pools,
 input-bound saved experiment evaluations, and a downloadable candidate-output table; the browser
 does not invoke pipeline stages or inference.
 

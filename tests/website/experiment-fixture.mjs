@@ -48,3 +48,13 @@ export function withControlledFields(variant) {
     assignments: variant.assignments.map((assignment, index) => ({...assignment,
       values: {...values, university: index ? "Other Fictional College" : values.university}}))};
 }
+
+export function withPopulationPools(variant) {
+  const dates = Object.fromEntries(Object.entries(variant.assignments[0].values).filter(([key]) => /_(month|year)$/.test(key)));
+  const earlier = Object.fromEntries(Object.entries(dates).map(([key, value]) => [key,
+    key.endsWith("year") && key !== "work_end_year" ? String(Number(value) - 1) : value]));
+  const addresses = ["10 Test Road", "20 Test Road", "30 Test Road", "40 Test Road"];
+  return {...variant, assignments: variant.assignments.map((assignment, index) => ({...assignment, address: addresses[index]})),
+    populationPools: {addresses, schools: ["Fictional College", "Other Fictional College"],
+      dates: [{label: "Recorded dates A", values: dates}, {label: "Recorded dates B", values: earlier}]}};
+}
