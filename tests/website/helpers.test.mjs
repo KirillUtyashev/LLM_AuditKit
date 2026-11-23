@@ -2,10 +2,42 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import {readFile} from "node:fs/promises";
 import {CSV_COLUMNS, chooseRecord, csvForRecords, filterRecords, formatDate, normalizedBox, stateFromUrl, cropStyle, loadBundle, jobPreview, resumeDemo, savedResumeVariant, resumePromptText, inlineResumeVariant, resumeBlocks, resumeTextParts, DEMO_CANDIDATES, populateResumeExample, populationExamples, resumeTemplates, experimentExample, finalOutputRows, resultCsv, RESULT_COLUMNS} from "../../website/lib.mjs";
-import {syntheticExperiment, pairedVariant, inlineVariants} from "./experiment-fixture.mjs";
+import {syntheticExperiment, pairedVariant, inlineVariants, withControlledFields} from "./experiment-fixture.mjs";
 
 const bundle = JSON.parse(await readFile(new URL("../../website/data/archive-newspapers.json", import.meta.url), "utf8"));
 const papers = bundle.newspapers;
+
+test("controlled school and date fields stay blank until exact assignment population", () => {
+  const variant = withControlledFields(pairedVariant({id: "fields", label: "Fields", prompt: "Controlled fields",
+    template: "{{name}}\n{{address}}\nFictional duties"}));
+  const before = JSON.stringify(variant);
+  const population = populationExamples(variant);
+  assert.equal(population.length, 2);
+  assert.ok(population[0].resume.includes("Fictional College\n1984–1988"));
+  assert.ok(population[1].resume.includes("Other Fictional College"));
+  assert.ok(population.every(candidate => candidate.resume.includes("June 1988–July 1990") && !candidate.resume.includes("{{")));
+  assert.equal(JSON.stringify(variant), before);
+  for (const change of [
+    v => {delete v.assignments[0].values.work_start_month;},
+    v => {v.assignments[0].values.work_start_month = "";},
+    v => {v.assignments[0].values.work_start_month = 6;},
+    v => {v.assignments[0].values.work_start_month = "{{month}}";},
+    v => {v.assignments[0].values.name = "Override";},
+    v => {v.assignments[0].values.unconfigured = "Unknown";},
+    v => {v.assignments[0].values = [];},
+    v => {v.placeholderFields.push("missing_field");},
+    v => {v.placeholderFields.push("university");},
+  ]) {
+    const changed = structuredClone(variant); change(changed);
+    assert.equal(populationExamples(changed), null);
+  }
+  const paper = {...papers[0], resumeDemo: {jobId: papers[0].records[0].id, variants: [variant]}};
+  paper.experimentDemo = syntheticExperiment(paper);
+  assert.ok(experimentExample(paper, variant));
+  const changed = structuredClone(variant);
+  changed.assignments[0].values.work_start_year = "1987";
+  assert.equal(experimentExample(paper, changed), null);
+});
 
 test("published papers each expose their own full pipeline without local assets", async () => {
   const published = JSON.parse(await readFile(new URL("../../website/data/newspapers.json", import.meta.url), "utf8"));

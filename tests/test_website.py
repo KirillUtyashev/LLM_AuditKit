@@ -297,6 +297,35 @@ def test_saved_skill_counts_and_all_inline_combinations_are_inspected():
                 assert len(re.findall(r"(?m)^- ", section)) == variant["settings"]["jobSkills"]
 
 
+def test_saved_school_and_dates_are_controlled_fields_with_exact_populated_inputs():
+    bundle = json.loads((WEBSITE / "data/newspapers.json").read_text())
+    for paper in bundle["newspapers"]:
+        school = "high_school" if paper["city"] == "Chicago" else "university"
+        fields = {"name", "address", school, "education_start_year", "education_end_year",
+                  "work_start_month", "work_start_year", "work_end_month", "work_end_year"}
+        if paper["city"] == "Birmingham":
+            fields |= {"school_work_start_month", "school_work_start_year", "school_work_end_month", "school_work_end_year"}
+        for variant in paper["resumeDemo"]["variants"]:
+            assert set(variant["placeholderFields"]) == fields
+            templates = {template["id"]: template["text"] for template in variant["templates"]}
+            for text in templates.values():
+                assert set(re.findall(r"\{\{([a-z_]+)\}\}", text)) == fields
+            example = next(e for e in paper["experimentDemo"]["examples"] if e["variantId"] == variant["id"])
+            assert example["experimentId"].endswith("controlled-fields-v1")
+            for assignment in variant["assignments"]:
+                values = assignment["values"]
+                assert set(values) == fields - {"name", "address"}
+                assert all(isinstance(value, str) and value.strip() for value in values.values())
+                candidate = next(c for c in example["candidates"] if c["id"] == assignment["candidateId"])
+                assert candidate["values"] == values
+                populated = re.sub(r"\{\{([a-z_]+)\}\}",
+                                   lambda match: {**values, "name": candidate["name"], "address": candidate["address"]}[match[1]],
+                                   templates[assignment["templateId"]])
+                assert candidate["resume"] == populated
+                assert "{{" not in populated
+                assert populated in example["renderedUserPrompt"]
+
+
 @pytest.mark.skipif(not shutil.which("node"), reason="Node.js is required for the offline website JS tests")
 def test_offline_javascript_website_helpers():
     result = subprocess.run(["node", "--test", *map(str, sorted((ROOT / "tests/website").glob("*.test.mjs")))],

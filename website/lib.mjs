@@ -140,6 +140,16 @@ export function resumeTemplates(variant) {
       || new Set(variant.templates.map(template => template.id)).size !== variant.templates.length
       || new Set(variant.templates.map(template => template.text.trim())).size !== variant.templates.length
       || variant.template !== variant.templates[0].text) return [];
+  if (variant.placeholderFields !== undefined) {
+    const fields = variant.placeholderFields;
+    if (!Array.isArray(fields) || !fields.includes("name") || !fields.includes("address")
+        || fields.some(field => typeof field !== "string" || !/^[a-z_]+$/.test(field))
+        || new Set(fields).size !== fields.length) return [];
+    for (const template of variant.templates) {
+      const used = new Set(resumeTextParts(template.text).filter(part => part.placeholder).map(part => part.text.slice(2, -2)));
+      if (used.size !== fields.length || fields.some(field => !used.has(field))) return [];
+    }
+  }
   return variant.templates;
 }
 
@@ -153,8 +163,12 @@ export function populationExamples(variant) {
   const examples = DEMO_CANDIDATES.map(candidate => {
     const assignment = assignments.find(item => item.candidateId === candidate.id);
     const template = templates.find(item => item.id === assignment?.templateId);
-    const resume = populateResumeExample(template?.text, candidate);
-    return resume === null ? null : {...candidate, templateId: template.id, template: template.text, resume};
+    const values = assignment?.values ?? {};
+    if (variant.placeholderFields && (Object.keys(values).length !== variant.placeholderFields.length - 2
+        || Object.keys(values).some(field => !variant.placeholderFields.includes(field)))) return null;
+    const populated = {...candidate, values};
+    const resume = populateResumeExample(template?.text, populated);
+    return resume === null ? null : {...populated, templateId: template.id, template: template.text, resume};
   });
   return examples.some(example => !example) ? null : examples;
 }
@@ -168,9 +182,14 @@ export function resumeTextParts(text) {
 export function populateResumeExample(template, candidate) {
   if (typeof template !== "string" || !template.includes("{{name}}") || !template.includes("{{address}}")
       || !candidate || ![candidate.name, candidate.address].every(value => typeof value === "string" && value.trim())) return null;
-  const values = {name: candidate.name, address: candidate.address};
+  const extra = candidate.values ?? {};
+  if (typeof extra !== "object" || Array.isArray(extra) || Object.hasOwn(extra, "name") || Object.hasOwn(extra, "address")
+      || Object.values(extra).some(value => typeof value !== "string" || !value.trim() || value.includes("{{"))) return null;
+  const values = {...extra, name: candidate.name, address: candidate.address};
   const parts = resumeTextParts(template);
   if (parts.some(part => part.placeholder && !Object.hasOwn(values, part.text.slice(2, -2)))) return null;
+  const used = new Set(parts.filter(part => part.placeholder).map(part => part.text.slice(2, -2)));
+  if (Object.keys(extra).some(field => !used.has(field))) return null;
   return parts.map(part => part.placeholder ? values[part.text.slice(2, -2)] : part.text).join("");
 }
 

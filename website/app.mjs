@@ -1,4 +1,4 @@
-import {csvForRecords, jobPreview, cropStyle, stateFromUrl, loadBundle, resumeDemo, savedResumeVariant, resumePromptText, inlineResumeVariant, resumeBlocks, resumeTextParts, DEMO_CANDIDATES, populationExamples, resumeTemplates, experimentExample, finalOutputRows, resultCsv} from "./lib.mjs?v=inline-controls-23";
+import {csvForRecords, jobPreview, cropStyle, stateFromUrl, loadBundle, resumeDemo, savedResumeVariant, resumePromptText, inlineResumeVariant, resumeBlocks, resumeTextParts, DEMO_CANDIDATES, populationExamples, resumeTemplates, experimentExample, finalOutputRows, resultCsv} from "./lib.mjs?v=controlled-fields-24";
 
 const $ = id => document.getElementById(id);
 const state = {papers: [], paperId: null, step: "archive", query: "", variantId: null, candidateId: DEMO_CANDIDATES[0].id};
@@ -92,6 +92,7 @@ function renderVariant(demo) {
     $("job-skill-count").value = String(variant.settings.jobSkills);
     $("experience-level").value = variant.settings.experience;
     $("prompt-location").textContent = `${paper().city}, ${paper().date.slice(0, 4)}`;
+    $("prompt-education").textContent = variant.placeholderFields?.includes("high_school") ? "school" : "university";
   }
   for (const button of $("prompt-variants").children) {
     button.setAttribute("aria-pressed", String(button.dataset.variantId === variant.id));
@@ -116,8 +117,8 @@ function changeInlineSettings() {
 
 function closePopulationHelp() {
   $("population-help").hidden = true;
-  $("prompt-name").setAttribute("aria-expanded", "false");
-  $("prompt-address").setAttribute("aria-expanded", "false");
+  for (const id of ["prompt-name", "prompt-address", "prompt-education", "prompt-dates"])
+    $(id).setAttribute("aria-expanded", "false");
 }
 
 function updateResumeButton(demo) {
@@ -190,7 +191,7 @@ function renderCandidate(saved, animate = false) {
     button.setAttribute("aria-pressed", String(button.dataset.candidateId === candidate.id));
   }
   const assigned = populationExamples(saved).find(item => item.id === candidate.id);
-  renderResumeDocument($("populated-document"), assigned.template, candidate, animate);
+  renderResumeDocument($("populated-document"), assigned.template, assigned, animate);
   $("candidate-status").textContent = `Showing ${candidate.label}: ${candidate.name}.`;
 }
 
@@ -288,7 +289,7 @@ function showExperimentCandidate(index) {
   $("resume-template-options").replaceChildren();
   const saved = savedResumeVariant(resumeDemo(paper()), state.variantId, $("variant-prompt").value);
   const assigned = populationExamples(saved).find(item => item.id === DEMO_CANDIDATES[index].id);
-  renderResumeDocument($("resume-document"), assigned.template, DEMO_CANDIDATES[index]);
+  renderResumeDocument($("resume-document"), assigned.template, assigned);
   $("resume-dialog").showModal(); $("resume-dialog").scrollTo(0, 0);
 }
 
@@ -298,7 +299,8 @@ function renderResumeDocument(target, template, candidate = null, animate = fals
     node.replaceChildren(...resumeTextParts(text).map(part => {
       const span = document.createElement("span"); span.textContent = part.text;
       if (part.placeholder && candidate) {
-        span.textContent = candidate[part.text.slice(2, -2)];
+        const field = part.text.slice(2, -2);
+        span.textContent = field === "name" || field === "address" ? candidate[field] : candidate.values[field];
         span.className = animate ? "candidate-value is-updated" : "candidate-value";
       } else if (part.placeholder) {
         span.className = "resume-placeholder"; span.tabIndex = 0;
@@ -430,7 +432,7 @@ function setupScrollFlow() {
 
 async function start() {
   const bundle = await loadBundle(fetch, location.hostname,
-    new URL("./data/newspapers.json?v=inline-controls-23", import.meta.url), new URL("./local/newspapers.json", import.meta.url));
+    new URL("./data/newspapers.json?v=controlled-fields-24", import.meta.url), new URL("./local/newspapers.json", import.meta.url));
   state.papers = bundle.newspapers;
   Object.assign(state, stateFromUrl(location.href, state.papers));
   $("paper-select").replaceChildren(...state.papers.map(item => {
@@ -453,7 +455,7 @@ async function start() {
   $("generate-resume").addEventListener("click", showResume);
   for (const id of ["resume-count", "job-skill-count", "experience-level"])
     $(id).addEventListener("change", changeInlineSettings);
-  for (const id of ["prompt-name", "prompt-address"]) $(id).addEventListener("click", () => {
+  for (const id of ["prompt-name", "prompt-address", "prompt-education", "prompt-dates"]) $(id).addEventListener("click", () => {
     placeholderTrigger = $(id);
     const open = $("population-help").hidden;
     closePopulationHelp(); $("population-help").hidden = !open;

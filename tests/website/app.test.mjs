@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import {readFile} from "node:fs/promises";
-import {syntheticExperiment, pairedVariant, inlineVariants} from "./experiment-fixture.mjs";
+import {syntheticExperiment, pairedVariant, inlineVariants, withControlledFields} from "./experiment-fixture.mjs";
 
 class Element {
   constructor() {
@@ -64,7 +64,7 @@ test(`preview rendering with reveal support ${revealSupported}, failure ${Boolea
   bundle.newspapers.push(secondDemo);
   const controlledPaper = structuredClone(secondDemo);
   controlledPaper.id = "synthetic-inline-paper";
-  controlledPaper.resumeDemo = {jobId: controlledPaper.records[0].id, inlineControls: true, variants: inlineVariants()};
+  controlledPaper.resumeDemo = {jobId: controlledPaper.records[0].id, inlineControls: true, variants: inlineVariants().map(withControlledFields)};
   controlledPaper.experimentDemo = syntheticExperiment(controlledPaper);
   bundle.newspapers.push(controlledPaper);
   const nodes = new Map([...html.matchAll(/id="([^"]+)"/g)].map(match => [match[1], new Element()]));
@@ -446,6 +446,16 @@ test(`preview rendering with reveal support ${revealSupported}, failure ${Boolea
     assert.equal(get("experience-level").value, "entry-level");
     get("generate-resume").fire("click");
     assert.equal(get("resume-template-options").children.length, 2);
+    assert.match(resumeText(get("resume-document")), /\{\{university\}\}/);
+    assert.match(resumeText(get("resume-document")), /\{\{work_start_month\}\}/);
+    assert.match(resumeText(get("populated-document")), /Fictional College/);
+    assert.match(resumeText(get("populated-document")), /June 1988–July 1990/);
+    assert.ok(!resumeText(get("populated-document")).includes("{{"));
+    get("candidate-options").children[1].fire("click");
+    assert.match(resumeText(get("populated-document")), /Other Fictional College/);
+    get("experiment-candidate-2").fire("click");
+    assert.match(resumeText(get("resume-document")), /Other Fictional College/);
+    assert.ok(!resumeText(get("resume-document")).includes("{{"));
     get("job-skill-count").value = "4";
     get("job-skill-count").fire("change", "4");
     assert.equal(get("resume-dialog").open, false);
@@ -477,6 +487,12 @@ test(`preview rendering with reveal support ${revealSupported}, failure ${Boolea
     get("interactive-prompt").events.keydown({key: "Escape"});
     assert.equal(get("population-help").hidden, true);
     assert.equal(get("prompt-name").focused, true);
+    for (const id of ["prompt-education", "prompt-dates"]) {
+      get(id).fire("click");
+      assert.equal(get("population-help").hidden, false);
+      get("interactive-prompt").events.keydown({key: "Escape"});
+      assert.equal(get(id).focused, true);
+    }
     get("prompt-address").fire("click");
     get("go-to-population").fire("click");
     assert.equal(new URL(globalThis.location.href).hash, "#population");

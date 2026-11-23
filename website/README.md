@@ -70,7 +70,7 @@ The additional runs use the same generation/evaluation settings as Boston:
 AuditKit structured parts, two or four templates per prompt, gpt-5.5 medium generation,
 and gpt-4o-2024-08-06 evaluation with temperature 0 and log probabilities.
 Maintainer-local YAML, checkpoints and curation commands are under ignored
-`website/local/inline-controls-v1/` and `website/local/inline_controls_demo.py`.
+`website/local/controlled-fields-v1/` and `website/local/controlled_fields_demo.py`.
 Earlier OCR/style runs remain under their existing ignored directories.
 The public site needs none of those local files and
 makes no live model requests. These runs use EDSL's own configured local cache,
@@ -127,7 +127,7 @@ Small `Template 1` … `Template N` buttons switch the preview. Each template ha
 a distinct fictional background, not just a different name. The dialog is
 explicitly labeled as a saved example. Invalid or unavailable settings cannot
 show another combination's output. This static demo does not run inference.
-Names and addresses have differently highlighted buttons: clicking explains
+Names, addresses, schools and dates have highlighted buttons: clicking explains
 that they are filled during population and offers a link to that next step.
 Escape dismisses the explanation and restores focus to its trigger.
 Switching settings clears open documents and model responses, then updates
@@ -147,15 +147,17 @@ instead of leaving empty resume panels.
 Saved outputs were generated through AuditKit's template-generation API with
 `templates_per_scenario: 2` or `4` and
 shared inference using gpt-5.5, medium reasoning, and structured parts mode.
-Name and address remain literal placeholders for the later population stage.
+Name, address, school and education/employment dates remain literal placeholders
+for the later population stage. Boston and Birmingham use `{{university}}`;
+Chicago's 1970 format uses `{{high_school}}`. Date fields include education start/end
+years and work start/end months and years; Birmingham also has in-school work dates.
 The source is `jobs_to_experiment/prompts.py` plus the job-agency persona from
 `jobs_to_experiment/resume_creation.py`, pinned reference revision
 `c9391854ea55806ec252625cd2f48fb9edb156cd`.
 The year-specific content guidance is retained, but explicit control settings
 override template/skill counts and entry-level versus experienced backgrounds.
-The demo uses structured parts and only canonical name/address placeholders.
-Dates and school details formerly controlled by other paper placeholders are
-generated example background here. SSNs are omitted, phone numbers use reserved
+The demo uses structured parts for every controlled field, rather than allowing
+the model to invent school names or dates. SSNs are omitted, phone numbers use reserved
 example ranges, and anachronistic job-website references are omitted from the
 agency persona. These are explicit adaptations, not byte-for-byte paper runs or
 a validated research design. There are no Historian/Role-play generation variants.
@@ -170,11 +172,11 @@ was actually generated, not assembled by trimming or duplicating another resume.
 Generation commands below are maintainer-local: the ignored run artifacts are
 not included in a fresh checkout and are not needed to view the published demo.
 YAML settings, CSV checkpoints and source snapshots stay under
-`website/local/inline-controls-v1/`. Earlier year-prompt runs remain preserved.
+`website/local/controlled-fields-v1/`. Earlier inline-control and year-prompt runs remain preserved.
 To explicitly generate pending Boston setting combinations (paid):
 
 ```bash
-EDSL_DATABASE_PATH=sqlite:///website/local/inline-controls-v1/boston-cache.db PYTHONPATH=src .venv/bin/python website/local/inline_controls_demo.py boston-1990 generate
+EDSL_DATABASE_PATH=sqlite:///website/local/controlled-fields-v1/boston-cache.db PYTHONPATH=src .venv/bin/python website/local/controlled_fields_demo.py boston-1990 generate
 ```
 
 The browser makes no generation requests. Each saved output retains its real
@@ -186,7 +188,7 @@ includes the saved examples; other local research artifacts are not published.
 ## Templates become candidates
 
 Scroll below the editor or open <http://127.0.0.1:8765/#population>.
-Two explicitly synthetic profiles fill name and address in their own assigned
+Two explicitly synthetic profiles fill identity, school and date fields in their own assigned
 templates. Stable candidate IDs map to content-derived template IDs; no template
 is reused for both. For four-template generation, exactly two are explicitly
 assigned for this paired hiring demonstration; all four remain inspectable.
@@ -194,6 +196,15 @@ A caption makes this distinction visible. Candidate buttons switch the document,
 generated work history. A short highlight marks the populated personal details.
 The prose within each original template stays unchanged. Motion is disabled for
 reduced-motion preferences. This is not a controlled same-qualification comparison.
+
+Each variant declares its exact `placeholderFields`; each candidate/template
+assignment carries explicit `values` for school and dates. Names/addresses come
+from the fixed profiles and cannot be overridden by that map. Fictional North
+Harbor/Riverbend schools are assigned, with education years followed by work
+dates ending before the newspaper date. Entry-level examples receive a one-year
+work range; experienced examples receive six years. Birmingham also receives
+an in-school work range. These illustrative assignments are deterministic,
+not a researcher sampling design. Missing, extra or blank fields are rejected.
 
 These are fixed local presentation examples, not the paper's sampling procedure
 or research assignments. No inference or extra fetch runs when switching.
@@ -217,12 +228,12 @@ These small synthetic examples are not evidence
 of bias or a replication of the paper. No browser inference runs.
 
 YAML, fixed source snapshots, prompt/persona files and CSV checkpoints live under
-ignored `website/local/inline-controls-v1/<paper>/experiment/`. Earlier one-template
+ignored `website/local/controlled-fields-v1/<paper>/experiment/`. Earlier one-template
 and style-comparison runs remain untouched in their old directories and are not
 reused for the new resumes. To explicitly execute a pending Boston evaluation (paid):
 
 ```bash
-EDSL_DATABASE_PATH=sqlite:///website/local/inline-controls-v1/boston-cache.db PYTHONPATH=src .venv/bin/python website/local/inline_controls_demo.py boston-1990 experiments
+EDSL_DATABASE_PATH=sqlite:///website/local/controlled-fields-v1/boston-cache.db PYTHONPATH=src .venv/bin/python website/local/controlled_fields_demo.py boston-1990 experiments
 ```
 
 Exported examples preserve exact input bindings, original rendered prompts,

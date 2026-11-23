@@ -36,3 +36,14 @@ export function inlineVariants(prefix = "controls") {
     return variant;
   })));
 }
+
+export function withControlledFields(variant) {
+  const values = {university: "Fictional College", education_start_year: "1984", education_end_year: "1988",
+    work_start_month: "June", work_start_year: "1988", work_end_month: "July", work_end_year: "1990"};
+  const fields = Object.keys(values);
+  const text = "\nEDUCATION\n{{university}}\n{{education_start_year}}–{{education_end_year}}\nWORK EXPERIENCE\n{{work_start_month}} {{work_start_year}}–{{work_end_month}} {{work_end_year}}";
+  const templates = variant.templates.map(template => ({...template, text: template.text + text}));
+  return {...variant, templates, template: templates[0].text, placeholderFields: ["name", "address", ...fields],
+    assignments: variant.assignments.map((assignment, index) => ({...assignment,
+      values: {...values, university: index ? "Other Fictional College" : values.university}}))};
+}

@@ -79,7 +79,7 @@ settings and matching template cardinalities; incomplete or ambiguous data is
 rejected rather than inventing an output. Setting changes select one saved
 variant, clear the open document/response and reset candidate selection.
 The settings are remembered independently per paper/job in page memory.
-Names and addresses use separate buttons that explain deterministic population;
+Names, addresses, school and dates use buttons that explain deterministic population;
 a next-step button scrolls there and focuses its heading. Escape dismisses the
 explanation and returns focus to the triggering button. Native selects provide
 keyboard, focus, Escape and outside-dismiss behavior without custom menus.
@@ -112,8 +112,8 @@ for Chicago and `prompt_2001` (the 2000–2002 function) for Birmingham, from
 `jobs_to_experiment/prompts.py`, reference revision
 `c9391854ea55806ec252625cd2f48fb9edb156cd`. The agency persona is adapted from
 `jobs_to_experiment/resume_creation.py`. Adaptations are explicit: selected
-template/skill counts and experience guidance, canonical name/address fields only, generated example
-dates/school details instead of extra paper placeholders, no SSNs, reserved
+template/skill counts and experience guidance, canonical identity/school/date
+field references instead of model-supplied values, no SSNs, reserved
 example phone numbers and no anachronistic website references. This is not an
 exact replication. Historian/Role-play were not substituted for generation.
 The public bundle retains full generation user/system prompts, request IDs,
@@ -121,8 +121,8 @@ fingerprints, model identity and source/adaptation provenance. `promptSummary`
 is a separate nonblank string used by the editor; older bundles without it fall
 back to `prompt`. Saving/playing an experiment still requires the full generation
 user prompt and, when supplied, system prompt to match. YAML configs, snapshots
-and CSV checkpoints remain ignored local artifacts under `inline-controls-v1/`.
-Earlier `year-prompts-v1/` runs are preserved, not relabeled. Template count uses
+and CSV checkpoints remain ignored local artifacts under `controlled-fields-v1/`.
+Earlier `inline-controls-v1/` and `year-prompts-v1/` runs are preserved, not relabeled. Template count uses
 the schema contract. Skill count and experience remain prompt-guided; skill
 bullet counts were inspected for these saved examples, not newly guaranteed by
 the package for arbitrary runs. Every combination was generated independently.
@@ -151,8 +151,17 @@ to their own generated background; content-derived template IDs are not display
 positions. Missing, duplicate, reused or incompatible mappings hide population
 rather than copying one template for both candidates. Single-template artifacts
 can still be previewed but cannot drive this paired example.
-Only exact `{{name}}` and `{{address}}` tokens are replaced within each assigned
-template; that template's prose stays unchanged. Switching candidates therefore
+Only declared placeholder tokens are replaced within each assigned template;
+that template's prose stays unchanged. Each variant declares `placeholderFields`;
+every template must contain exactly that field set. Explicit assignment `values`
+supply school, education years and employment start/end months/years. Chicago
+uses `high_school`, Boston/Birmingham `university`; Birmingham also controls
+in-school employment dates. Names and addresses remain fixed profile values,
+not overridable by assignments. Missing, extra, blank or unresolved values reject
+population. Fixed fictional schools and era-appropriate date ranges are synthetic
+presentation assignments, not inferred research covariates. New evaluations use
+the fully populated resumes, and matching rejects changed assignment values.
+Switching candidates therefore
 changes the background as well as personal details. It is not a same-qualification
 identity comparison, and no such claim is shown.
 A brief highlight marks changed values when switching candidates, with no
