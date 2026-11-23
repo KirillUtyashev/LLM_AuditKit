@@ -69,6 +69,20 @@ def test_original_newspaper_is_preserved_and_jobs_use_three_columns():
     assert "page-preview" in css and ".job-button" not in css
 
 
+def test_extraction_labels_identify_input_and_output_without_labeling_later_stages():
+    html = (WEBSITE / "index.html").read_text()
+    scan = html.split('id="archive-view"', 1)[1].split("</section>", 1)[0]
+    jobs = html.split('id="data-view"', 1)[1].split("</section>", 1)[0]
+    assert '<span>Input</span><span aria-hidden="true">·</span>Newspaper scan' in scan
+    assert '<span>Output</span><span aria-hidden="true">·</span>Job postings' in jobs
+    assert scan.index('class="artifact-label"') < scan.index('id="open-scan"')
+    assert jobs.index('class="artifact-label"') < jobs.index('id="job-cards"')
+    assert html.count('class="artifact-label"') == 2
+    assert "Advertisements from the page." not in jobs
+    css = (WEBSITE / "styles.css").read_text()
+    assert "flex-wrap:wrap" in re.search(r"\.stage-heading \.artifact-label\s*\{([^}]+)\}", css).group(1)
+
+
 def test_changed_resume_assets_have_matching_cache_versions():
     html = (WEBSITE / "index.html").read_text()
     app = (WEBSITE / "app.mjs").read_text()

@@ -5,11 +5,11 @@ flowchart TD
     L[Other ignored research artifacts and optional local override] --> P[Loopback preview only]
     B --> P
     P --> V
-    V --> S[Scan section: city/year and original newspaper preview]
+    V --> S[Scan section: Input - Newspaper scan, city/year and original preview]
     S --> Z[Enlarge complete newspaper]
     S --> D[One continuous decorative connecting line]
     D --> Q[Search every job in the selected newspaper]
-    Q --> J[Show at most three previews, featured images by default]
+    Q --> J[Output - Job postings: show at most three previews, featured images by default]
     J --> F[Image previews with approximate source-area labels]
     F --> U[Text fallback only when no source area exists]
     V --> K[Scroll bookmark and progressive reveal]

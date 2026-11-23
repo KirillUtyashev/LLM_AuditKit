@@ -1,4 +1,4 @@
-import {csvForRecords, jobPreview, cropStyle, stateFromUrl, loadBundle, resumeDemo, savedResumeVariant, resumeBlocks, resumeTextParts, DEMO_CANDIDATES, populationExamples, resumeTemplates, experimentExample, finalOutputRows, resultCsv} from "./lib.mjs?v=final-results-17";
+import {csvForRecords, jobPreview, cropStyle, stateFromUrl, loadBundle, resumeDemo, savedResumeVariant, resumeBlocks, resumeTextParts, DEMO_CANDIDATES, populationExamples, resumeTemplates, experimentExample, finalOutputRows, resultCsv} from "./lib.mjs?v=extraction-labels-18";
 
 const $ = id => document.getElementById(id);
 const state = {papers: [], paperId: null, step: "archive", query: "", variantId: null, candidateId: DEMO_CANDIDATES[0].id};

@@ -11,6 +11,9 @@ The page presents the scan, then job rows, an optional resume prompt editor
 and synthetic template-population, saved experiment and candidate-output examples
 in normal vertical document flow.
 The city/year selector remains above the original large newspaper preview.
+The extraction section alone has understated artifact labels beside its headings:
+`Input · Newspaper scan` and `Output · Job postings`. On narrow screens these
+sit below the headings; no additional panels or labels on later stages are added.
 Enlarging it displays the complete newspaper page. The jobs section below shows
 at most three job previews in desktop columns (stacked on mobile), while search
 always considers every available record for the selected newspaper.

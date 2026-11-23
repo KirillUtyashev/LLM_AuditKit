@@ -17,6 +17,9 @@ down to the jobs. Search the jobs, inspect their source excerpts, or download th
 filtered CSV. Source notes and raw OCR remain in the data, not in a UI accordion.
 The stages stay in the document, without tabs or stage-navigation controls.
 The newspaper remains one large preview, with full-page enlargement and zoom.
+Only extraction currently labels its artifacts: `Input · Newspaper scan` beside
+the scan heading and `Output · Job postings` beside the jobs heading. These are
+small text labels, not new panels; the remaining stages are unchanged.
 Search covers every available job for the selected newspaper (59 Boston,
 118 Chicago, or 86 Birmingham ads), but displays at most three matches side by side on desktop,
 stacked on mobile. Clearing search restores the three featured images.
