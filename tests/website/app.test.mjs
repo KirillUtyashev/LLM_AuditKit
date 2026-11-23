@@ -185,7 +185,7 @@ test(`preview rendering with reveal support ${revealSupported}, failure ${Boolea
     assert.equal(get("run-experiment").disabled, true);
     assert.equal(get("experiment-result").hidden, true);
     assert.equal(get("experiment-explanation").textContent, "");
-    assert.match(get("experiment-status").textContent, /original prompt/);
+    assert.match(get("experiment-status").textContent, /original summary/);
     get("run-experiment").fire("click");
     assert.equal(get("experiment-result").hidden, true);
     get("prompt-variants").children[1].fire("click");
@@ -468,6 +468,15 @@ test(`preview rendering with reveal support ${revealSupported}, failure ${Boolea
     assert.equal(get("experience-level").value, "entry-level");
     assert.deepEqual(get("experiment-perspectives").children.map(node => node.textContent), ["Role-play", "Historian"]);
     assert.equal(get("experiment-prompt").value, "Synthetic role-play prompt for two applicants");
+    assert.ok(!/fictional|JSON/.test(get("experiment-prompt").value));
+    const fullRolePrompt = controlledPaper.experimentDemo.perspectives[0].prompts["2"];
+    assert.notEqual(get("experiment-prompt").value, fullRolePrompt);
+    get("experiment-prompt").value = fullRolePrompt;
+    get("experiment-prompt").fire("input", fullRolePrompt);
+    assert.equal(get("run-experiment").disabled, true);
+    get("experiment-prompt").value = "Synthetic role-play prompt for two applicants";
+    get("experiment-prompt").fire("input", get("experiment-prompt").value);
+    assert.equal(get("run-experiment").disabled, false);
     get("generate-resume").fire("click");
     assert.equal(get("resume-template-options").children.length, 2);
     assert.match(resumeText(get("resume-document")), /\{\{university\}\}/);

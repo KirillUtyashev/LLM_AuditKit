@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import {readFile} from "node:fs/promises";
-import {CSV_COLUMNS, chooseRecord, csvForRecords, filterRecords, formatDate, normalizedBox, stateFromUrl, cropStyle, loadBundle, jobPreview, resumeDemo, savedResumeVariant, resumePromptText, inlineResumeVariant, resumeBlocks, resumeTextParts, DEMO_CANDIDATES, populateResumeExample, populationExamples, resumeTemplates, experimentExample, experimentPerspectives, answerProbabilityPercent, formatAnswerProbability, finalOutputRows, resultCsv, RESULT_COLUMNS, candidateFieldPresets, replaceCandidateFields} from "../../website/lib.mjs";
+import {CSV_COLUMNS, chooseRecord, csvForRecords, filterRecords, formatDate, normalizedBox, cropStyle, loadBundle, jobPreview, resumeDemo, savedResumeVariant, resumePromptText, inlineResumeVariant, resumeBlocks, resumeTextParts, DEMO_CANDIDATES, populateResumeExample, populationExamples, resumeTemplates, experimentExample, experimentPerspectives, experimentPromptText, answerProbabilityPercent, formatAnswerProbability, finalOutputRows, resultCsv, RESULT_COLUMNS, candidateFieldPresets, replaceCandidateFields, stateFromUrl} from "../../website/lib.mjs";
 import {syntheticExperiment, pairedVariant, inlineVariants, withControlledFields, withPopulationPools, withHiringPerspectives} from "./experiment-fixture.mjs";
 
 const bundle = JSON.parse(await readFile(new URL("../../website/data/archive-newspapers.json", import.meta.url), "utf8"));
@@ -29,6 +29,10 @@ test("hiring perspectives bind actual prompts and personas and cannot reuse anot
   const historian = experimentExample(paper, variant, "historian");
   assert.notEqual(role.requestId, historian.requestId);
   assert.notEqual(role.prompt, historian.prompt);
+  assert.ok(role.prompt.includes("JSON") && role.prompt.includes("fictional"));
+  assert.equal(experimentPromptText(role), "Synthetic role-play prompt for two applicants");
+  assert.ok(!/fictional|JSON/.test(experimentPromptText(role)));
+  assert.equal(experimentPromptText({prompt: "Legacy question"}), "Legacy question");
   assert.equal(experimentExample(paper, variant).perspectiveId, "role-play");
   assert.equal(experimentExample(paper, variant, "unknown"), null);
   assert.equal(finalOutputRows(paper, variant.id, "historian")[0].answer, "No");
@@ -44,6 +48,7 @@ test("hiring perspectives bind actual prompts and personas and cannot reuse anot
     p => {p.experimentDemo.examples.push(structuredClone(p.experimentDemo.examples[1]));},
     p => {p.experimentDemo.perspectives.push(structuredClone(p.experimentDemo.perspectives[1]));},
     p => {p.experimentDemo.perspectives[1].prompts = [];},
+    p => {p.experimentDemo.perspectives[1].summaries["2"] = "";},
   ]) {const changed = structuredClone(paper); mutate(changed); assert.equal(experimentExample(changed, variant, "historian"), null);}
 });
 

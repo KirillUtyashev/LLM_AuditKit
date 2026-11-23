@@ -244,12 +244,16 @@ Continue scrolling or open <http://127.0.0.1:8765/#experiment>.
 button row; inspect jobs and full resumes in the earlier sections.
 `Output · Interview decisions` appears with the revealed results. Choose `Role-play`
 (a period hiring manager) or `Historian` (a descriptive prediction of an employer's
-period decisions). The displayed prompt is the actual saved question, not a gist;
+period decisions). The visible `Prompt summary` omits the applicant qualifier
+and JSON-output boilerplate. Full prompts remain unchanged in the saved data;
 these two versions were authored for the website, not copied verbatim from the paper.
 `Inspect model decisions`
 reveals the saved interview decisions and original model explanation for the
-unchanged prompt. Editing the hiring prompt disables playback and clears the
+unchanged summary. Editing the summary disables playback and clears the
 result; this static site cannot run a new model request.
+The underlying full prompt, persona and populated resumes must still match
+the saved evaluation. Summaries are separate presentation strings, never
+substitutes for the actual recorded inference inputs.
 
 Each newspaper's eight selected applicant sets were actually run under both
 perspectives through `ExperimentRunner`

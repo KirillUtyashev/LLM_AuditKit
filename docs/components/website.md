@@ -210,10 +210,15 @@ connector. `Input · Job posting + resumes` replaces the redundant input-review
 button row. Jobs remain inspectable in the extraction section and full resumes
 through their cards above. `Output · Interview decisions` labels the revealed
 results, not an empty placeholder before playback. `Role-play` and `Historian` buttons select two authored hiring
-perspectives above the editable prompt. Role-play acts as a period hiring manager;
+perspectives above the editable `Prompt summary`. Role-play acts as a period hiring manager;
 Historian predicts an employer's period decision from a descriptive viewpoint.
 Both use the supplied advertisement/resumes and prohibit invented applicant facts
 or later events. These are reasonable website prompts, not verbatim paper prompts.
+The summaries omit the applicant qualifier and JSON/schema instructions; the
+full model prompts remain unchanged in the saved payload for provenance.
+`perspectives.summaries` declares both applicant-count summaries separately
+from `prompts`, and `experimentPromptText` selects presentation text with a
+legacy full-prompt fallback. Display text never replaces full-prompt validation.
 An `Inspect model decisions` button sits below. Only the fixed model name is shown beside it.
 Clicking reveals the matching number of saved interview decisions and the original explanation
 as plain text, not a reconstructed or invented answer. Each decision also shows
@@ -238,13 +243,17 @@ model configuration, exact source text, candidate/template IDs, ordered inputs a
 
 An example is available only when its job ID/text, resume-generation prompt,
 templates and their assignments, ordered candidate IDs/names/addresses/resumes, hiring prompt, complete
-decisions and provenance match. Prompt edits disable `Inspect model decisions` and clear
+decisions and provenance match. Summary edits disable `Inspect model decisions` and clear
 the previous result; they are not submitted. Generation edits, changed source
 data, missing results or a paper/preset change cannot reuse a stale response.
 `experimentDemo.perspectives` declares unique IDs, labels, persona IDs, effective
 traits/instructions and prompts keyed by applicant count. Matching additionally
 requires the selected `perspectiveId`, persona ID, trait and instruction. A missing,
 duplicate or incompatible example cannot fall back to another perspective.
+Playback and CSV require the original display summary as well as valid underlying
+full prompts/persona/inputs; entering the full model prompt into a summary editor
+does not bypass this guard. Changing presentation summaries does not relabel or
+rerun saved responses.
 Legacy bundles without perspectives retain their `experimentPrompt`/default-prompt
 contract. Selection persists per paper/job in page memory across generation
 settings. Switching perspectives clears prior decisions/table and selects only

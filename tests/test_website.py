@@ -212,6 +212,7 @@ def test_experiment_section_has_editable_prompt_inputs_and_explicit_saved_respon
     section = html.split('id="experiment-view"', 1)[1].split("</section>", 1)[0]
     assert "How does the model decide?" in section
     assert '<textarea id="experiment-prompt"' in section and 'for="experiment-prompt"' in section
+    assert '<label class="prompt-summary-label" for="experiment-prompt">Prompt summary</label>' in section
     assert '<span>Input</span><span aria-hidden="true">·</span>Job posting + resumes' in section
     assert '<span>Output</span><span aria-hidden="true">·</span>Interview decisions' in section
     assert section.index('Job posting + resumes') < section.index('id="experiment-perspectives"')
@@ -385,6 +386,14 @@ def test_both_hiring_perspectives_have_independent_complete_saved_runs():
     for paper in bundle["newspapers"]:
         demo = paper["experimentDemo"]
         assert [(p["id"], p["label"]) for p in demo["perspectives"]] == [("role-play", "Role-play"), ("historian", "Historian")]
+        for perspective in demo["perspectives"]:
+            for n in ("2", "4"):
+                summary = perspective["summaries"][n]
+                assert not re.search(r"\bfictional\b|JSON", summary, re.I)
+                assert "Answer Yes or No" in summary
+                assert "both applicants" in summary if n == "2" else "four applicants" in summary
+                assert "JSON" in perspective["prompts"][n]
+                assert "fictional" in perspective["prompts"][n]
         assert {(e["variantId"], e["perspectiveId"]) for e in demo["examples"]} == {
             (v["id"], p["id"]) for v in paper["resumeDemo"]["variants"] for p in demo["perspectives"]}
         for example in demo["examples"]:

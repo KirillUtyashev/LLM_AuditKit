@@ -28,7 +28,8 @@ export function withHiringPerspectives(paper) {
   const demo = syntheticExperiment(paper);
   const perspectives = ["role-play", "historian"].map(id => ({id, label: id === "role-play" ? "Role-play" : "Historian",
     personaId: `synthetic-${id}-persona`, trait: `Synthetic ${id} trait`, instruction: `Synthetic ${id} instruction`,
-    prompts: {"2": `Synthetic ${id} prompt for two applicants`, "4": `Synthetic ${id} prompt for four applicants`}}));
+    prompts: {"2": `Synthetic ${id} prompt for two applicants. Return JSON for fictional applicants.`, "4": `Synthetic ${id} prompt for four applicants. Return JSON for fictional applicants.`},
+    summaries: {"2": `Synthetic ${id} prompt for two applicants`, "4": `Synthetic ${id} prompt for four applicants`}}));
   return {...demo, perspectives, examples: perspectives.flatMap(p => demo.examples.map(original => ({...structuredClone(original),
     perspectiveId: p.id, personaId: p.personaId, personaTrait: p.trait, personaInstruction: p.instruction,
     prompt: p.prompts[String(original.candidates.length)], requestId: `${original.requestId}-${p.id}`,

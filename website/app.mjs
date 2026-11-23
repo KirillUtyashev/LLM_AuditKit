@@ -1,4 +1,4 @@
-import {csvForRecords, jobPreview, cropStyle, stateFromUrl, loadBundle, resumeDemo, savedResumeVariant, resumePromptText, inlineResumeVariant, resumeBlocks, resumeTextParts, populationExamples, resumeTemplates, experimentExample, experimentPerspectives, formatAnswerProbability, finalOutputRows, resultCsv, candidateFieldPresets, replaceCandidateFields} from "./lib.mjs?v=experiment-artifacts-30";
+import {csvForRecords, jobPreview, cropStyle, stateFromUrl, loadBundle, resumeDemo, savedResumeVariant, resumePromptText, inlineResumeVariant, resumeBlocks, resumeTextParts, populationExamples, resumeTemplates, experimentExample, experimentPerspectives, experimentPromptText, formatAnswerProbability, finalOutputRows, resultCsv, candidateFieldPresets, replaceCandidateFields} from "./lib.mjs?v=prompt-summary-31";
 
 const $ = id => document.getElementById(id);
 const state = {papers: [], paperId: null, step: "archive", query: "", variantId: null, perspectiveId: null};
@@ -264,7 +264,7 @@ function renderExperiment(saved) {
     }
     return;
   }
-  $("experiment-prompt").value = experimentDrafts.get(experimentDraftKey()) ?? example.prompt;
+  $("experiment-prompt").value = experimentDrafts.get(experimentDraftKey()) ?? experimentPromptText(example);
   $("experiment-model").textContent = example.model === "gpt-4o-2024-08-06" ? "GPT-4o" : example.model;
   $("experiment-model").title = `${example.model} · previously recorded response; no live generation.`;
   updateExperimentButton();
@@ -273,11 +273,11 @@ function renderExperiment(saved) {
 function updateExperimentButton() {
   clearExperimentResult();
   const example = currentExperiment();
-  const matches = example && $("experiment-prompt").value === example.prompt;
+  const matches = example && $("experiment-prompt").value === experimentPromptText(example);
   $("run-experiment").disabled = !matches;
-  $("run-experiment").title = "Show the previously recorded response for these exact inputs; no live generation.";
+  $("run-experiment").title = "Inspect the saved decisions associated with this prompt summary; no live generation.";
   $("experiment-status").textContent = example && !matches
-    ? "This saved run uses the original prompt. Live generation isn’t connected." : "";
+    ? "Saved decisions are available for the original summary only." : "";
   renderFinalOutput(Boolean(matches));
 }
 
@@ -311,7 +311,7 @@ function currentResultRows() {
 
 function showExperimentResult() {
   const example = currentExperiment();
-  if (!example || $("experiment-prompt").value !== example.prompt) return;
+  if (!example || $("experiment-prompt").value !== experimentPromptText(example)) return;
   $("experiment-decisions").replaceChildren(...example.decisions.map((decision, index) => {
     const row = document.createElement("div");
     const name = document.createElement("h4"); name.textContent = `${example.candidates[index].label} · ${example.candidates[index].name}`;
@@ -478,7 +478,7 @@ function setupScrollFlow() {
 
 async function start() {
   const bundle = await loadBundle(fetch, location.hostname,
-    new URL("./data/newspapers.json?v=experiment-artifacts-30", import.meta.url), new URL("./local/newspapers.json", import.meta.url));
+    new URL("./data/newspapers.json?v=prompt-summary-31", import.meta.url), new URL("./local/newspapers.json", import.meta.url));
   state.papers = bundle.newspapers;
   Object.assign(state, stateFromUrl(location.href, state.papers));
   $("paper-select").replaceChildren(...state.papers.map(item => {
@@ -523,7 +523,7 @@ async function start() {
   $("run-experiment").addEventListener("click", showExperimentResult);
   $("download-results").addEventListener("click", () => {
     const example = currentExperiment();
-    if (!example || $("experiment-prompt").value !== example.prompt) return;
+    if (!example || $("experiment-prompt").value !== experimentPromptText(example)) return;
     const rows = currentResultRows();
     if (!rows.length) return;
     const blob = new Blob([resultCsv(rows)], {type: "text/csv;charset=utf-8"});

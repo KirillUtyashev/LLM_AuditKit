@@ -2354,7 +2354,11 @@
               "2": "Act as the hiring manager for this vacancy in Boston in 1990. Based on the job posting and resumes, would you invite each applicant to an interview? Assess each independently using the qualifications stated in the ad. Do not use information from later years or invent applicant facts. Review all 2 fictional applicants. Return one JSON object with exactly the keys \"Applicant 1\", \"Applicant 2\", each containing \"Yes\" or \"No\". Do not use a bullet list. Put a brief explanation for each applicant after the JSON object.",
               "4": "Act as the hiring manager for this vacancy in Boston in 1990. Based on the job posting and resumes, would you invite each applicant to an interview? Assess each independently using the qualifications stated in the ad. Do not use information from later years or invent applicant facts. Review all 4 fictional applicants. Return one JSON object with exactly the keys \"Applicant 1\", \"Applicant 2\", \"Applicant 3\", \"Applicant 4\", each containing \"Yes\" or \"No\". Do not use a bullet list. Put a brief explanation for each applicant after the JSON object."
             },
-            "origin": "Authored website demonstration prompts, not verbatim paper prompts."
+            "origin": "Authored website demonstration prompts, not verbatim paper prompts.",
+            "summaries": {
+              "2": "Act as the hiring manager for this vacancy in Boston in 1990. Based on the job posting and resumes, would you invite each applicant to an interview? Assess each independently using the qualifications stated in the ad. Do not use information from later years or invent applicant facts. Review both applicants. Answer Yes or No for each applicant and briefly explain each decision.",
+              "4": "Act as the hiring manager for this vacancy in Boston in 1990. Based on the job posting and resumes, would you invite each applicant to an interview? Assess each independently using the qualifications stated in the ad. Do not use information from later years or invent applicant facts. Review all four applicants. Answer Yes or No for each applicant and briefly explain each decision."
+            }
           },
           {
             "id": "historian",
@@ -2366,7 +2370,11 @@
               "2": "Take the perspective of a historian studying hiring in Boston in 1990. Based on this advertisement and these resumes, predict whether an employer at that time would invite each applicant to an interview. Assess each independently. Distinguish document evidence from assumptions about the period; do not use knowledge of later events or invent applicant facts. Review all 2 fictional applicants. Return one JSON object with exactly the keys \"Applicant 1\", \"Applicant 2\", each containing \"Yes\" or \"No\". Do not use a bullet list. Put a brief explanation for each applicant after the JSON object.",
               "4": "Take the perspective of a historian studying hiring in Boston in 1990. Based on this advertisement and these resumes, predict whether an employer at that time would invite each applicant to an interview. Assess each independently. Distinguish document evidence from assumptions about the period; do not use knowledge of later events or invent applicant facts. Review all 4 fictional applicants. Return one JSON object with exactly the keys \"Applicant 1\", \"Applicant 2\", \"Applicant 3\", \"Applicant 4\", each containing \"Yes\" or \"No\". Do not use a bullet list. Put a brief explanation for each applicant after the JSON object."
             },
-            "origin": "Authored website demonstration prompts, not verbatim paper prompts."
+            "origin": "Authored website demonstration prompts, not verbatim paper prompts.",
+            "summaries": {
+              "2": "Take the perspective of a historian studying hiring in Boston in 1990. Based on this advertisement and these resumes, predict whether an employer at that time would invite each applicant to an interview. Assess each independently. Distinguish document evidence from assumptions about the period; do not use knowledge of later events or invent applicant facts. Review both applicants. Answer Yes or No for each applicant and briefly explain each decision.",
+              "4": "Take the perspective of a historian studying hiring in Boston in 1990. Based on this advertisement and these resumes, predict whether an employer at that time would invite each applicant to an interview. Assess each independently. Distinguish document evidence from assumptions about the period; do not use knowledge of later events or invent applicant facts. Review all four applicants. Answer Yes or No for each applicant and briefly explain each decision."
+            }
           }
         ],
         "examples": [
@@ -8046,7 +8054,11 @@
               "2": "Act as the hiring manager for this vacancy in Chicago in 1970. Based on the job posting and resumes, would you invite each applicant to an interview? Assess each independently using the qualifications stated in the ad. Do not use information from later years or invent applicant facts. Review all 2 fictional applicants. Return one JSON object with exactly the keys \"Applicant 1\", \"Applicant 2\", each containing \"Yes\" or \"No\". Do not use a bullet list. Put a brief explanation for each applicant after the JSON object.",
               "4": "Act as the hiring manager for this vacancy in Chicago in 1970. Based on the job posting and resumes, would you invite each applicant to an interview? Assess each independently using the qualifications stated in the ad. Do not use information from later years or invent applicant facts. Review all 4 fictional applicants. Return one JSON object with exactly the keys \"Applicant 1\", \"Applicant 2\", \"Applicant 3\", \"Applicant 4\", each containing \"Yes\" or \"No\". Do not use a bullet list. Put a brief explanation for each applicant after the JSON object."
             },
-            "origin": "Authored website demonstration prompts, not verbatim paper prompts."
+            "origin": "Authored website demonstration prompts, not verbatim paper prompts.",
+            "summaries": {
+              "2": "Act as the hiring manager for this vacancy in Chicago in 1970. Based on the job posting and resumes, would you invite each applicant to an interview? Assess each independently using the qualifications stated in the ad. Do not use information from later years or invent applicant facts. Review both applicants. Answer Yes or No for each applicant and briefly explain each decision.",
+              "4": "Act as the hiring manager for this vacancy in Chicago in 1970. Based on the job posting and resumes, would you invite each applicant to an interview? Assess each independently using the qualifications stated in the ad. Do not use information from later years or invent applicant facts. Review all four applicants. Answer Yes or No for each applicant and briefly explain each decision."
+            }
           },
           {
             "id": "historian",
@@ -8058,7 +8070,11 @@
               "2": "Take the perspective of a historian studying hiring in Chicago in 1970. Based on this advertisement and these resumes, predict whether an employer at that time would invite each applicant to an interview. Assess each independently. Distinguish document evidence from assumptions about the period; do not use knowledge of later events or invent applicant facts. Review all 2 fictional applicants. Return one JSON object with exactly the keys \"Applicant 1\", \"Applicant 2\", each containing \"Yes\" or \"No\". Do not use a bullet list. Put a brief explanation for each applicant after the JSON object.",
               "4": "Take the perspective of a historian studying hiring in Chicago in 1970. Based on this advertisement and these resumes, predict whether an employer at that time would invite each applicant to an interview. Assess each independently. Distinguish document evidence from assumptions about the period; do not use knowledge of later events or invent applicant facts. Review all 4 fictional applicants. Return one JSON object with exactly the keys \"Applicant 1\", \"Applicant 2\", \"Applicant 3\", \"Applicant 4\", each containing \"Yes\" or \"No\". Do not use a bullet list. Put a brief explanation for each applicant after the JSON object."
             },
-            "origin": "Authored website demonstration prompts, not verbatim paper prompts."
+            "origin": "Authored website demonstration prompts, not verbatim paper prompts.",
+            "summaries": {
+              "2": "Take the perspective of a historian studying hiring in Chicago in 1970. Based on this advertisement and these resumes, predict whether an employer at that time would invite each applicant to an interview. Assess each independently. Distinguish document evidence from assumptions about the period; do not use knowledge of later events or invent applicant facts. Review both applicants. Answer Yes or No for each applicant and briefly explain each decision.",
+              "4": "Take the perspective of a historian studying hiring in Chicago in 1970. Based on this advertisement and these resumes, predict whether an employer at that time would invite each applicant to an interview. Assess each independently. Distinguish document evidence from assumptions about the period; do not use knowledge of later events or invent applicant facts. Review all four applicants. Answer Yes or No for each applicant and briefly explain each decision."
+            }
           }
         ],
         "examples": [
@@ -13636,7 +13652,11 @@
               "2": "Act as the hiring manager for this vacancy in Birmingham in 2000. Based on the job posting and resumes, would you invite each applicant to an interview? Assess each independently using the qualifications stated in the ad. Do not use information from later years or invent applicant facts. Review all 2 fictional applicants. Return one JSON object with exactly the keys \"Applicant 1\", \"Applicant 2\", each containing \"Yes\" or \"No\". Do not use a bullet list. Put a brief explanation for each applicant after the JSON object.",
               "4": "Act as the hiring manager for this vacancy in Birmingham in 2000. Based on the job posting and resumes, would you invite each applicant to an interview? Assess each independently using the qualifications stated in the ad. Do not use information from later years or invent applicant facts. Review all 4 fictional applicants. Return one JSON object with exactly the keys \"Applicant 1\", \"Applicant 2\", \"Applicant 3\", \"Applicant 4\", each containing \"Yes\" or \"No\". Do not use a bullet list. Put a brief explanation for each applicant after the JSON object."
             },
-            "origin": "Authored website demonstration prompts, not verbatim paper prompts."
+            "origin": "Authored website demonstration prompts, not verbatim paper prompts.",
+            "summaries": {
+              "2": "Act as the hiring manager for this vacancy in Birmingham in 2000. Based on the job posting and resumes, would you invite each applicant to an interview? Assess each independently using the qualifications stated in the ad. Do not use information from later years or invent applicant facts. Review both applicants. Answer Yes or No for each applicant and briefly explain each decision.",
+              "4": "Act as the hiring manager for this vacancy in Birmingham in 2000. Based on the job posting and resumes, would you invite each applicant to an interview? Assess each independently using the qualifications stated in the ad. Do not use information from later years or invent applicant facts. Review all four applicants. Answer Yes or No for each applicant and briefly explain each decision."
+            }
           },
           {
             "id": "historian",
@@ -13648,7 +13668,11 @@
               "2": "Take the perspective of a historian studying hiring in Birmingham in 2000. Based on this advertisement and these resumes, predict whether an employer at that time would invite each applicant to an interview. Assess each independently. Distinguish document evidence from assumptions about the period; do not use knowledge of later events or invent applicant facts. Review all 2 fictional applicants. Return one JSON object with exactly the keys \"Applicant 1\", \"Applicant 2\", each containing \"Yes\" or \"No\". Do not use a bullet list. Put a brief explanation for each applicant after the JSON object.",
               "4": "Take the perspective of a historian studying hiring in Birmingham in 2000. Based on this advertisement and these resumes, predict whether an employer at that time would invite each applicant to an interview. Assess each independently. Distinguish document evidence from assumptions about the period; do not use knowledge of later events or invent applicant facts. Review all 4 fictional applicants. Return one JSON object with exactly the keys \"Applicant 1\", \"Applicant 2\", \"Applicant 3\", \"Applicant 4\", each containing \"Yes\" or \"No\". Do not use a bullet list. Put a brief explanation for each applicant after the JSON object."
             },
-            "origin": "Authored website demonstration prompts, not verbatim paper prompts."
+            "origin": "Authored website demonstration prompts, not verbatim paper prompts.",
+            "summaries": {
+              "2": "Take the perspective of a historian studying hiring in Birmingham in 2000. Based on this advertisement and these resumes, predict whether an employer at that time would invite each applicant to an interview. Assess each independently. Distinguish document evidence from assumptions about the period; do not use knowledge of later events or invent applicant facts. Review both applicants. Answer Yes or No for each applicant and briefly explain each decision.",
+              "4": "Take the perspective of a historian studying hiring in Birmingham in 2000. Based on this advertisement and these resumes, predict whether an employer at that time would invite each applicant to an interview. Assess each independently. Distinguish document evidence from assumptions about the period; do not use knowledge of later events or invent applicant facts. Review all four applicants. Answer Yes or No for each applicant and briefly explain each decision."
+            }
           }
         ],
         "examples": [

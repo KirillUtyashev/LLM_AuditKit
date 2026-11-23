@@ -39,8 +39,8 @@ flowchart TD
     E1 -->|No| E3[Hide experiment section and clear stale result]
     E2 --> E4[Input label: job posting plus resumes; inspect through earlier sections]
     E2 --> EP[Select Role-play or Historian with independently evaluated persona and prompt]
-    EP --> E5[Editable hiring prompt and Inspect model decisions button]
-    E5 --> E6{Hiring prompt unchanged?}
+    EP --> E5[Editable prompt summary without output-format boilerplate; full prompts retained]
+    E5 --> E6{Displayed summary unchanged and full saved inputs validate?}
     E6 -->|Yes| E7[Output - Interview decisions: saved answers, probability percentages and explanation]
     E6 -->|No| E8[Disable playback and clear result; no live request]
     E6 -->|Original prompt and selected example validates| F1[From decisions to data: two or four rows for current settings only]

@@ -251,10 +251,17 @@ export function experimentPerspectives(paper) {
   if (!Array.isArray(perspectives) || !perspectives.length || perspectives.some(p => !p
       || ["id", "label", "personaId", "trait", "instruction"].some(key => typeof p[key] !== "string" || !p[key].trim())
       || !p.prompts || typeof p.prompts !== "object" || Array.isArray(p.prompts)
-      || ["2", "4"].some(key => typeof p.prompts[key] !== "string" || !p.prompts[key].trim()))
+      || ["2", "4"].some(key => typeof p.prompts[key] !== "string" || !p.prompts[key].trim())
+      || (p.summaries !== undefined && (!p.summaries || typeof p.summaries !== "object" || Array.isArray(p.summaries)
+        || ["2", "4"].some(key => typeof p.summaries[key] !== "string" || !p.summaries[key].trim()))))
       || new Set(perspectives.map(p => p.id)).size !== perspectives.length
       || new Set(perspectives.map(p => p.personaId)).size !== perspectives.length) return [];
   return perspectives;
+}
+
+// Presentation text is deliberately separate from the saved inference prompt.
+export function experimentPromptText(example) {
+  return example?.promptSummary ?? example?.prompt ?? "";
 }
 
 // Probability of the emitted answer token span, not decision correctness.
@@ -301,7 +308,8 @@ export function experimentExample(paper, variant, perspectiveId) {
         || input.resume === null || decision.candidateId !== candidate.id
         || typeof decision.invite !== "boolean" || !Number.isFinite(decision.logprob) || decision.logprob > 0) return null;
   }
-  return perspective ? {...example, perspectiveLabel: perspective.label} : example;
+  return perspective ? {...example, perspectiveLabel: perspective.label,
+    ...(perspective.summaries ? {promptSummary: perspective.summaries[String(population.length)]} : {})} : example;
 }
 
 export function finalOutputRows(paper, variantId, perspectiveId) {
