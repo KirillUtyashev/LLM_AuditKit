@@ -131,6 +131,8 @@ test(`preview rendering with reveal support ${revealSupported}, failure ${Boolea
     assert.equal(get("population-view").hidden, false);
     assert.equal(get("population-connector").hidden, false);
     assert.equal(get("populated-document").children.length, 2);
+    assert.equal(get("population-caption").hidden, true);
+    assert.equal(get("population-caption").textContent, "");
     assert.equal(get("experiment-candidates").children.length, 2);
     assert.equal(get("experiment-view").hidden, false);
     assert.equal(get("experiment-result").hidden, true);
@@ -216,6 +218,8 @@ test(`preview rendering with reveal support ${revealSupported}, failure ${Boolea
     assert.equal(field(1, "name").textContent, "Jordan Taylor");
     assert.equal(get("experiment-view").hidden, true);
     assert.equal(get("results-view").hidden, true);
+    assert.equal(get("population-caption").hidden, false);
+    assert.equal(get("population-caption").textContent, "Reset details to see saved model results.");
     assert.equal(get("experiment-explanation").textContent, "");
     const editedDownloads = downloadLinks.length;
     get("download-results").fire("click");
@@ -224,6 +228,7 @@ test(`preview rendering with reveal support ${revealSupported}, failure ${Boolea
     assert.equal(field(0, "name").textContent, "Alex Morgan");
     assert.equal(get("experiment-view").hidden, false);
     assert.equal(get("results-view").hidden, false);
+    assert.equal(get("population-caption").hidden, true);
     field(1, "address").fire("click");
     get("candidate-field-dialog").events.cancel({preventDefault() {}});
     assert.equal(get("candidate-field-dialog").open, false);
@@ -497,7 +502,8 @@ test(`preview rendering with reveal support ${revealSupported}, failure ${Boolea
     assert.match(resumeText(get("resume-document")), /Fourth distinct background/);
     get("close-resume-dialog").fire("click");
     assert.equal(get("populated-document").children.length, 4);
-    assert.match(get("population-caption").textContent, /4 applications/);
+    assert.equal(get("population-caption").hidden, true);
+    assert.equal(get("population-caption").textContent, "");
     assert.equal(get("experiment-candidates").children.length, 4);
     assert.match(resumeText(resume(3)), /Riley Parker/);
     get("experiment-candidate-4").fire("click");

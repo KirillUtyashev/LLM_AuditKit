@@ -467,12 +467,6 @@ h2  {
   padding:4px 8px;
   font-size:.875rem
 }
-.synthetic-note {
-  margin:0;
-  text-align:center;
-  color:#737782;
-  font-size:.875rem
-}
 .typeset-resume.populated-resume {
   max-width:none;
   margin:0;

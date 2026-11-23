@@ -1,4 +1,4 @@
-import {csvForRecords, jobPreview, cropStyle, stateFromUrl, loadBundle, resumeDemo, savedResumeVariant, resumePromptText, inlineResumeVariant, resumeBlocks, resumeTextParts, populationExamples, resumeTemplates, experimentExample, finalOutputRows, resultCsv, candidateFieldPresets, replaceCandidateFields} from "./lib.mjs?v=paper-values-27";
+import {csvForRecords, jobPreview, cropStyle, stateFromUrl, loadBundle, resumeDemo, savedResumeVariant, resumePromptText, inlineResumeVariant, resumeBlocks, resumeTextParts, populationExamples, resumeTemplates, experimentExample, finalOutputRows, resultCsv, candidateFieldPresets, replaceCandidateFields} from "./lib.mjs?v=clean-applications-28";
 
 const $ = id => document.getElementById(id);
 const state = {papers: [], paperId: null, step: "archive", query: "", variantId: null};
@@ -162,9 +162,8 @@ function renderPopulation(saved) {
   const available = population !== null;
   fieldTriggers.clear();
   $("go-to-population").disabled = !available;
-  $("population-caption").textContent = candidateEdits.size
-    ? `${population?.length ?? 0} applications. Reset details to see saved model results.`
-    : `${population?.length ?? 0} applications. Click highlighted details to change them.`;
+  $("population-caption").hidden = !candidateEdits.size;
+  $("population-caption").textContent = candidateEdits.size ? "Reset details to see saved model results." : "";
   $("reset-candidates").disabled = !candidateEdits.size;
   $("population-view").hidden = !available;
   $("population-connector").hidden = !available;
@@ -475,7 +474,7 @@ function setupScrollFlow() {
 
 async function start() {
   const bundle = await loadBundle(fetch, location.hostname,
-    new URL("./data/newspapers.json?v=paper-values-27", import.meta.url), new URL("./local/newspapers.json", import.meta.url));
+    new URL("./data/newspapers.json?v=clean-applications-28", import.meta.url), new URL("./local/newspapers.json", import.meta.url));
   state.papers = bundle.newspapers;
   Object.assign(state, stateFromUrl(location.href, state.papers));
   $("paper-select").replaceChildren(...state.papers.map(item => {

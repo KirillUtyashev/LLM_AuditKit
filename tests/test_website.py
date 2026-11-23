@@ -165,9 +165,11 @@ def test_population_section_continues_the_scroll_flow_with_synthetic_candidates(
     assert html.index('id="resume-view"') < html.index('id="population-connector"') < html.index('id="population-view"')
     section = html.split('id="population-view"', 1)[1].split("</section>", 1)[0]
     assert "Templates become applications." in section
-    assert "Click highlighted details to change them." in section
+    assert "Click highlighted details to change them." not in section
     assert "Same qualifications" not in html
-    assert "Synthetic examples." in section
+    assert "Synthetic examples." not in section
+    assert 'class="synthetic-note"' not in section
+    assert 'id="population-caption" class="population-caption" hidden></p>' in section
     assert 'class="resume-grid"' in section
     assert 'role="group" aria-label="Ready applications"' in section
     assert "View full resume" in (WEBSITE / "app.mjs").read_text()

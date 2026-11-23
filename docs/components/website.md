@@ -141,7 +141,8 @@ Below the editor, `Templates become applications.` shows all two or four typeset
 resumes in a two-column document grid, stacked on mobile. Sheets stretch to equal
 height within each row, leaving blank space beneath shorter text. Four templates produce
 four applications, not a paired subset. Each document has a `View full resume`
-button. The examples are explicitly labeled synthetic.
+button. The grid has no introductory count/instruction or synthetic-example
+caption; applicant provenance remains in the saved data and documentation.
 The four available fixed profiles have stable synthetic IDs and deliberately illustrative
 names/addresses; they are not paper assignments, sampled demographic groups,
 or a researcher-defined audit design.
@@ -180,7 +181,7 @@ announces edits. Close/Escape returns focus, and applying a preset focuses the
 replacement field in the rerendered document. `Reset details` restores the exact
 evaluated set. Edits are page-memory only and clear on paper/setting changes.
 Changed candidate inputs hide evaluation/results and disable CSV export; the
-caption explains reset. No old decisions are shown for edited resumes.
+reset notice appears only after edits. No old decisions are shown for edited resumes.
 
 Missing output, unsupported placeholders, or an edited prompt hide this section
 and its connector and clear stale content. Choosing a valid saved preset brings
