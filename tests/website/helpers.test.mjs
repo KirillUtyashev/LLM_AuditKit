@@ -384,11 +384,14 @@ test("source crop positioning uses original image coordinates", () => {
   assert.throws(() => cropStyle(paper, {bbox: [-1, 0, 10, 20]}));
 });
 
-test("public hosts never request a local research bundle", async () => {
+test("public bundles revalidate cached data without ever requesting local research files", async () => {
   const calls = [];
-  const fetcher = async url => {calls.push(url); return {ok: true, json: async () => bundle};};
-  assert.equal(await loadBundle(fetcher, "example.github.io", "public", "private"), bundle);
-  assert.deepEqual(calls, ["public"]);
+  const fetcher = async (url, options) => {
+    assert.equal(options?.cache, "no-cache");
+    calls.push(url); return {ok: true, json: async () => bundle};
+  };
+  assert.equal(await loadBundle(fetcher, "example.github.io", "public?v=release-2", "private"), bundle);
+  assert.deepEqual(calls, ["public?v=release-2"]);
 });
 
 test("loopback preview selects local scan and missing local data falls back", async () => {

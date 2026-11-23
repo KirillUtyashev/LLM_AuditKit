@@ -4,6 +4,10 @@
 
 The optional `website/` directory is an independent buildless HTML/CSS/JS
 showcase, not a pipeline stage. It supports GitHub Pages repository prefixes.
+HTML assets, the helper import and the public data URL use the same release
+query revision. Public and loopback JSON requests revalidate cached responses,
+so new controls do not silently consume an older bundle and show the legacy
+textarea. Previously open/cached HTML may still require a hard refresh.
 
 ## Scroll flow
 

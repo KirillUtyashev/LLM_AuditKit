@@ -266,7 +266,7 @@ export async function loadBundle(fetcher, hostname, publicUrl, localUrl) {
     }
     if (local.status !== 404) throw new Error("Cannot load local newspaper bundle");
   }
-  const response = await fetcher(publicUrl);
+  const response = await fetcher(publicUrl, {cache: "no-cache"});
   if (!response.ok) throw new Error("Cannot load public newspaper bundle");
   const bundle = await response.json();
   if (!bundle.newspapers?.length) throw new Error("Empty public newspaper bundle");

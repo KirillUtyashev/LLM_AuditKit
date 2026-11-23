@@ -40,7 +40,7 @@ def test_website_local_references_and_accessible_targets():
         assert (WEBSITE / urlsplit(target).path).exists(), target
     app = (WEBSITE / "app.mjs").read_text()
     assert set(re.findall(r'\$\("([a-z0-9-]+)"\)', app)) <= set(page.ids)
-    assert 'new URL("./data/newspapers.json", import.meta.url)' in app
+    assert re.search(r'new URL\("\./data/newspapers\.json\?v=[^"\s]+", import\.meta\.url\)', app)
     assert "innerHTML" not in app
     assert "eval(" not in app
     assert "prefers-reduced-motion" in (WEBSITE / "styles.css").read_text()
@@ -107,6 +107,7 @@ def test_changed_resume_assets_have_matching_cache_versions():
         re.search(r'\./styles\.css\?v=([^"\s]+)', html).group(1),
         re.search(r'\./app\.mjs\?v=([^"\s]+)', html).group(1),
         re.search(r'\./lib\.mjs\?v=([^"\s]+)', app).group(1),
+        re.search(r'\./data/newspapers\.json\?v=([^"\s]+)', app).group(1),
     ]
     assert len(set(versions)) == 1
 

@@ -136,9 +136,12 @@ Highlighted placeholders explain on hover or keyboard focus that candidate
 details are intentionally filled in next; Escape dismisses the explanation.
 The UI uses plain `resume` without accents.
 
-HTML asset URLs and the app's helper-module import share a cache revision;
-bump all three together when changing their DOM/data contract. Local JSON is
-revalidated on reload. Startup rendering errors show a visible reload message
+HTML asset URLs, the helper-module import and the public data URL share a cache
+revision; bump all four together when changing their DOM/data contract. Both
+public and local JSON revalidate on reload. This prevents cached pre-control
+data from silently falling back to the older textarea after a UI update. An
+already open/cached HTML page may still need a hard refresh after deployment.
+Startup rendering errors show a visible reload message
 instead of leaving empty resume panels.
 
 Saved outputs were generated through AuditKit's template-generation API with
