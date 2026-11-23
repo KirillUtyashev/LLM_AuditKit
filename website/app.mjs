@@ -1,4 +1,4 @@
-import {csvForRecords, jobPreview, cropStyle, stateFromUrl, loadBundle, resumeDemo, savedResumeVariant, resumePromptText, inlineResumeVariant, resumeBlocks, resumeTextParts, populationExamples, resumeTemplates, experimentExample, experimentPerspectives, formatAnswerProbability, finalOutputRows, resultCsv, candidateFieldPresets, replaceCandidateFields} from "./lib.mjs?v=perspectives-29";
+import {csvForRecords, jobPreview, cropStyle, stateFromUrl, loadBundle, resumeDemo, savedResumeVariant, resumePromptText, inlineResumeVariant, resumeBlocks, resumeTextParts, populationExamples, resumeTemplates, experimentExample, experimentPerspectives, formatAnswerProbability, finalOutputRows, resultCsv, candidateFieldPresets, replaceCandidateFields} from "./lib.mjs?v=experiment-artifacts-30";
 
 const $ = id => document.getElementById(id);
 const state = {papers: [], paperId: null, step: "archive", query: "", variantId: null, perspectiveId: null};
@@ -249,7 +249,6 @@ function renderExperiment(saved) {
     }); return button;
   }));
   const example = saved ? currentExperiment() : null;
-  $("experiment-candidates").replaceChildren();
   $("experiment-view").hidden = !example;
   $("experiment-connector").hidden = !example;
   clearExperimentResult();
@@ -266,11 +265,6 @@ function renderExperiment(saved) {
     return;
   }
   $("experiment-prompt").value = experimentDrafts.get(experimentDraftKey()) ?? example.prompt;
-  $("experiment-candidates").replaceChildren(...example.candidates.map((candidate, index) => {
-    const button = document.createElement("button"); button.type = "button"; button.textContent = candidate.label;
-    button.id = `experiment-candidate-${index + 1}`;
-    button.addEventListener("click", () => showExperimentCandidate(index)); return button;
-  }));
   $("experiment-model").textContent = example.model === "gpt-4o-2024-08-06" ? "GPT-4o" : example.model;
   $("experiment-model").title = `${example.model} · previously recorded response; no live generation.`;
   updateExperimentButton();
@@ -329,13 +323,6 @@ function showExperimentResult() {
   $("experiment-explanation").textContent = example.explanation;
   $("experiment-result").hidden = false;
   $("experiment-result").scrollIntoView({behavior: "instant", block: "nearest"});
-}
-
-function showExperimentCandidate(index) {
-  const example = currentExperiment();
-  if (!example) return;
-  const saved = savedResumeVariant(resumeDemo(paper()), state.variantId, $("variant-prompt").value);
-  showPopulatedCandidate(currentPopulation(saved)[index]);
 }
 
 function showPopulatedCandidate(candidate) {
@@ -491,7 +478,7 @@ function setupScrollFlow() {
 
 async function start() {
   const bundle = await loadBundle(fetch, location.hostname,
-    new URL("./data/newspapers.json?v=perspectives-29", import.meta.url), new URL("./local/newspapers.json", import.meta.url));
+    new URL("./data/newspapers.json?v=experiment-artifacts-30", import.meta.url), new URL("./local/newspapers.json", import.meta.url));
   state.papers = bundle.newspapers;
   Object.assign(state, stateFromUrl(location.href, state.papers));
   $("paper-select").replaceChildren(...state.papers.map(item => {
@@ -552,13 +539,6 @@ async function start() {
   const closeCandidateField = () => {$("candidate-field-dialog").close(); activeFieldTrigger?.focus();};
   $("close-candidate-field").addEventListener("click", closeCandidateField);
   $("candidate-field-dialog").addEventListener("cancel", event => {event.preventDefault(); closeCandidateField();});
-  $("experiment-job").addEventListener("click", () => {
-    const example = currentExperiment();
-    if (!example) return;
-    $("job-dialog-title").textContent = "Job posting";
-    $("job-full-text").textContent = example.jobPosting;
-    $("job-dialog").showModal(); $("job-dialog").scrollTo(0, 0);
-  });
   $("close-resume-dialog").addEventListener("click", () => $("resume-dialog").close());
   $("resume-source").addEventListener("click", () => {
     const demo = resumeDemo(paper());

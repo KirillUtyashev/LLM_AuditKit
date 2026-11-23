@@ -206,8 +206,10 @@ artifacts remain local.
 ## Saved experiment evaluation
 
 `How does the model decide?` follows population with the same continuous-line
-connector. Small input-review buttons open the exact job text and all two or four typeset
-candidate resumes. `Role-play` and `Historian` buttons select two authored hiring
+connector. `Input · Job posting + resumes` replaces the redundant input-review
+button row. Jobs remain inspectable in the extraction section and full resumes
+through their cards above. `Output · Interview decisions` labels the revealed
+results, not an empty placeholder before playback. `Role-play` and `Historian` buttons select two authored hiring
 perspectives above the editable prompt. Role-play acts as a period hiring manager;
 Historian predicts an employer's period decision from a descriptive viewpoint.
 Both use the supplied advertisement/resumes and prohibit invented applicant facts

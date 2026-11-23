@@ -80,7 +80,7 @@ def test_extraction_and_generation_labels_identify_their_inputs_and_outputs():
     resumes = html.split('id="resume-view"', 1)[1].split("</section>", 1)[0]
     assert '<span>Input</span><span aria-hidden="true">·</span>Job posting + prompt' in resumes
     assert '<span>Output</span><span aria-hidden="true">·</span>Resume templates' in resumes
-    assert html.count('class="artifact-label"') == 4
+    assert html.count('class="artifact-label"') == 6
     assert "Advertisements from the page." not in jobs
     css = (WEBSITE / "styles.css").read_text()
     assert "flex-wrap:wrap" in re.search(r"\.artifact-label\s*\{([^}]+)\}", css).group(1)
@@ -212,7 +212,12 @@ def test_experiment_section_has_editable_prompt_inputs_and_explicit_saved_respon
     section = html.split('id="experiment-view"', 1)[1].split("</section>", 1)[0]
     assert "How does the model decide?" in section
     assert '<textarea id="experiment-prompt"' in section and 'for="experiment-prompt"' in section
-    assert all(f'id="experiment-{field}"' in section for field in ["job", "candidates"])
+    assert '<span>Input</span><span aria-hidden="true">·</span>Job posting + resumes' in section
+    assert '<span>Output</span><span aria-hidden="true">·</span>Interview decisions' in section
+    assert section.index('Job posting + resumes') < section.index('id="experiment-perspectives"')
+    assert section.index('id="experiment-result"') < section.index('Interview decisions') < section.index('id="experiment-decisions"')
+    assert "Review inputs" not in section
+    assert 'id="experiment-job"' not in section and 'id="experiment-candidates"' not in section
     assert "Saved model response" not in section and "Inspect model decisions" in section
     assert 'id="experiment-perspectives"' in section and 'aria-label="Hiring perspective"' in section
     assert 'id="experiment-result" aria-live="polite" hidden' in section

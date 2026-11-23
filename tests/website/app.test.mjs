@@ -133,7 +133,7 @@ test(`preview rendering with reveal support ${revealSupported}, failure ${Boolea
     assert.equal(get("populated-document").children.length, 2);
     assert.equal(get("population-caption").hidden, true);
     assert.equal(get("population-caption").textContent, "");
-    assert.equal(get("experiment-candidates").children.length, 2);
+    assert.ok(!nodes.has("experiment-candidates") && !nodes.has("experiment-job"));
     assert.equal(get("experiment-view").hidden, false);
     assert.equal(get("experiment-result").hidden, true);
     assert.equal(get("results-view").hidden, false);
@@ -157,11 +157,8 @@ test(`preview rendering with reveal support ${revealSupported}, failure ${Boolea
     assert.equal(get("experiment-prompt").value, hiringPrompt);
     assert.equal(get("experiment-model").textContent, "synthetic-test-model");
     assert.match(get("experiment-model").title, /previously recorded response/);
-    get("experiment-job").fire("click");
-    assert.equal(get("job-full-text").textContent, bundle.newspapers[0].records[0].text);
-    get("close-job-dialog").fire("click");
     for (const [index, name] of ["Alex Morgan", "Jordan Taylor"].entries()) {
-      get(`experiment-candidate-${index + 1}`).fire("click");
+      get("populated-document").children[index].children[0].children[1].fire("click");
       assert.equal(get("resume-dialog").open, true);
       assert.equal(get("resume-dialog-title").textContent, `Candidate ${index + 1}`);
       assert.ok(resumeText(get("resume-document")).includes(name));
@@ -417,7 +414,6 @@ test(`preview rendering with reveal support ${revealSupported}, failure ${Boolea
     assert.equal(get("resume-dialog").open, false);
     assert.equal(get("generate-resume").disabled, true);
     assert.equal(get("population-view").hidden, true);
-    assert.equal(get("experiment-candidates").children.length, 0);
     assert.equal(get("candidate-status").textContent, "");
     assert.equal(get("experiment-view").hidden, true);
     assert.equal(get("run-experiment").disabled, true);
@@ -458,9 +454,6 @@ test(`preview rendering with reveal support ${revealSupported}, failure ${Boolea
     get("variant-prompt").value = secondDemo.resumeDemo.variants[0].promptSummary;
     get("variant-prompt").fire("input", get("variant-prompt").value);
     assert.equal(get("generate-resume").disabled, false);
-    get("experiment-job").fire("click");
-    assert.equal(get("job-full-text").textContent, secondDemo.records[0].text);
-    get("close-job-dialog").fire("click");
     globalThis.location.href = "https://example.org/kit/?paper=" + bundle.newspapers[0].id + "#resumes";
     windowEvents.popstate();
     assert.equal(get("variant-prompt").value, draft); // Drafts never leak to the second paper.
@@ -487,7 +480,7 @@ test(`preview rendering with reveal support ${revealSupported}, failure ${Boolea
     assert.deepEqual(get("candidate-field-options").children.map(node => node.textContent), ["10 Test Road", "20 Test Road", "30 Test Road", "40 Test Road"]);
     get("close-candidate-field").fire("click");
     assert.match(resumeText(resume(1)), /Other Fictional College/);
-    get("experiment-candidate-2").fire("click");
+    get("populated-document").children[1].children[0].children[1].fire("click");
     assert.match(resumeText(get("resume-document")), /Other Fictional College/);
     assert.ok(!resumeText(get("resume-document")).includes("{{"));
     get("job-skill-count").value = "4";
@@ -507,9 +500,8 @@ test(`preview rendering with reveal support ${revealSupported}, failure ${Boolea
     assert.equal(get("populated-document").children.length, 4);
     assert.equal(get("population-caption").hidden, true);
     assert.equal(get("population-caption").textContent, "");
-    assert.equal(get("experiment-candidates").children.length, 4);
     assert.match(resumeText(resume(3)), /Riley Parker/);
-    get("experiment-candidate-4").fire("click");
+    get("populated-document").children[3].children[0].children[1].fire("click");
     assert.match(resumeText(get("resume-document")), /Riley Parker/);
     get("close-resume-dialog").fire("click");
     get("run-experiment").fire("click");
@@ -595,7 +587,6 @@ test(`preview rendering with reveal support ${revealSupported}, failure ${Boolea
     get("resume-count").fire("change", "2");
     assert.equal(get("generate-resume").disabled, false);
     assert.equal(get("populated-document").children.length, 2);
-    assert.equal(get("experiment-candidates").children.length, 2);
     assert.equal(get("final-output-rows").children.length, 2);
     assert.equal(get("experiment-decisions").children.length, 0);
     assert.equal(get("experiment-prompt").value, "Synthetic historian prompt for two applicants");

@@ -239,8 +239,10 @@ optional section; the published Boston bundle includes the complete examples.
 
 ## How does the model decide?
 
-Continue scrolling or open <http://127.0.0.1:8765/#experiment>. Review the posting
-or any candidate's exact resume using the input buttons. Choose `Role-play`
+Continue scrolling or open <http://127.0.0.1:8765/#experiment>.
+`Input · Job posting + resumes` identifies the supplied artifacts without another
+button row; inspect jobs and full resumes in the earlier sections.
+`Output · Interview decisions` appears with the revealed results. Choose `Role-play`
 (a period hiring manager) or `Historian` (a descriptive prediction of an employer's
 period decisions). The displayed prompt is the actual saved question, not a gist;
 these two versions were authored for the website, not copied verbatim from the paper.

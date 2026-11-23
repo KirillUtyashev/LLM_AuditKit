@@ -505,11 +505,6 @@ h2  {
 .field-options button {
   text-align:left
 }
-.experiment-candidates {
-  display:flex;
-  flex-wrap:wrap;
-  gap:8px
-}
 .candidate-value {
   border-radius:2px
 }
@@ -523,20 +518,8 @@ h2  {
   max-width:780px;
   margin:28px auto 0
 }
-.experiment-inputs {
-  display:flex;
-  align-items:center;
-  flex-wrap:wrap;
-  gap:8px;
-  margin-bottom:18px
-}
-.experiment-inputs span {
-  margin-right:8px;
-  color:#737782;
-  font-size:.875rem
-}
-.experiment-inputs button {
-  font-size:.875rem
+#experiment-result > .artifact-label {
+  margin-bottom:16px
 }
 #experiment-prompt {
   display:block;
