@@ -77,7 +77,7 @@ in its prose. The free-text editor and old variant buttons are hidden for
 `inlineControls` bundles. Such bundles must declare all eight unique valid
 settings and matching template cardinalities; incomplete or ambiguous data is
 rejected rather than inventing an output. Setting changes select one saved
-variant, clear the open document/response and reset candidate selection.
+variant, clear the open document/response and reset candidate edits.
 The settings are remembered independently per paper/job in page memory.
 Names, addresses, school and dates use buttons that explain deterministic population;
 a next-step button scrolls there and focuses its heading. Escape dismisses the
@@ -136,21 +136,21 @@ The `#resumes` bookmark is accepted only when such a demo exists.
 
 ## Synthetic template population
 
-Below the editor, `Templates become candidates.` shows one typeset
-resume and two small candidate buttons. The caption is `Different resumes.
-Ready for review.` and the examples are explicitly labeled synthetic.
-The two fixed profiles have stable synthetic IDs and deliberately illustrative
+Below the editor, `Templates become applications.` shows all two or four typeset
+resumes in a two-column document grid, stacked on mobile. Four templates produce
+four applications, not a paired subset. Each document has a `View full resume`
+button. The examples are explicitly labeled synthetic.
+The four available fixed profiles have stable synthetic IDs and deliberately illustrative
 names/addresses; they are not paper assignments, sampled demographic groups,
 or a researcher-defined audit design.
 
-The section uses two explicitly assigned templates from the current saved
-generation. A four-template setting still populates only two for the paired
-hiring example; its caption explains that the others remain inspectable.
+The section uses every explicitly assigned template from the current saved
+generation, with one distinct candidate per template.
 Explicit candidate-ID to template-ID assignments bind each candidate
 to their own generated background; content-derived template IDs are not display
 positions. Missing, duplicate, reused or incompatible mappings hide population
 rather than copying one template for both candidates. Single-template artifacts
-can still be previewed but cannot drive this paired example.
+can still be previewed but cannot drive this two/four-applicant example.
 Only declared placeholder tokens are replaced within each assigned template;
 that template's prose stays unchanged. Each variant declares `placeholderFields`;
 every template must contain exactly that field set. Explicit assignment `values`
@@ -161,41 +161,50 @@ not overridable by assignments. Missing, extra, blank or unresolved values rejec
 population. Fixed fictional schools and era-appropriate date ranges are synthetic
 presentation assignments, not inferred research covariates. New evaluations use
 the fully populated resumes, and matching rejects changed assignment values.
-Switching candidates therefore
-changes the background as well as personal details. It is not a same-qualification
+Candidates therefore have different generated backgrounds, not merely different
+personal details. It is not a same-qualification
 identity comparison, and no such claim is shown.
-A brief highlight marks changed values when switching candidates, with no
-animation under reduced-motion preferences. Buttons expose pressed state, and
-a concise live status announces the selected candidate without rereading the
-entire resume. The same document renderer is used for the template and filled
-example; no extra text-card border or new API request is introduced.
+Highlighted populated fields are keyboard-accessible buttons that open a native
+dialog with explicit replacement presets. Names/addresses select from the four
+fictional profiles; schools select from the current set. Date presets update a
+coherent group of education/employment fields together, keeping the final work
+end date unchanged. Edits preserve durable candidate/template IDs and generated
+prose. A brief changed-value highlight respects reduced motion; a live status
+announces edits. Close/Escape returns focus, and applying a preset focuses the
+replacement field in the rerendered document. `Reset details` restores the exact
+evaluated set. Edits are page-memory only and clear on paper/setting changes.
+Changed candidate inputs hide evaluation/results and disable CSV export; the
+caption explains reset. No old decisions are shown for edited resumes.
 
 Missing output, unsupported placeholders, or an edited prompt hide this section
 and its connector and clear stale content. Choosing a valid saved preset brings
 it back. `#population` opens this section only when the paper's default preset
 supports the fixed examples; scrolling keeps the bookmark current. Hiding an
 active population section falls back to the resume section or archive bookmark.
-Paper changes reset candidate selection. No candidate data is persisted.
+No candidate data is persisted.
 
 ## Saved experiment evaluation
 
 `How does the model decide?` follows population with the same continuous-line
-connector. Small input-review buttons open the exact job text and both typeset
+connector. Small input-review buttons open the exact job text and all two or four typeset
 candidate resumes. A labeled editable hiring-prompt window and one `Run
 experiment` button sit below. Only the fixed model name is shown beside it.
-Clicking reveals the two saved interview decisions and the original explanation
+Clicking reveals the matching number of saved interview decisions and the original explanation
 as plain text, not a reconstructed or invented answer. The model and button
 tooltips explain that responses are previously recorded; no saved-run suffix or
 response heading is shown. There is no simulated waiting or browser API call.
 
-The three newspapers' new year-prompt resume pairs were each rerun
+The three newspapers' year-prompt applicant sets were each run
 through `ExperimentRunner` and the shared EDSL adapter, using
 `gpt-4o-2024-08-06`, temperature 0, and token log probabilities. The existing
 runner validated `Yes`/`No` decisions and their emitted-token log probabilities.
 This is illustrative, not an estimate of bias or a reproduction of the paper's
 assignments. Raw checkpoints,
 YAML, persona/system text and full rendered prompts stay in the ignored local
-inline-controls-v1 directory; earlier year, style and one-template runs remain untouched.
+controlled-fields-v1 directory for two applicants and ready-resumes-v1 for four;
+earlier year, style and paired-only four-template runs remain untouched.
+Four-applicant evaluations have new experiment identities and prompt files
+listing all four resumes; they do not reuse paired decisions or logprobs.
 Saved exports retain request/scenario/experiment IDs,
 model configuration, exact source text, candidate/template IDs, ordered inputs and logprobs.
 
@@ -204,14 +213,16 @@ templates and their assignments, ordered candidate IDs/names/addresses/resumes, 
 decisions and provenance match. Prompt edits disable `Run experiment` and clear
 the previous result; they are not submitted. Generation edits, changed source
 data, missing results or a paper/preset change cannot reuse a stale response.
-Hiring-prompt drafts are scoped to paper/job and survive preset switches in page
+The expected hiring prompt may be declared per variant through `experimentPrompt`,
+falling back to the demo's default prompt for legacy data. It must exactly match
+the evaluated prompt. Hiring-prompt drafts are scoped to paper/job/variant in page
 memory only. `#experiment` and scroll bookmarks follow the same optional-stage
 rules as population. The published Boston bundle includes these examples;
 papers without experiment payloads hide this section and connector.
 
 ## Final candidate-output table
 
-`From decisions to data.` ends the flow with two candidate-level rows from the
+`From decisions to data.` ends the flow with two or four candidate-level rows from the
 selected newspaper and settings' validated evaluation. The visible columns are resume prompt,
 candidate, Yes/No decision, emitted-answer logprob and model. Logprob is the
 natural log probability of the emitted answer, not a calibrated probability of
@@ -242,7 +253,7 @@ researchers to scale to thousands of applications and take the data into their
 own analysis. The demo does not manufacture a large dataset or draw statistical
 conclusions from these small examples. Regression remains a separate researcher step.
 
-Beyond fixed synthetic substitution and saved-output playback, no uploads,
+Beyond synthetic preset substitution and saved-output playback, no uploads,
 live browser OCR/generation, research sampling, live experiments or regression
 are implemented.
 These are illustrative prompt presets and candidates, not a
@@ -253,7 +264,7 @@ validated research comparison or hiring recommendation.
 The default `website/data/newspapers.json` and three newspaper images under
 `website/assets/` are the maintainer-selected public display copies. Each has
 its own saved OCR ads and eight generated setting combinations, each with two
-or four templates and one real saved paired evaluation. Boston sharing was explicitly approved on 19 November 2026;
+or four templates and a real saved evaluation of that entire applicant set. Boston sharing was explicitly approved on 19 November 2026;
 Chicago 1970 and Birmingham 2000 were requested as additions on 22 November.
 Third-party newspaper content is not relicensed as MIT. Chicago's ProQuest
 reproduction notice is preserved; dates for Chicago and Birmingham are visible

@@ -51,7 +51,7 @@ The selector offers **Boston, 1990**, **Chicago, 1970**, and **Birmingham, 2000*
 Each has its own scan and actual AuditKit OCR output. Each also has a matching
 year-specific job-agency prompt with eight saved setting combinations: 2/4
 templates, 2/4 job-related skills, and entry-level/experienced backgrounds.
-Every combination has genuine generated templates and a real evaluation of two
+Every combination has genuine generated templates and a real evaluation of all two or four
 explicitly assigned candidates. Switching papers changes the complete
 walkthrough, not just its opening image. Candidate names/addresses remain the
 same fixed fictional demonstration profiles; work histories and model outcomes
@@ -185,15 +185,15 @@ paper without a matching saved demo hides the whole resume section rather than
 reusing another newspaper's image or prompt. The approved public Boston bundle
 includes the saved examples; other local research artifacts are not published.
 
-## Templates become candidates
+## Templates become applications
 
 Scroll below the editor or open <http://127.0.0.1:8765/#population>.
-Two explicitly synthetic profiles fill identity, school and date fields in their own assigned
-templates. Stable candidate IDs map to content-derived template IDs; no template
-is reused for both. For four-template generation, exactly two are explicitly
-assigned for this paired hiring demonstration; all four remain inspectable.
-A caption makes this distinction visible. Candidate buttons switch the document, including its distinct
-generated work history. A short highlight marks the populated personal details.
+Two or four explicitly synthetic profiles fill identity, school and date fields
+in their own assigned templates. Every selected template becomes one application;
+stable candidate IDs map to distinct content-derived template IDs. All resumes
+appear in a two-column document grid (stacked on mobile); four produces a 2×2 grid.
+`View full resume` enlarges any application. Highlighted fields are buttons:
+click to choose a preset name, address, school or coherent date range.
 The prose within each original template stays unchanged. Motion is disabled for
 reduced-motion preferences. This is not a controlled same-qualification comparison.
 
@@ -204,7 +204,14 @@ Harbor/Riverbend schools are assigned, with education years followed by work
 dates ending before the newspaper date. Entry-level examples receive a one-year
 work range; experienced examples receive six years. Birmingham also receives
 an in-school work range. These illustrative assignments are deterministic,
-not a researcher sampling design. Missing, extra or blank fields are rejected.
+not a researcher sampling design. Four-template settings add fictional Elm Grove
+and Cedar Valley schools. Missing, extra or blank fields are rejected.
+
+Edits exist only in page memory and keep candidate/template IDs and generated
+prose unchanged. Date presets move education and employment starts together,
+not disconnected years. Changed inputs hide the saved experiment and CSV until
+`Reset details` restores the evaluated resumes. Paper or generation-setting
+changes clear edits. The browser does not evaluate changed applications.
 
 These are fixed local presentation examples, not the paper's sampling procedure
 or research assignments. No inference or extra fetch runs when switching.
@@ -217,23 +224,26 @@ optional section; the published Boston bundle includes the complete examples.
 ## How does the model decide?
 
 Continue scrolling or open <http://127.0.0.1:8765/#experiment>. Review the posting
-or either candidate's exact resume using the input buttons. `Run experiment`
+or any candidate's exact resume using the input buttons. `Run experiment`
 reveals the saved interview decisions and original model explanation for the
 unchanged prompt. Editing the hiring prompt disables playback and clears the
 result; this static site cannot run a new model request.
 
-Each newspaper's eight selected resume pairs were actually run through `ExperimentRunner`
+Each newspaper's eight selected applicant sets were actually run through `ExperimentRunner`
 and shared inference with `gpt-4o-2024-08-06`, temperature 0 and log probabilities.
 These small synthetic examples are not evidence
 of bias or a replication of the paper. No browser inference runs.
 
 YAML, fixed source snapshots, prompt/persona files and CSV checkpoints live under
-ignored `website/local/controlled-fields-v1/<paper>/experiment/`. Earlier one-template
+ignored `website/local/controlled-fields-v1/<paper>/experiment/` for two-applicant
+settings and `website/local/ready-resumes-v1/<paper>/` for four-applicant settings.
+All four templates are reused from genuine generation, with fresh four-applicant
+prompts, decisions and log probabilities—not old paired outcomes. Earlier one-template
 and style-comparison runs remain untouched in their old directories and are not
 reused for the new resumes. To explicitly execute a pending Boston evaluation (paid):
 
 ```bash
-EDSL_DATABASE_PATH=sqlite:///website/local/controlled-fields-v1/boston-cache.db PYTHONPATH=src .venv/bin/python website/local/controlled_fields_demo.py boston-1990 experiments
+EDSL_DATABASE_PATH=sqlite:///website/local/ready-resumes-v1/boston-cache.db PYTHONPATH=src .venv/bin/python website/local/ready_resumes_demo.py boston-1990
 ```
 
 Exported examples preserve exact input bindings, original rendered prompts,
@@ -245,7 +255,7 @@ is public; other research runs and local directories remain excluded.
 ## From decisions to data
 
 Open <http://127.0.0.1:8765/#results> or continue scrolling. The final table shows
-the selected newspaper and settings' two candidate evaluations: candidate, decision,
+the selected newspaper and settings' two or four candidate evaluations: candidate, decision,
 emitted-answer logprob and model. `Download CSV` preserves full-precision logprobs,
 numeric decisions, explanations and stable candidate/template/request/model IDs.
 The displayed logprob is rounded; it is not a calibrated hiring probability.

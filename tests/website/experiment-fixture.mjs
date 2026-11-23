@@ -6,7 +6,7 @@ export function pairedVariant(variant) {
     {id: `synthetic-template-${variant.id}-a`, text: variant.template},
     {id: `synthetic-template-${variant.id}-b`, text: `{{name}}\n{{address}}\n\nEXPERIENCE\nDifferent fictional employer for ${variant.label}\n- Different work history and duties`},
   ];
-  return {...variant, templates, assignments: DEMO_CANDIDATES.map((candidate, index) => ({candidateId: candidate.id, templateId: templates[index].id}))};
+  return {...variant, templates, assignments: DEMO_CANDIDATES.slice(0, templates.length).map((candidate, index) => ({candidateId: candidate.id, templateId: templates[index].id}))};
 }
 
 export function syntheticExperiment(paper) {
@@ -14,9 +14,9 @@ export function syntheticExperiment(paper) {
   const prompt = "Evaluate these fictional applicants and explain each interview decision.";
   return {prompt, examples: paper.resumeDemo.variants.map(variant => ({
     variantId: variant.id, generationPrompt: variant.prompt, template: variant.template,
-    jobId: job.id, jobPosting: job.text, prompt,
+    jobId: job.id, jobPosting: job.text, prompt: variant.experimentPrompt ?? prompt,
     candidates: populationExamples(variant).map(({template, ...input}) => input),
-    decisions: DEMO_CANDIDATES.map((candidate, index) => ({candidateId: candidate.id, invite: index === 0, logprob: -0.1})),
+    decisions: populationExamples(variant).map((candidate, index) => ({candidateId: candidate.id, invite: index === 0, logprob: -0.1})),
     explanation: `Synthetic explanation for ${variant.id}; <script>literal text only</script>.`,
     requestId: `synthetic-request-${variant.id}`, scenarioId: `synthetic-scenario-${variant.id}`,
     experimentId: "synthetic-test-experiment", modelConfigId: "synthetic-model-config",
@@ -33,6 +33,7 @@ export function inlineVariants(prefix = "controls") {
     if (resumes === 4) variant.templates.push(
       {id: `${id}-third`, text: `{{name}}\n{{address}}\nThird distinct background for ${id}`},
       {id: `${id}-fourth`, text: `{{name}}\n{{address}}\nFourth distinct background for ${id}`});
+    variant.assignments = DEMO_CANDIDATES.slice(0, resumes).map((candidate, index) => ({candidateId: candidate.id, templateId: variant.templates[index].id}));
     return variant;
   })));
 }

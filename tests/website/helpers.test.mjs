@@ -1,11 +1,53 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import {readFile} from "node:fs/promises";
-import {CSV_COLUMNS, chooseRecord, csvForRecords, filterRecords, formatDate, normalizedBox, stateFromUrl, cropStyle, loadBundle, jobPreview, resumeDemo, savedResumeVariant, resumePromptText, inlineResumeVariant, resumeBlocks, resumeTextParts, DEMO_CANDIDATES, populateResumeExample, populationExamples, resumeTemplates, experimentExample, finalOutputRows, resultCsv, RESULT_COLUMNS} from "../../website/lib.mjs";
+import {CSV_COLUMNS, chooseRecord, csvForRecords, filterRecords, formatDate, normalizedBox, stateFromUrl, cropStyle, loadBundle, jobPreview, resumeDemo, savedResumeVariant, resumePromptText, inlineResumeVariant, resumeBlocks, resumeTextParts, DEMO_CANDIDATES, populateResumeExample, populationExamples, resumeTemplates, experimentExample, finalOutputRows, resultCsv, RESULT_COLUMNS, candidateFieldPresets, replaceCandidateFields} from "../../website/lib.mjs";
 import {syntheticExperiment, pairedVariant, inlineVariants, withControlledFields} from "./experiment-fixture.mjs";
 
 const bundle = JSON.parse(await readFile(new URL("../../website/data/archive-newspapers.json", import.meta.url), "utf8"));
 const papers = bundle.newspapers;
+
+test("replacement presets preserve prose and stable IDs, and shift date ranges together", () => {
+  const variant = withControlledFields(inlineVariants().find(v => v.settings.resumes === 4));
+  const population = populationExamples(variant);
+  const original = population[3];
+  const before = JSON.stringify(original);
+  for (const field of ["name", "address", "university", "work_start_year"]) {
+    const presets = candidateFieldPresets(original, population, field);
+    assert.ok(presets.length >= 2);
+    const changed = replaceCandidateFields(original, presets[1].changes);
+    assert.equal(changed.id, original.id);
+    assert.equal(changed.templateId, original.templateId);
+    assert.equal(changed.template, original.template);
+    assert.ok(!changed.resume.includes("{{"));
+  }
+  const dates = replaceCandidateFields(original, candidateFieldPresets(original, population, "education_end_year")[1].changes);
+  assert.equal(dates.values.work_start_year, "1987");
+  assert.equal(dates.values.education_start_year, "1983");
+  assert.equal(dates.values.education_end_year, "1987");
+  assert.equal(dates.values.work_end_year, "1990");
+  assert.equal(dates.name, original.name);
+  assert.equal(JSON.stringify(original), before);
+  assert.deepEqual(candidateFieldPresets(original, population, "unknown"), []);
+  for (const change of [{id: "replacement-id"}, {template: "Changed"}, {name: ""}, {values: {unknown: "x"}}, {values: []}, {values: null}])
+    assert.equal(replaceCandidateFields(original, change), null);
+});
+
+test("four-template settings require four distinct assignments and matching four-applicant evaluations", () => {
+  const variant = inlineVariants().find(v => v.settings.resumes === 4);
+  variant.experimentPrompt = "Evaluate exactly four applicants.";
+  const paper = {...papers[0], resumeDemo: {jobId: papers[0].records[0].id, variants: [variant]}};
+  paper.experimentDemo = syntheticExperiment(paper);
+  assert.equal(experimentExample(paper, variant).candidates.length, 4);
+  assert.equal(finalOutputRows(paper).length, 4);
+  assert.equal(populationExamples({...variant, assignments: variant.assignments.slice(0, 2)}), null);
+  assert.equal(populationExamples({...variant, assignments: [...variant.assignments, variant.assignments[0]]}), null);
+  const changed = structuredClone(paper);
+  changed.experimentDemo.examples[0].candidates = changed.experimentDemo.examples[0].candidates.slice(0, 2);
+  changed.experimentDemo.examples[0].decisions = changed.experimentDemo.examples[0].decisions.slice(0, 2);
+  assert.equal(experimentExample(changed, variant), null);
+  assert.equal(experimentExample(paper, {...variant, experimentPrompt: "Evaluate two applicants."}), null);
+});
 
 test("controlled school and date fields stay blank until exact assignment population", () => {
   const variant = withControlledFields(pairedVariant({id: "fields", label: "Fields", prompt: "Controlled fields",
@@ -48,7 +90,7 @@ test("published papers each expose their own full pipeline without local assets"
   assert.equal(published.newspapers[0].records.length, 59);
   const jobIds = new Set(), requestIds = new Set(), templateIds = new Set();
   for (const paper of published.newspapers) {
-    assert.equal(finalOutputRows(paper).length, 16);
+    assert.equal(finalOutputRows(paper).length, 24);
     const url = `https://example.org/LLM_AuditKit/?paper=${paper.id}#results`;
     assert.deepEqual(stateFromUrl(url, published.newspapers), {paperId: paper.id, step: "results"});
     assert.ok(paper.imageSrc.startsWith("./assets/"));
@@ -61,7 +103,7 @@ test("published papers each expose their own full pipeline without local assets"
     assert.ok(paper.featuredIds.includes(demo.jobId));
     for (const variant of demo.variants) {
       assert.equal(resumeTemplates(variant).length, variant.settings.resumes);
-      assert.equal(finalOutputRows(paper, variant.id).length, 2);
+      assert.equal(finalOutputRows(paper, variant.id).length, variant.settings.resumes);
       assert.ok(variant.prompt.length > resumePromptText(variant).length);
       const example = experimentExample(paper, variant);
       assert.ok(example);
@@ -225,7 +267,7 @@ test("population demo replaces only explicit name/address tokens, without changi
   }
   assert.notEqual(copies[0], copies[1]);
   assert.equal(source, "{{name}}\n{{address}}\nEXPERIENCE\nFive years of office work.\nRef: {{name}}");
-  assert.equal(new Set(DEMO_CANDIDATES.map(candidate => candidate.id)).size, 2);
+  assert.equal(new Set(DEMO_CANDIDATES.map(candidate => candidate.id)).size, 4);
   assert.ok(Object.isFrozen(DEMO_CANDIDATES) && DEMO_CANDIDATES.every(Object.isFrozen));
   for (const template of [undefined, "", "No placeholders", "{{name}}", "{{name}} {{address}} {{city}}", "{{name}} {{address}} {{constructor}}"])
     assert.equal(populateResumeExample(template, DEMO_CANDIDATES[0]), null);
@@ -269,11 +311,11 @@ test("inline settings resolve one complete saved combination and never invent ou
   for (const variant of variants) {
     assert.equal(inlineResumeVariant(demo, variant.settings), variant);
     assert.equal(resumeTemplates(variant).length, variant.settings.resumes);
-    assert.equal(populationExamples(variant).length, 2); // Two explicit assignments, even for four templates.
-    assert.equal(finalOutputRows(paper, variant.id).length, 2);
+    assert.equal(populationExamples(variant).length, variant.settings.resumes);
+    assert.equal(finalOutputRows(paper, variant.id).length, variant.settings.resumes);
     assert.ok(finalOutputRows(paper, variant.id).every(row => row.variant_id === variant.id));
   }
-  assert.equal(finalOutputRows(paper).length, 16);
+  assert.equal(finalOutputRows(paper).length, 24);
   assert.deepEqual(finalOutputRows(paper, "unknown-combination"), []);
   for (const settings of [{resumes: 3, jobSkills: 2, experience: "entry-level"}, {resumes: 2, jobSkills: "2", experience: "entry-level"}, {resumes: 2, jobSkills: 2, experience: "unknown"}]) {
     assert.equal(inlineResumeVariant(demo, settings), null);

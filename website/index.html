@@ -6,8 +6,8 @@
 <meta name="description" content="Follow a newspaper scan as it becomes a dataset of job advertisements.">
 <title>LLM AuditKit · Pipeline</title>
 <link rel="icon" href="./assets/mark.svg" type="image/svg+xml">
-<link rel="stylesheet" href="./styles.css?v=controlled-fields-24">
-<script type="module" src="./app.mjs?v=controlled-fields-24"></script>
+<link rel="stylesheet" href="./styles.css?v=ready-resumes-25">
+<script type="module" src="./app.mjs?v=ready-resumes-25"></script>
 </head>
 <body>
 <a class="skip-link" href="#main">Skip to pipeline</a>
@@ -55,18 +55,17 @@
 </section>
 <div id="population-connector" class="flow-connector" aria-hidden="true" hidden><span class="flow-line"></span></div>
 <section id="population-view" class="flow-stage reveal" aria-labelledby="population-heading" hidden>
-  <div class="stage-heading"><h2 id="population-heading" tabindex="-1">Templates become candidates.</h2></div>
-  <p id="population-caption" class="population-caption">Different resumes. Ready for review.</p>
-  <div id="candidate-options" class="candidate-options" role="group" aria-label="Synthetic candidates"></div>
+  <div class="stage-heading"><h2 id="population-heading" tabindex="-1">Templates become applications.</h2><button id="reset-candidates" type="button" disabled>Reset details</button></div>
+  <p id="population-caption" class="population-caption">Click highlighted details to change them.</p>
   <p class="synthetic-note">Synthetic examples.</p>
   <p id="candidate-status" class="sr-only" role="status"></p>
-  <article id="populated-document" class="typeset-resume populated-resume" aria-label="Populated resume"></article>
+  <div id="populated-document" class="resume-grid" role="group" aria-label="Ready applications"></div>
 </section>
 <div id="experiment-connector" class="flow-connector" aria-hidden="true" hidden><span class="flow-line"></span></div>
 <section id="experiment-view" class="flow-stage reveal" aria-labelledby="experiment-heading" hidden>
   <div class="stage-heading"><h2 id="experiment-heading">How does the model decide?</h2></div>
   <div class="experiment-workspace">
-    <div class="experiment-inputs" role="group" aria-label="Review experiment inputs"><span>Review inputs</span><button id="experiment-job" type="button">Job posting</button><button id="experiment-candidate-1" type="button">Candidate 1</button><button id="experiment-candidate-2" type="button">Candidate 2</button></div>
+    <div class="experiment-inputs" role="group" aria-label="Review experiment inputs"><span>Review inputs</span><button id="experiment-job" type="button">Job posting</button><div id="experiment-candidates" class="experiment-candidates"></div></div>
     <label class="sr-only" for="experiment-prompt">Hiring prompt</label>
     <textarea id="experiment-prompt" rows="4" spellcheck="true"></textarea>
     <div class="experiment-actions"><button id="run-experiment" type="button" disabled>Run experiment</button><span id="experiment-model" class="quiet"></span></div>
@@ -92,5 +91,6 @@
 <dialog id="image-dialog" aria-labelledby="image-dialog-title"><div class="dialog-toolbar"><h2 id="image-dialog-title">Advertisement scan</h2><label>Zoom <select id="zoom-select"><option value="100">Fit width</option><option value="150">150%</option><option value="200">200%</option></select></label><button id="close-dialog" type="button">Close</button></div><div class="enlarged-scroll"><div id="enlarged-crop" class="scan-window enlarged-crop"><img id="enlarged-image" alt=""></div></div></dialog>
 <dialog id="job-dialog" aria-labelledby="job-dialog-title"><div class="dialog-toolbar"><h2 id="job-dialog-title"></h2><button id="close-job-dialog" type="button">Close</button></div><p id="job-full-text" class="job-text"></p></dialog>
 <dialog id="resume-dialog" aria-labelledby="resume-dialog-title"><div class="dialog-toolbar"><h2 id="resume-dialog-title">Saved resume example</h2><button id="close-resume-dialog" type="button">Close</button></div><div id="resume-template-options" class="resume-template-options" role="group" aria-label="Generated templates"></div><article id="resume-document" class="typeset-resume" aria-label="Resume"></article></dialog>
+<dialog id="candidate-field-dialog" aria-labelledby="candidate-field-title"><div class="dialog-toolbar"><h2 id="candidate-field-title">Change details</h2><button id="close-candidate-field" type="button">Close</button></div><div id="candidate-field-options" class="field-options" role="group" aria-label="Replacement presets"></div></dialog>
 </body>
 </html>

@@ -52,7 +52,7 @@ def test_website_local_references_and_accessible_targets():
     assert "<details" not in (WEBSITE / "index.html").read_text()
     assert {"resume-view", "prompt-variants", "variant-prompt", "resume-source", "resume-source-image"} <= set(page.ids)
     assert "resume-output" not in page.ids
-    assert {"population-view", "population-connector", "candidate-options", "candidate-status", "populated-document"} <= set(page.ids)
+    assert {"population-view", "population-connector", "reset-candidates", "candidate-status", "populated-document", "candidate-field-dialog"} <= set(page.ids)
     assert {"experiment-view", "experiment-connector", "experiment-prompt", "run-experiment", "experiment-result", "experiment-explanation"} <= set(page.ids)
     assert {"results-view", "results-connector", "results-heading", "results-count", "final-output-rows", "download-results"} <= set(page.ids)
     assert "Prompt highlights" not in (WEBSITE / "index.html").read_text()
@@ -164,16 +164,21 @@ def test_population_section_continues_the_scroll_flow_with_synthetic_candidates(
     html = (WEBSITE / "index.html").read_text()
     assert html.index('id="resume-view"') < html.index('id="population-connector"') < html.index('id="population-view"')
     section = html.split('id="population-view"', 1)[1].split("</section>", 1)[0]
-    assert "Templates become candidates." in section
-    assert "Different resumes. Ready for review." in section
+    assert "Templates become applications." in section
+    assert "Click highlighted details to change them." in section
     assert "Same qualifications" not in html
     assert "Synthetic examples." in section
-    assert 'class="typeset-resume populated-resume"' in section
-    assert 'role="group" aria-label="Synthetic candidates"' in section
+    assert 'class="resume-grid"' in section
+    assert 'role="group" aria-label="Ready applications"' in section
+    assert "View full resume" in (WEBSITE / "app.mjs").read_text()
+    assert 'id="candidate-field-dialog" aria-labelledby="candidate-field-title"' in html
+    assert 'aria-label="Replacement presets"' in html
     css = (WEBSITE / "styles.css").read_text()
     assert "@keyframes candidate-update" in css
     assert "margin:24px 0 24px" in re.search(r"#population-view\s*\{([^}]+)\}", css).group(1)
     assert "padding-bottom:24px" in re.search(r"\.typeset-resume\.populated-resume\s*\{([^}]+)\}", css).group(1)
+    assert "grid-template-columns:repeat(2,minmax(0,1fr))" in re.search(r"\.resume-grid\s*\{([^}]+)\}", css).group(1)
+    assert "grid-template-columns:1fr" in css.split("@media(max-width:700px)", 1)[1]
     assert "animation:none!important" in css.split("@media(prefers-reduced-motion:reduce)", 1)[1]
 
 
@@ -199,7 +204,7 @@ def test_experiment_section_has_editable_prompt_inputs_and_explicit_saved_respon
     section = html.split('id="experiment-view"', 1)[1].split("</section>", 1)[0]
     assert "How does the model decide?" in section
     assert '<textarea id="experiment-prompt"' in section and 'for="experiment-prompt"' in section
-    assert all(f'id="experiment-{field}"' in section for field in ["job", "candidate-1", "candidate-2"])
+    assert all(f'id="experiment-{field}"' in section for field in ["job", "candidates"])
     assert "Saved model response" not in section and "Run experiment" in section
     assert 'id="experiment-result" aria-live="polite" hidden' in section
 
@@ -291,7 +296,7 @@ def test_saved_skill_counts_and_all_inline_combinations_are_inspected():
             (n, skills, experience) for n in (2, 4) for skills in (2, 4) for experience in ("entry-level", "experienced")}
         for variant in variants:
             assert variant["inspectedJobSkillCount"] is True
-            assert len(variant["assignments"]) == 2
+            assert len(variant["assignments"]) == variant["settings"]["resumes"]
             for template in variant["templates"]:
                 section = re.split(r"(?m)^JOB[- ]RELATED SKILLS:?\s*$", template["text"])[1]
                 assert len(re.findall(r"(?m)^- ", section)) == variant["settings"]["jobSkills"]
@@ -311,7 +316,9 @@ def test_saved_school_and_dates_are_controlled_fields_with_exact_populated_input
             for text in templates.values():
                 assert set(re.findall(r"\{\{([a-z_]+)\}\}", text)) == fields
             example = next(e for e in paper["experimentDemo"]["examples"] if e["variantId"] == variant["id"])
-            assert example["experimentId"].endswith("controlled-fields-v1")
+            assert len(example["candidates"]) == len(example["decisions"]) == variant["settings"]["resumes"]
+            assert example["experimentId"].endswith("controlled-fields-v1" if variant["settings"]["resumes"] == 2 else "ready-resumes-four-v1")
+            assert example["prompt"] == variant.get("experimentPrompt", paper["experimentDemo"]["prompt"])
             for assignment in variant["assignments"]:
                 values = assignment["values"]
                 assert set(values) == fields - {"name", "address"}

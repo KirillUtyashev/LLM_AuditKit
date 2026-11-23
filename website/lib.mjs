@@ -12,6 +12,8 @@ export const RESULT_COLUMNS = Object.freeze([
 export const DEMO_CANDIDATES = Object.freeze([
   Object.freeze({id: "synthetic-candidate-1", label: "Candidate 1", name: "Alex Morgan", address: "12 Example Street"}),
   Object.freeze({id: "synthetic-candidate-2", label: "Candidate 2", name: "Jordan Taylor", address: "48 Sample Avenue"}),
+  Object.freeze({id: "synthetic-candidate-3", label: "Candidate 3", name: "Casey Lee", address: "16 Practice Road"}),
+  Object.freeze({id: "synthetic-candidate-4", label: "Candidate 4", name: "Riley Parker", address: "72 Demo Lane"}),
 ]);
 
 export function formatDate(date) {
@@ -156,11 +158,12 @@ export function resumeTemplates(variant) {
 export function populationExamples(variant) {
   const templates = resumeTemplates(variant);
   const assignments = variant?.assignments;
-  if (templates.length < DEMO_CANDIDATES.length || !Array.isArray(assignments)
-      || assignments.length !== DEMO_CANDIDATES.length || assignments.some(assignment => !assignment)
-      || new Set(assignments.map(item => item.candidateId)).size !== DEMO_CANDIDATES.length
-      || new Set(assignments.map(item => item.templateId)).size !== DEMO_CANDIDATES.length) return null;
-  const examples = DEMO_CANDIDATES.map(candidate => {
+  const count = templates.length;
+  if (![2, 4].includes(count) || !Array.isArray(assignments)
+      || assignments.length !== count || assignments.some(assignment => !assignment)
+      || new Set(assignments.map(item => item.candidateId)).size !== count
+      || new Set(assignments.map(item => item.templateId)).size !== count) return null;
+  const examples = DEMO_CANDIDATES.slice(0, count).map(candidate => {
     const assignment = assignments.find(item => item.candidateId === candidate.id);
     const template = templates.find(item => item.id === assignment?.templateId);
     const values = assignment?.values ?? {};
@@ -193,6 +196,32 @@ export function populateResumeExample(template, candidate) {
   return parts.map(part => part.placeholder ? values[part.text.slice(2, -2)] : part.text).join("");
 }
 
+// Small explicit presentation presets, never researcher sampling assignments.
+export function candidateFieldPresets(candidate, population, field) {
+  if (!candidate || !population?.some(item => item.id === candidate.id)) return [];
+  if (field === "name" || field === "address") return DEMO_CANDIDATES.map(profile => ({
+    label: profile[field], changes: {[field]: profile[field]},
+  }));
+  if (["university", "high_school"].includes(field) && Object.hasOwn(candidate.values, field))
+    return [...new Set(population.map(item => item.values[field]))].map(value => ({label: value, changes: {values: {[field]: value}}}));
+  if (Object.hasOwn(candidate.values, field) && /_(month|year)$/.test(field)) {
+    const dates = Object.fromEntries(Object.entries(candidate.values).filter(([key]) => /_(month|year)$/.test(key)));
+    if (Object.entries(dates).some(([key, value]) => !value || (key.endsWith("year") && !/^\d{4}$/.test(value)))) return [];
+    const earlier = Object.fromEntries(Object.entries(dates).map(([key, value]) => [key,
+      key.endsWith("year") && key !== "work_end_year" ? String(Number(value) - 1) : value]));
+    return [{label: "Original dates", changes: {values: dates}}, {label: "Start one year earlier", changes: {values: earlier}}];
+  }
+  return [];
+}
+
+export function replaceCandidateFields(candidate, changes) {
+  if (!candidate || !changes || Object.keys(changes).some(key => !["name", "address", "values"].includes(key))) return null;
+  if (changes.values !== undefined && (!changes.values || typeof changes.values !== "object" || Array.isArray(changes.values))) return null;
+  const result = {...candidate, ...changes, values: {...candidate.values, ...changes.values}};
+  const resume = populateResumeExample(result.template, result);
+  return resume === null ? null : {...result, resume};
+}
+
 export function experimentExample(paper, variant) {
   const demo = paper.experimentDemo;
   const population = populationExamples(variant);
@@ -202,14 +231,15 @@ export function experimentExample(paper, variant) {
   if (matches.length !== 1) return null;
   const example = matches[0];
   const job = paper.records.find(record => record.id === paper.resumeDemo?.jobId);
-  if (!job || example.jobId !== job.id || example.jobPosting !== job.text || example.prompt !== demo.prompt
+  const expectedPrompt = variant.experimentPrompt ?? demo.prompt;
+  if (!job || example.jobId !== job.id || example.jobPosting !== job.text || example.prompt !== expectedPrompt
       || example.generationPrompt !== variant.prompt || example.template !== variant.template
       || (variant.systemPrompt !== undefined && example.generationSystemPrompt !== variant.systemPrompt)
-      || !Array.isArray(example.candidates) || example.candidates.length !== DEMO_CANDIDATES.length
-      || !Array.isArray(example.decisions) || example.decisions.length !== DEMO_CANDIDATES.length) return null;
+      || !Array.isArray(example.candidates) || example.candidates.length !== population.length
+      || !Array.isArray(example.decisions) || example.decisions.length !== population.length) return null;
   for (const field of ["explanation", "requestId", "scenarioId", "experimentId", "modelConfigId", "model", "provider"])
     if (typeof example[field] !== "string" || !example[field].trim()) return null;
-  for (const [index, candidate] of DEMO_CANDIDATES.entries()) {
+  for (const [index, candidate] of population.entries()) {
     const input = example.candidates[index];
     const decision = example.decisions[index];
     if (!input || !decision || ["id", "label", "name", "address"].some(field => input[field] !== candidate[field])
@@ -217,7 +247,7 @@ export function experimentExample(paper, variant) {
         || input.resume === null || decision.candidateId !== candidate.id
         || typeof decision.invite !== "boolean" || !Number.isFinite(decision.logprob) || decision.logprob > 0) return null;
   }
-  return {...example, prompt: demo.prompt};
+  return example;
 }
 
 export function finalOutputRows(paper, variantId) {

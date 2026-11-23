@@ -436,12 +436,36 @@ h2  {
   color:#737782;
   font-size:1rem
 }
-.candidate-options {
+.resume-grid {
+  display:grid;
+  grid-template-columns:repeat(2,minmax(0,1fr));
+  align-items:start;
+  gap:24px;
+  margin-top:24px
+}
+.resume-sheet {
+  min-width:0;
+  border:1px solid #e1e3e8;
+  box-shadow:0 6px 24px #161b2b06
+}
+.resume-sheet-toolbar {
   display:flex;
-  justify-content:center;
   flex-wrap:wrap;
+  align-items:center;
+  justify-content:space-between;
   gap:8px;
-  margin:28px 0 10px
+  padding:12px 18px;
+  border-bottom:1px solid #eceef2
+}
+.resume-sheet-toolbar h3 {
+  margin:0;
+  font-size:.875rem;
+  font-weight:500;
+  color:#737782
+}
+.resume-sheet-toolbar button {
+  padding:4px 8px;
+  font-size:.875rem
 }
 .synthetic-note {
   margin:0;
@@ -450,9 +474,47 @@ h2  {
   font-size:.875rem
 }
 .typeset-resume.populated-resume {
-  max-width:700px;
-  margin:24px auto 0;
+  max-width:none;
+  margin:0;
+  padding:24px;
   padding-bottom:24px
+}
+.populated-resume .resume-contact h2 {
+  font-size:1.5rem
+}
+.populated-resume button.candidate-value {
+  display:inline;
+  padding:0 2px;
+  border:0;
+  border-bottom:1px dashed #b18d3f;
+  border-radius:2px;
+  background:#fbf5e5;
+  color:inherit;
+  font:inherit;
+  letter-spacing:inherit;
+  line-height:inherit;
+  text-align:inherit;
+  cursor:pointer
+}
+.populated-resume button.candidate-value:hover {
+  background:#f5e8bd
+}
+#candidate-field-dialog {
+  max-width:440px
+}
+.field-options {
+  display:flex;
+  flex-direction:column;
+  gap:10px;
+  padding:20px
+}
+.field-options button {
+  text-align:left
+}
+.experiment-candidates {
+  display:flex;
+  flex-wrap:wrap;
+  gap:8px
 }
 .candidate-value {
   border-radius:2px
@@ -775,6 +837,9 @@ dialog::backdrop  {
   color:#747782
 }
 @media(max-width:700px)  {
+  .resume-grid {
+    grid-template-columns:1fr
+  }
   .experiment-decisions {
     grid-template-columns:1fr;
     gap:16px

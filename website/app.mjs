@@ -1,14 +1,17 @@
-import {csvForRecords, jobPreview, cropStyle, stateFromUrl, loadBundle, resumeDemo, savedResumeVariant, resumePromptText, inlineResumeVariant, resumeBlocks, resumeTextParts, DEMO_CANDIDATES, populationExamples, resumeTemplates, experimentExample, finalOutputRows, resultCsv} from "./lib.mjs?v=controlled-fields-24";
+import {csvForRecords, jobPreview, cropStyle, stateFromUrl, loadBundle, resumeDemo, savedResumeVariant, resumePromptText, inlineResumeVariant, resumeBlocks, resumeTextParts, populationExamples, resumeTemplates, experimentExample, finalOutputRows, resultCsv, candidateFieldPresets, replaceCandidateFields} from "./lib.mjs?v=ready-resumes-25";
 
 const $ = id => document.getElementById(id);
-const state = {papers: [], paperId: null, step: "archive", query: "", variantId: null, candidateId: DEMO_CANDIDATES[0].id};
+const state = {papers: [], paperId: null, step: "archive", query: "", variantId: null};
 const promptDrafts = new Map();
 const experimentDrafts = new Map();
 const selectedSettings = new Map();
+const candidateEdits = new Map();
+const fieldTriggers = new Map();
+let activeFieldTrigger = null;
 let placeholderTrigger = null;
 const paper = () => state.papers.find(item => item.id === state.paperId);
 const draftKey = (demo, variantId) => JSON.stringify([state.paperId, demo.jobId, variantId]);
-const experimentDraftKey = () => JSON.stringify([state.paperId, paper().resumeDemo?.jobId]);
+const experimentDraftKey = () => JSON.stringify([state.paperId, paper().resumeDemo?.jobId, state.variantId]);
 
 function syncUrl(push = false) {
   const url = new URL(location.href);
@@ -31,6 +34,7 @@ function render() {
 }
 
 function renderResumes() {
+  candidateEdits.clear(); $("candidate-field-dialog").close();
   $("resume-dialog").close();
   $("resume-document").replaceChildren();
   $("resume-template-options").replaceChildren();
@@ -82,6 +86,7 @@ function renderResumes() {
 }
 
 function renderVariant(demo) {
+  candidateEdits.clear(); $("candidate-field-dialog").close();
   const key = JSON.stringify([state.paperId, demo.jobId]);
   const variant = demo.variants.find(item => item.id === state.variantId)
     || (demo.inlineControls && demo.variants.find(item => item.id === selectedSettings.get(key))) || demo.variants[0];
@@ -102,12 +107,12 @@ function renderVariant(demo) {
 }
 
 function changeInlineSettings() {
+  candidateEdits.clear(); $("candidate-field-dialog").close();
   const demo = resumeDemo(paper());
   const variant = inlineResumeVariant(demo, {resumes: Number($("resume-count").value),
     jobSkills: Number($("job-skill-count").value), experience: $("experience-level").value});
   closePopulationHelp();
   $("resume-dialog").close(); $("resume-document").replaceChildren(); $("resume-template-options").replaceChildren();
-  state.candidateId = DEMO_CANDIDATES[0].id;
   if (!variant) {
     state.variantId = null; $("variant-prompt").value = ""; $("generate-resume").disabled = true;
     renderPopulation(null); return;
@@ -153,16 +158,18 @@ function showResume() {
 }
 
 function renderPopulation(saved) {
-  const available = populationExamples(saved) !== null;
+  const population = currentPopulation(saved);
+  const available = population !== null;
+  fieldTriggers.clear();
   $("go-to-population").disabled = !available;
-  $("population-caption").textContent = saved?.templates?.length > DEMO_CANDIDATES.length
-    ? "Two assigned templates become candidates. The others remain available to inspect."
-    : "Different resumes. Ready for review.";
+  $("population-caption").textContent = candidateEdits.size
+    ? `${population?.length ?? 0} applications. Reset details to see saved model results.`
+    : `${population?.length ?? 0} applications. Click highlighted details to change them.`;
+  $("reset-candidates").disabled = !candidateEdits.size;
   $("population-view").hidden = !available;
   $("population-connector").hidden = !available;
   renderExperiment(available ? saved : null);
   if (!available) {
-    $("candidate-options").replaceChildren();
     $("populated-document").replaceChildren();
     $("candidate-status").textContent = "";
     if (state.step === "population") {
@@ -171,33 +178,53 @@ function renderPopulation(saved) {
     }
     return;
   }
-  $("candidate-options").replaceChildren(...DEMO_CANDIDATES.map(candidate => {
-    const button = document.createElement("button");
-    button.type = "button"; button.className = "variant-button";
-    button.dataset.candidateId = candidate.id; button.textContent = candidate.label;
-    button.addEventListener("click", () => {
-      const changed = state.candidateId !== candidate.id;
-      state.candidateId = candidate.id; renderCandidate(saved, changed);
-    });
-    return button;
+  $("populated-document").replaceChildren(...population.map(candidate => {
+    const card = document.createElement("section"); card.className = "resume-sheet";
+    card.dataset.candidateId = candidate.id;
+    const heading = document.createElement("div"); heading.className = "resume-sheet-toolbar";
+    const label = document.createElement("h3"); label.textContent = candidate.label;
+    const enlarge = document.createElement("button"); enlarge.type = "button"; enlarge.textContent = "View full resume";
+    enlarge.setAttribute("aria-label", `View full resume for ${candidate.label}`);
+    enlarge.addEventListener("click", () => showPopulatedCandidate(candidate));
+    heading.append(label, enlarge);
+    const doc = document.createElement("article"); doc.className = "typeset-resume populated-resume";
+    doc.setAttribute("aria-label", `${candidate.label} resume`);
+    renderResumeDocument(doc, candidate.template, candidate, candidateEdits.has(candidate.id), (field, trigger) => openCandidateField(saved, candidate.id, field, trigger));
+    card.append(heading, doc); return card;
   }));
-  renderCandidate(saved);
 }
 
-function renderCandidate(saved, animate = false) {
-  const candidate = DEMO_CANDIDATES.find(item => item.id === state.candidateId) || DEMO_CANDIDATES[0];
-  state.candidateId = candidate.id;
-  for (const button of $("candidate-options").children) {
-    button.setAttribute("aria-pressed", String(button.dataset.candidateId === candidate.id));
-  }
-  const assigned = populationExamples(saved).find(item => item.id === candidate.id);
-  renderResumeDocument($("populated-document"), assigned.template, assigned, animate);
-  $("candidate-status").textContent = `Showing ${candidate.label}: ${candidate.name}.`;
+function currentPopulation(saved) {
+  return populationExamples(saved)?.map(candidate => candidateEdits.get(candidate.id) ?? candidate) ?? null;
+}
+
+function openCandidateField(saved, candidateId, field, trigger) {
+  const baseline = populationExamples(saved);
+  const original = baseline.find(candidate => candidate.id === candidateId);
+  const candidate = currentPopulation(saved).find(candidate => candidate.id === candidateId);
+  const presets = candidateFieldPresets(original, baseline, field);
+  if (!presets.length) return;
+  activeFieldTrigger = trigger;
+  $("candidate-field-title").textContent = /_(month|year)$/.test(field) ? "Change dates" : `Change ${field === "high_school" ? "school" : field}`;
+  $("candidate-field-options").replaceChildren(...presets.map(preset => {
+    const button = document.createElement("button"); button.type = "button"; button.textContent = preset.label;
+    button.addEventListener("click", () => {
+      const updated = replaceCandidateFields(candidate, preset.changes);
+      if (!updated) return;
+      if (updated.resume === original.resume) candidateEdits.delete(candidateId); else candidateEdits.set(candidateId, updated);
+      $("candidate-field-dialog").close(); renderPopulation(saved);
+      $("candidate-status").textContent = `${candidate.label} details updated. ${candidateEdits.size ? "Reset details to see the saved model evaluation." : "Original details restored."}`;
+      fieldTriggers.get(trigger.dataset.triggerKey)?.focus();
+    }); return button;
+  }));
+  $("candidate-field-dialog").showModal();
 }
 
 function currentExperiment() {
   const saved = savedResumeVariant(resumeDemo(paper()), state.variantId, $("variant-prompt").value);
-  return experimentExample(paper(), saved);
+  const example = experimentExample(paper(), saved);
+  const population = currentPopulation(saved);
+  return example && population?.every((candidate, index) => candidate.resume === example.candidates[index].resume) ? example : null;
 }
 
 function clearExperimentResult() {
@@ -207,7 +234,8 @@ function clearExperimentResult() {
 }
 
 function renderExperiment(saved) {
-  const example = experimentExample(paper(), saved);
+  const example = saved ? currentExperiment() : null;
+  $("experiment-candidates").replaceChildren();
   $("experiment-view").hidden = !example;
   $("experiment-connector").hidden = !example;
   clearExperimentResult();
@@ -224,6 +252,11 @@ function renderExperiment(saved) {
     return;
   }
   $("experiment-prompt").value = experimentDrafts.get(experimentDraftKey()) ?? example.prompt;
+  $("experiment-candidates").replaceChildren(...example.candidates.map((candidate, index) => {
+    const button = document.createElement("button"); button.type = "button"; button.textContent = candidate.label;
+    button.id = `experiment-candidate-${index + 1}`;
+    button.addEventListener("click", () => showExperimentCandidate(index)); return button;
+  }));
   $("experiment-model").textContent = example.model === "gpt-4o-2024-08-06" ? "GPT-4o" : example.model;
   $("experiment-model").title = `${example.model} · previously recorded response; no live generation.`;
   updateExperimentButton();
@@ -265,7 +298,7 @@ function renderFinalOutput(enabled) {
 }
 
 function currentResultRows() {
-  return finalOutputRows(paper(), resumeDemo(paper())?.inlineControls ? state.variantId : undefined);
+  return currentExperiment() ? finalOutputRows(paper(), resumeDemo(paper())?.inlineControls ? state.variantId : undefined) : [];
 }
 
 function showExperimentResult() {
@@ -273,7 +306,7 @@ function showExperimentResult() {
   if (!example || $("experiment-prompt").value !== example.prompt) return;
   $("experiment-decisions").replaceChildren(...example.decisions.map((decision, index) => {
     const row = document.createElement("div");
-    const name = document.createElement("h4"); name.textContent = `${DEMO_CANDIDATES[index].label} · ${DEMO_CANDIDATES[index].name}`;
+    const name = document.createElement("h4"); name.textContent = `${example.candidates[index].label} · ${example.candidates[index].name}`;
     const answer = document.createElement("p"); answer.textContent = decision.invite ? "Invite to interview" : "Do not invite";
     row.append(name, answer); return row;
   }));
@@ -285,23 +318,33 @@ function showExperimentResult() {
 function showExperimentCandidate(index) {
   const example = currentExperiment();
   if (!example) return;
-  $("resume-dialog-title").textContent = DEMO_CANDIDATES[index].label;
-  $("resume-template-options").replaceChildren();
   const saved = savedResumeVariant(resumeDemo(paper()), state.variantId, $("variant-prompt").value);
-  const assigned = populationExamples(saved).find(item => item.id === DEMO_CANDIDATES[index].id);
-  renderResumeDocument($("resume-document"), assigned.template, assigned);
+  showPopulatedCandidate(currentPopulation(saved)[index]);
+}
+
+function showPopulatedCandidate(candidate) {
+  $("resume-dialog-title").textContent = candidate.label;
+  $("resume-template-options").replaceChildren();
+  renderResumeDocument($("resume-document"), candidate.template, candidate);
   $("resume-dialog").showModal(); $("resume-dialog").scrollTo(0, 0);
 }
 
-function renderResumeDocument(target, template, candidate = null, animate = false) {
+function renderResumeDocument(target, template, candidate = null, animate = false, edit = null) {
   let placeholderIndex = 0;
   const setText = (node, text) => {
     node.replaceChildren(...resumeTextParts(text).map(part => {
-      const span = document.createElement("span"); span.textContent = part.text;
+      const span = document.createElement(part.placeholder && candidate && edit ? "button" : "span"); span.textContent = part.text;
       if (part.placeholder && candidate) {
         const field = part.text.slice(2, -2);
         span.textContent = field === "name" || field === "address" ? candidate[field] : candidate.values[field];
         span.className = animate ? "candidate-value is-updated" : "candidate-value";
+        if (edit) {
+          span.type = "button"; span.dataset.field = field;
+          span.setAttribute("aria-label", `Change ${field.replaceAll("_", " ")} for ${candidate.label}: ${span.textContent}`);
+          span.addEventListener("click", () => edit(field, span));
+          span.dataset.triggerKey = `${candidate.id}:${field}:${++placeholderIndex}`;
+          fieldTriggers.set(span.dataset.triggerKey, span);
+        }
       } else if (part.placeholder) {
         span.className = "resume-placeholder"; span.tabIndex = 0;
         const tip = document.createElement("span");
@@ -432,7 +475,7 @@ function setupScrollFlow() {
 
 async function start() {
   const bundle = await loadBundle(fetch, location.hostname,
-    new URL("./data/newspapers.json?v=controlled-fields-24", import.meta.url), new URL("./local/newspapers.json", import.meta.url));
+    new URL("./data/newspapers.json?v=ready-resumes-25", import.meta.url), new URL("./local/newspapers.json", import.meta.url));
   state.papers = bundle.newspapers;
   Object.assign(state, stateFromUrl(location.href, state.papers));
   $("paper-select").replaceChildren(...state.papers.map(item => {
@@ -441,7 +484,7 @@ async function start() {
     return option;
   }));
   $("paper-select").addEventListener("change", event => {
-    state.paperId = event.target.value; state.variantId = null; state.candidateId = DEMO_CANDIDATES[0].id;
+    state.paperId = event.target.value; state.variantId = null;
     state.query = ""; $("search-input").value = ""; render(); syncUrl(true);
   });
   $("search-input").addEventListener("input", event => {state.query = event.target.value; renderJobs();});
@@ -485,8 +528,14 @@ async function start() {
     link.href = url; link.download = `${paper().id}-candidate-results.csv`; link.click();
     setTimeout(() => URL.revokeObjectURL(url), 1000);
   });
-  $("experiment-candidate-1").addEventListener("click", () => showExperimentCandidate(0));
-  $("experiment-candidate-2").addEventListener("click", () => showExperimentCandidate(1));
+  $("reset-candidates").addEventListener("click", () => {
+    candidateEdits.clear();
+    const saved = savedResumeVariant(resumeDemo(paper()), state.variantId, $("variant-prompt").value);
+    renderPopulation(saved); $("candidate-status").textContent = "Original applicant details restored.";
+  });
+  const closeCandidateField = () => {$("candidate-field-dialog").close(); activeFieldTrigger?.focus();};
+  $("close-candidate-field").addEventListener("click", closeCandidateField);
+  $("candidate-field-dialog").addEventListener("cancel", event => {event.preventDefault(); closeCandidateField();});
   $("experiment-job").addEventListener("click", () => {
     const example = currentExperiment();
     if (!example) return;
