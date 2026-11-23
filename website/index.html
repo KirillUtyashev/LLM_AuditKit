@@ -1,0 +1,101 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="description" content="Follow a newspaper scan as it becomes a dataset of job advertisements.">
+<title>LLM AuditKit · Pipeline</title>
+<link rel="icon" href="./assets/mark.svg" type="image/svg+xml">
+<link rel="stylesheet" href="./styles.css?v=paper-analysis-36">
+<script type="module" src="./app.mjs?v=paper-analysis-36"></script>
+</head>
+<body>
+<a class="skip-link" href="#main">Skip to pipeline</a>
+<header class="site-header"><a class="brand" href="./">LLM AuditKit</a><a href="https://github.com/KirillUtyashev/LLM_AuditKit">GitHub</a></header>
+<main id="main">
+<div class="intro"><h1>From newspapers to hiring experiments.</h1><p>Follow the data, one step at a time.</p></div>
+<div class="toolbar">
+<label class="paper-picker"><span class="sr-only">Newspaper</span><select id="paper-select"></select></label>
+</div>
+<p id="load-status" role="status">Loading newspaper…</p>
+<section id="archive-view" class="flow-stage" aria-labelledby="scan-heading" hidden>
+<div class="stage-heading"><h2 id="scan-heading">Start with a newspaper.</h2><p class="artifact-label"><span>Input</span><span aria-hidden="true">·</span>Newspaper scan</p></div>
+<button id="open-scan" type="button" class="page-preview" aria-label="Enlarge newspaper scan"><img id="scan-image" alt=""><span>Enlarge scan</span></button>
+</section>
+<div class="flow-connector" aria-hidden="true"><span class="flow-line"></span></div>
+<section id="data-view" class="flow-stage reveal" aria-labelledby="jobs-heading" hidden>
+<div class="stage-heading"><h2 id="jobs-heading" tabindex="-1">A scan becomes rows.</h2><p class="artifact-label"><span>Output</span><span aria-hidden="true">·</span>Extracted text</p></div>
+<p class="extraction-note">Each posting is stored as text. Scan excerpts are shown for context—click one to read the extracted text.</p>
+<div class="jobs-toolbar"><label><span class="sr-only">Search all jobs</span><input id="search-input" type="search" placeholder="Search all jobs"></label><button id="download-button" type="button" title="Download all matching job postings as CSV, not just the three previews">Download job text</button></div>
+<p id="results-summary" class="quiet" aria-live="polite"></p>
+<div id="job-cards" class="jobs-view"></div>
+<p id="empty-state" hidden>No jobs match your search.</p>
+</section>
+<div id="resume-connector" class="flow-connector" aria-hidden="true" hidden><span class="flow-line"></span></div>
+<section id="resume-view" class="flow-stage reveal" aria-labelledby="resume-heading" hidden>
+  <div class="stage-heading"><h2 id="resume-heading">Generate a resume.</h2><p class="artifact-label"><span>Input</span><span aria-hidden="true">·</span>Job posting + prompt</p></div>
+  <div class="resume-workspace">
+    <div class="resume-posting">
+      <button id="resume-source" class="source-crop" type="button" aria-label="Enlarge source job posting"><img id="resume-source-image" alt=""></button>
+      <p id="resume-source-text" class="job-text" hidden></p>
+    </div>
+    <div class="prompt-editor">
+      <div id="prompt-variants" class="prompt-variants" role="group" aria-label="Prompt variants"></div>
+      <label id="prompt-summary-label" class="prompt-summary-label" for="variant-prompt">Prompt summary</label>
+      <div id="interactive-prompt" class="interactive-prompt" role="group" aria-labelledby="prompt-summary-label" hidden>
+        <p>Create <label class="inline-setting"><span class="sr-only">Number of resume templates</span><select id="resume-count" class="prompt-token"><option value="2">2 resumes</option><option value="4">4 resumes</option></select></label> for this job in <span id="prompt-location"></span>.</p>
+        <p>Include <label class="inline-setting"><span class="sr-only">Number of job-related skills</span><select id="job-skill-count" class="prompt-token"><option value="2">2 job-related skills</option><option value="4">4 job-related skills</option></select></label> and <label class="inline-setting"><span class="sr-only">Experience wording</span><select id="experience-level" class="prompt-token"><option value="entry-level">entry-level wording</option><option value="experienced">experienced wording</option></select></label>.</p>
+        <p>Leave <button id="prompt-name" class="placeholder-token" type="button" aria-expanded="false" aria-controls="population-help">name</button>, <button id="prompt-address" class="placeholder-token" type="button" aria-expanded="false" aria-controls="population-help">address</button>, <button id="prompt-education" class="placeholder-token" type="button" aria-expanded="false" aria-controls="population-help">university</button> and <button id="prompt-dates" class="placeholder-token" type="button" aria-expanded="false" aria-controls="population-help">dates</button> for the next step.</p>
+        <div id="population-help" class="population-help" hidden>Filled in during template population. <button id="go-to-population" type="button">See the next step</button></div>
+      </div>
+      <textarea id="variant-prompt" rows="6" spellcheck="true" placeholder="Write your resume prompt"></textarea>
+      <div class="prompt-actions"><button id="generate-resume" type="button" disabled>Inspect templates</button><p class="artifact-label"><span>Output</span><span aria-hidden="true">·</span>Resume templates</p></div>
+    </div>
+  </div>
+</section>
+<div id="population-connector" class="flow-connector" aria-hidden="true" hidden><span class="flow-line"></span></div>
+<section id="population-view" class="flow-stage reveal" aria-labelledby="population-heading" hidden>
+  <div class="stage-heading"><h2 id="population-heading" tabindex="-1">Templates become applications.</h2><button id="reset-candidates" type="button" disabled>Reset details</button></div>
+  <p class="quiet">Set fields of interest—such as names, addresses, and education—to compare model decisions in controlled experiments.</p>
+  <p id="population-caption" class="population-caption" hidden></p>
+  <p id="candidate-status" class="sr-only" role="status"></p>
+  <div id="populated-document" class="resume-grid" role="group" aria-label="Ready applications"></div>
+</section>
+<div id="experiment-connector" class="flow-connector" aria-hidden="true" hidden><span class="flow-line"></span></div>
+<section id="experiment-view" class="flow-stage reveal" aria-labelledby="experiment-heading" hidden>
+  <div class="stage-heading"><h2 id="experiment-heading">How does the model decide?</h2><p class="artifact-label"><span>Input</span><span aria-hidden="true">·</span>Job posting + resumes</p></div>
+  <div class="experiment-workspace">
+    <div id="experiment-perspectives" class="prompt-variants" role="group" aria-label="Hiring perspective" hidden></div>
+    <label class="prompt-summary-label" for="experiment-prompt">Prompt summary</label>
+    <textarea id="experiment-prompt" rows="4" spellcheck="true"></textarea>
+    <div class="experiment-actions"><button id="run-experiment" type="button" disabled>Inspect model decisions</button><span id="experiment-model" class="quiet"></span></div>
+    <p id="experiment-status" class="quiet" role="status"></p>
+    <div id="experiment-result" aria-live="polite" hidden>
+      <p class="artifact-label"><span>Output</span><span aria-hidden="true">·</span>Interview decisions</p>
+      <div id="experiment-decisions" class="experiment-decisions"></div>
+      <p id="experiment-explanation" class="experiment-explanation"></p>
+    </div>
+  </div>
+</section>
+<div id="results-connector" class="flow-connector" aria-hidden="true" hidden><span class="flow-line"></span></div>
+<section id="results-view" class="flow-stage reveal" aria-labelledby="results-heading" hidden>
+  <div class="stage-heading results-toolbar"><h2 id="results-heading">From decisions to data.</h2><button id="download-results" type="button" aria-label="Download candidate results CSV">Download CSV</button></div>
+  <div class="results-table-scroll" role="region" aria-label="Candidate results table" tabindex="0">
+    <table class="results-table"><caption class="sr-only">Candidate-level outputs for the selected newspaper.</caption><thead><tr><th scope="col">Prompt</th><th scope="col">Candidate</th><th scope="col">Decision</th><th scope="col">Answer probability</th><th scope="col">Model</th><th scope="col">Comments</th><th scope="col">Request ID</th><th scope="col">Candidate ID</th></tr></thead><tbody id="final-output-rows"></tbody></table>
+  </div>
+  <div class="final-handoff"><h3>Take it from here.</h3><p>With LLM AuditKit, scale to thousands of simulated hiring decisions and easily analyze how model behavior varies across applicants, places, and time.</p>
+    <figure class="paper-example">
+      <a href="./assets/paper-role-play-coefficients.png" target="_blank" rel="noopener" aria-label="Open full-size coefficient plot from the paper"><img src="./assets/paper-role-play-coefficients.png" width="1820" height="1348" loading="lazy" alt="Role-play regression coefficients for Black versus White applicants, with 95% confidence intervals, across Birmingham, Boston, and Chicago from 1950 to 2020; separate panels show Gemini 1.5 Flash, GPT-4o, Grok-2, and Llama 3.1 405B."></a>
+      <figcaption>Example analysis from our paper · Role-play coefficients with 95% confidence intervals.</figcaption>
+    </figure>
+    <a href="https://github.com/KirillUtyashev/LLM_AuditKit">Run your own audit</a>
+  </div>
+</section>
+<footer id="source-footer" hidden><a id="archive-source" target="_blank" rel="noopener">Original source</a></footer>
+</main>
+<dialog id="image-dialog" aria-labelledby="image-dialog-title"><div class="dialog-toolbar"><h2 id="image-dialog-title">Advertisement scan</h2><label>Zoom <select id="zoom-select"><option value="100">Fit width</option><option value="150">150%</option><option value="200">200%</option></select></label><button id="close-dialog" type="button">Close</button></div><div class="enlarged-scroll"><div id="enlarged-crop" class="scan-window enlarged-crop"><img id="enlarged-image" alt=""></div></div></dialog>
+<dialog id="job-dialog" aria-labelledby="job-dialog-title"><div class="dialog-toolbar"><h2 id="job-dialog-title"></h2><button id="close-job-dialog" type="button">Close</button></div><p id="job-full-text" class="job-text"></p></dialog>
+<dialog id="resume-dialog" aria-labelledby="resume-dialog-title"><div class="dialog-toolbar"><h2 id="resume-dialog-title">Saved resume example</h2><button id="close-resume-dialog" type="button">Close</button></div><div id="resume-template-options" class="resume-template-options" role="group" aria-label="Generated templates"></div><article id="resume-document" class="typeset-resume" aria-label="Resume"></article></dialog>
+<dialog id="candidate-field-dialog" aria-labelledby="candidate-field-title"><div class="dialog-toolbar"><h2 id="candidate-field-title">Change details</h2><button id="close-candidate-field" type="button">Close</button></div><div id="candidate-field-options" class="field-options" role="group" aria-label="Replacement presets"></div></dialog>
+</body>
+</html>

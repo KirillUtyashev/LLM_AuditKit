@@ -1,0 +1,372 @@
+# Static Pipeline Showcase
+
+[Interaction diagram](../architecture/website.mmd)
+
+The optional `website/` directory is an independent buildless HTML/CSS/JS
+showcase, not a pipeline stage. It supports GitHub Pages repository prefixes.
+HTML assets, the helper import and the public data URL use the same release
+query revision. Public and loopback JSON requests revalidate cached responses,
+so new controls do not silently consume an older bundle and show the legacy
+textarea. Previously open/cached HTML may still require a hard refresh.
+
+## Scroll flow
+
+The page presents the scan, then job rows, an optional resume prompt editor
+and synthetic template-population, saved experiment and candidate-output examples
+in normal vertical document flow.
+The city/year selector remains above the original large newspaper preview.
+The extraction section has understated artifact labels beside its headings:
+`Input · Newspaper scan` and `Output · Extracted text`. On narrow screens these
+sit below the headings. Generation adds `Input · Job posting + prompt` and
+`Output · Resume templates` beside its heading and Generate button, respectively.
+No new panels or labels on later stages are added.
+A short note explains that postings are stored as text and scan excerpts provide
+context; clicking one reads the extracted text. `Download job text` still exports
+all matching postings as CSV. The later candidate-results CSV label is unchanged.
+Enlarging it displays the complete newspaper page. The jobs section below shows
+at most three job previews in desktop columns (stacked on mobile), while search
+always considers every available record for the selected newspaper.
+Clearing search restores the explicit `featuredIds` order, falling back to the
+bundle's order when absent. Counts show total matches and previews shown.
+Reviewed crops preserve their complete aspect ratios at compact sizes.
+The public selector includes Boston 1990 (59 OCR ads), Chicago 1970 (118), and
+Birmingham 2000 (86). Each paper has independent generation and evaluation
+examples bound to one of its own ads; switching never substitutes Boston results.
+Chicago and Birmingham dates are visible on the scans; Birmingham is 2000, not
+2001. The Boston bundle includes source-image areas for all 59 results.
+Six regions were previously located manually. The remainder were matched from
+saved Vision word coordinates and adjusted locally; `cropMethod` distinguishes
+these approximate previews. Hover text and alt text identify approximate areas,
+which may contain neighboring text or omit fragments when extraction merged
+ads or OCR reading order mixed columns. This does not establish verified per-ad
+source attribution or change the OCR-stage contract. Curation remains local;
+the browser does no inference or source matching. Records without a usable
+source area still fall back to labeled text previews.
+Clicking any preview opens its full extracted text in an accessible native dialog;
+Close or Escape returns to the image grid. There are no visible per-ad titles
+or body text in the grid, and no selector or carousel. The original newspaper
+preview retains its separate full-page enlargement and zoom.
+One centered continuous line connects the scan to the jobs, without provider
+icons, tool names or intermediate captions. The line is hidden from assistive
+technology. Matching connectors continue the optional resume/population flow.
+No inference runs while scrolling.
+The jobs section has search, approximate source images and full extracted text
+on demand. The sections remain visible, without Scan/Jobs navigation or a
+separate date caption. Scroll position updates the stage bookmark.
+IntersectionObserver progressively reveals content, with visible defaults when
+unsupported, keyboard-focus visibility and a reduced-motion fallback.
+Paper changes reset search; browser history restores paper/stage.
+An empty search result clears the cards and disables CSV export.
+
+CSV export includes all matching records, not just the three previews, preserving source-region IDs, source
+text when available, city/date/page provenance and review flags. Formula-like
+prefixes are escaped for spreadsheet safety. Display labels are not IDs.
+Source/transcription notes remain in the bundle, and raw OCR also remains in
+CSV exports. They are not shown in an on-page accordion.
+
+## Resume prompt editor
+
+A third scroll section appears only when the selected paper includes a valid
+`resumeDemo` bound to an existing job ID. Each newspaper uses a year-specific
+job-agency prompt with eight supported combinations of template count (2/4),
+job-related skill count (2/4) and experience wording (entry-level/experienced).
+Writing guidance does not select or alter the independently populated paper dates.
+The source job image appears on the left, preserving its crop aspect
+ratio; clicking enlarges it. Jobs without a source region show extracted text
+instead. On the right, `Prompt summary` embeds three highlighted native selects
+in its prose. The free-text editor and old variant buttons are hidden for
+`inlineControls` bundles. Such bundles must declare all eight unique valid
+settings and matching template cardinalities; incomplete or ambiguous data is
+rejected rather than inventing an output. Setting changes select one saved
+variant, clear the open document/response and reset candidate edits.
+The settings are remembered independently per paper/job in page memory.
+Names, addresses, school and dates use buttons that explain deterministic population;
+a next-step button scrolls there and focuses its heading. Escape dismisses the
+explanation and returns focus to the triggering button. Native selects provide
+keyboard, focus, Escape and outside-dismiss behavior without custom menus.
+The summary is a gist, not the full model instructions. Legacy bundles retain
+the editable textarea and their existing exact-summary playback guard.
+A left-aligned `Inspect templates` button opens a dialog labeled `Saved resume
+example`, with two or four small buttons for the jointly generated templates.
+Each template
+describes a distinct fictional applicant. The resume is typeset
+as a document: serif text, centered contact placeholders, small-cap section
+headings with thin rules, paragraphs and real bullet lists. No LaTeX compiler,
+external font service, text-card border or new generation request is involved.
+Close or Escape returns to the prompt editor. The saved prose is not rewritten.
+Canonical placeholders such as `{{name}}` and `{{address}}` have a subtle
+highlight and dashed underline. Hover or keyboard focus explains that they are
+intentional and invite the visitor to close the preview and scroll down to see
+candidate details filled in. Each
+focusable placeholder has an associated tooltip; Escape dismisses that note
+without closing the resume, and focus/hover can reveal it again. This does not
+submit a generation request or modify the saved template.
+Edited summaries and prompts without saved output disable the button with an
+explanatory tooltip rather than presenting an old result as newly generated.
+The two columns stack on mobile and the inline controls wrap with the prose.
+The UI uses plain `resume`, without accents. No selected setting or legacy
+text draft is persisted beyond page reload.
+
+Generation was performed offline through `TemplateGenerator`, shared inference
+and structured parts. Source prompts are `prompt_1990` for Boston, `prompt_1970`
+for Chicago and `prompt_2001` (the 2000–2002 function) for Birmingham, from
+`jobs_to_experiment/prompts.py`, reference revision
+`c9391854ea55806ec252625cd2f48fb9edb156cd`. The agency persona is adapted from
+`jobs_to_experiment/resume_creation.py`. Adaptations are explicit: selected
+template/skill counts and experience guidance, canonical identity/school/date
+field references instead of model-supplied values, no SSNs, reserved
+example phone numbers and no anachronistic website references. This is not an
+exact replication. Historian/Role-play were not substituted for generation.
+The public bundle retains full generation user/system prompts, request IDs,
+fingerprints, model identity and source/adaptation provenance. `promptSummary`
+is a separate nonblank string used by the editor; older bundles without it fall
+back to `prompt`. Saving/playing an experiment still requires the full generation
+user prompt and, when supplied, system prompt to match. YAML configs, snapshots
+and CSV checkpoints remain ignored local artifacts under `controlled-fields-v1/`.
+Earlier `inline-controls-v1/` and `year-prompts-v1/` runs are preserved, not relabeled. Template count uses
+the schema contract. Skill count and experience remain prompt-guided; skill
+bullet counts were inspected for these saved examples, not newly guaranteed by
+the package for arbitrary runs. Every combination was generated independently.
+Editing and switching variants perform no fetch or inference and do not change
+the saved prompts or outputs. Earlier outputs are previewed only for their exact
+original prompt, not as results of editing. A valid prompt-only demo does not
+require generated outputs. Source binding prevents using another job's image
+or draft. Papers without a matching demo hide this section and its connector,
+clearing the visible editor, image and saved-document dialog.
+The `#resumes` bookmark is accepted only when such a demo exists.
+
+## Synthetic template population
+
+Below the editor, `Templates become applications.` shows all two or four typeset
+resumes in a two-column document grid, stacked on mobile. A short sentence explains
+setting fields of interest for controlled experiments. Sheets stretch to equal
+height within each row, leaving blank space beneath shorter text. Four templates produce
+four applications, not a paired subset. Each document has a `View full resume`
+button. The grid has no introductory count/instruction or synthetic-example
+caption; applicant provenance remains in the saved data and documentation.
+The four available fixed profiles have stable synthetic IDs and deliberately illustrative
+names/addresses; they are not paper assignments, sampled demographic groups,
+or a researcher-defined audit design.
+
+The section uses every explicitly assigned template from the current saved
+generation, with one distinct candidate per template.
+Explicit candidate-ID to template-ID assignments bind each candidate
+to their own generated background; content-derived template IDs are not display
+positions. Missing, duplicate, reused or incompatible mappings hide population
+rather than copying one template for both candidates. Single-template artifacts
+can still be previewed but cannot drive this two/four-applicant example.
+Only declared placeholder tokens are replaced within each assigned template;
+that template's prose stays unchanged. Each variant declares `placeholderFields`;
+every template must contain exactly that field set. Explicit assignment `values`
+supply school, education years and employment start/end values. Chicago
+uses `high_school`, Boston/Birmingham `university`; Birmingham also controls
+in-school employment dates. Chicago records graduation year, not an invented
+attendance range. Boston/Birmingham preserve a `work_end` value of `Present`.
+Names remain fixed fictional profile values. Assignment `address` and
+`populationPools` supply the original paper's city/year address and school values
+and selected recorded date sets. Pool membership is validated for default inputs.
+Missing, extra, blank, unresolved or out-of-pool values reject population.
+These remain illustrative assignments, not inferred research covariates. New evaluations use
+the fully populated resumes, and matching rejects changed assignment values.
+Candidates therefore have different generated backgrounds, not merely different
+personal details. It is not a same-qualification
+identity comparison, and no such claim is shown.
+Highlighted populated fields are keyboard-accessible buttons that open a native
+dialog with explicit replacement presets. Names/addresses select from the four
+fictional profiles; addresses and schools select from declared paper pools.
+Date presets select entire recorded education/employment sets, not invented year
+offsets. Legacy bundles without pools retain synthetic presentation presets.
+Edits preserve durable candidate/template IDs and generated
+prose. A brief changed-value highlight respects reduced motion; a live status
+announces edits. Close/Escape returns focus, and applying a preset focuses the
+replacement field in the rerendered document. `Reset details` restores the exact
+evaluated set. Edits are page-memory only and clear on paper/setting changes.
+Changed candidate inputs hide evaluation/results and disable CSV export; the
+reset notice appears only after edits. No old decisions are shown for edited resumes.
+
+Missing output, unsupported placeholders, or an edited prompt hide this section
+and its connector and clear stale content. Choosing a valid saved preset brings
+it back. `#population` opens this section only when the paper's default preset
+supports the fixed examples; scrolling keeps the bookmark current. Hiding an
+active population section falls back to the resume section or archive bookmark.
+No candidate data is persisted.
+
+`populationSource` records `jobs_to_experiment/experiment_setup.py` at reference
+revision `c9391854ea55806ec252625cd2f48fb9edb156cd`, constant pool names and the
+relative source/date/hash of the selected recorded replacement fields. Raw
+private CSV rows, original applicant names, demographics and outcomes are not
+exported. Values are reused for the new demo jobs, not claimed as exact paper
+replications. `generationProjection` explicitly records deterministic date-label
+projection after generation, preserving original template IDs and field lists.
+Only date labels/placeholders change: Chicago keeps graduation year only;
+Boston/Birmingham retain `Present` as a single controlled end field. Other prose
+is unchanged; new content-derived IDs and fresh model evaluations bind those
+projected templates to their actual populated input. Original generated
+artifacts remain local.
+
+## Saved experiment evaluation
+
+`How does the model decide?` follows population with the same continuous-line
+connector. `Input · Job posting + resumes` replaces the redundant input-review
+button row. Jobs remain inspectable in the extraction section and full resumes
+through their cards above. `Output · Interview decisions` labels the revealed
+results, not an empty placeholder before playback. `Role-play` and `Historian` buttons select two authored hiring
+perspectives above the editable `Prompt summary`. Role-play acts as a period hiring manager;
+Historian predicts an employer's period decision from a descriptive viewpoint.
+Both use the supplied advertisement/resumes and prohibit invented applicant facts
+or later events. These are reasonable website prompts, not verbatim paper prompts.
+The summaries omit the applicant qualifier and JSON/schema instructions; the
+full model prompts remain unchanged in the saved payload for provenance.
+`perspectives.summaries` declares both applicant-count summaries separately
+from `prompts`, and `experimentPromptText` selects presentation text with a
+legacy full-prompt fallback. Display text never replaces full-prompt validation.
+An `Inspect model decisions` button sits below. Only the fixed model name is shown beside it.
+Clicking reveals the matching number of saved interview decisions and the original explanation
+as plain text, not a reconstructed or invented answer. Each decision also shows
+its emitted-answer probability as a percentage. The model and button
+tooltips explain that responses are previously recorded; no saved-run suffix or
+response heading is shown. There is no simulated waiting or browser API call.
+
+The three newspapers' year-prompt applicant sets were each run
+through `ExperimentRunner` and the shared EDSL adapter, using
+`gpt-4o-2024-08-06`, temperature 0, and token log probabilities. The existing
+runner validated `Yes`/`No` decisions and their emitted-token log probabilities.
+This is illustrative, not an estimate of bias or a reproduction of the paper's
+assignments. Raw checkpoints,
+YAML, persona/system text and full rendered prompts stay in the ignored local
+hiring-perspectives-v1 directory, split by newspaper/perspective and experiment-2/4;
+earlier year, style and paired-only four-template runs remain untouched.
+Every setting/perspective has a new evaluated experiment identity, persona and
+prompt, including all selected resumes. There are 48 interviews and 144 candidate
+observations across the three papers. No earlier outcomes are relabeled.
+Saved exports retain request/scenario/experiment IDs,
+model configuration, exact source text, candidate/template IDs, ordered inputs and logprobs.
+
+An example is available only when its job ID/text, resume-generation prompt,
+templates and their assignments, ordered candidate IDs/names/addresses/resumes, hiring prompt, complete
+decisions and provenance match. Summary edits disable `Inspect model decisions` and clear
+the previous result; they are not submitted. Generation edits, changed source
+data, missing results or a paper/preset change cannot reuse a stale response.
+`experimentDemo.perspectives` declares unique IDs, labels, persona IDs, effective
+traits/instructions and prompts keyed by applicant count. Matching additionally
+requires the selected `perspectiveId`, persona ID, trait and instruction. A missing,
+duplicate or incompatible example cannot fall back to another perspective.
+Playback and CSV require the original display summary as well as valid underlying
+full prompts/persona/inputs; entering the full model prompt into a summary editor
+does not bypass this guard. Changing presentation summaries does not relabel or
+rerun saved responses.
+Legacy bundles without perspectives retain their `experimentPrompt`/default-prompt
+contract. Selection persists per paper/job in page memory across generation
+settings. Switching perspectives clears prior decisions/table and selects only
+the matching saved output. Hiring-prompt drafts are scoped to paper/job/variant/perspective in page
+memory only. `#experiment` and scroll bookmarks follow the same optional-stage
+rules as population. The published Boston bundle includes these examples;
+papers without experiment payloads hide this section and connector.
+
+## Final candidate-output table
+
+`From decisions to data.` ends the flow with two or four candidate-level rows from the
+selected newspaper and settings' validated evaluation. The first column is
+`Prompt`, showing the selected `Role-play` or `Historian` label, not the resume
+generation settings. Legacy bundles fall back to their preset label. Candidate,
+Yes/No decision, `Answer probability` and model follow. `Comments`, `Request ID`
+and `Candidate ID` preview additional exported fields with `…` placeholders;
+titles and accessible labels explain that full values are in the CSV. Those
+placeholders do not replace actual exported values or mean missing data. The
+CSV button shares the heading row (wrapping on narrow screens), with no
+evaluation-count caption or extra toolbar row. Short continuous connectors and
+consistent section margins keep the scroll flow compact. The percentage is
+`100 * exp(logprob)` for the emitted answer-token span, not calibrated confidence
+that the decision is correct or the applicant should be hired. It is not a
+self-reported LLM confidence score. No answers are not inverted into hire
+probabilities, and alternatives are not renormalized. Display uses one decimal;
+values below 0.1% or above 99.9% use inequalities to avoid rounding small nonzero
+values to zero or near-certainty to 100%. Zero logprob displays 100.0% at the
+provider's reported precision. Invalid/nonfinite or positive logprobs do not
+become probabilities. Hover retains full-precision percent; CSV retains both
+`answer_probability_pct` and the original numeric `logprob`.
+The results section has no explanatory probability paragraph beneath the table;
+the interpretation remains documented here and in the existing value tooltips.
+
+The download also includes numeric `decision` (`1`/`0`), variant/candidate/template
+IDs, scenario/request/experiment IDs, model configuration/provider, source ad ID,
+address, `prompt_style`, `persona_id` and the run-level explanation. `(request_id, candidate_id)` distinguishes
+candidate rows across presets. Values come from validated saved results, never
+from a new model call or fabricated probabilities. Formula-like string cells
+are escaped for spreadsheet safety without turning negative numeric logprobs
+into text. This is a simplified candidate-level analysis view, not the native
+wide experiment checkpoint or an R-preparation export: no `audit_id`, substantive
+covariates or regression outputs are inferred.
+CSV `preset` still records generation settings separately from `prompt_style`;
+comments and stable request/candidate IDs retain their real saved values.
+
+The table and CSV contain only the selected combination and perspective, never the other seven
+settings. Unknown selections clear the table and disable download. The default
+all-variant helper remains available for validation; the browser passes the
+selected variant ID and perspective ID for inline-control bundles. Filenames
+include the perspective ID. Editing
+the active generation/hiring prompt also hides and clears the table and disables
+download. The table describes the original saved presets, not unsent drafts.
+`#results` bookmarks this section; papers without completed examples do
+not expose it. A scrollable semantic table supports smaller screens.
+
+The closing `Take it from here.` message invites researchers to scale to thousands
+of simulated hiring decisions and analyze variation across applicants, places and
+time. Beneath it, the maintainer-approved, unchanged role-play coefficient plot
+from the earlier paper illustrates analysis at research scale. It is explicitly
+captioned `Example analysis from our paper`, not presented as a regression on the
+website's few candidates. The responsive image opens its original full-size PNG
+in a new tab; the GitHub-only `Run your own audit` handoff follows the plot.
+See [asset provenance](../../website/assets/README.md#paper-coefficient-plot).
+No regression runs in the browser. Regression remains a separate researcher step.
+
+Beyond synthetic preset substitution and saved-output playback, no uploads,
+live browser OCR/generation, research sampling, live experiments or regression
+are implemented.
+These are illustrative prompt presets and candidates, not a
+validated research comparison or hiring recommendation.
+
+## Data boundary
+
+The default `website/data/newspapers.json` and three newspaper images under
+`website/assets/` are the maintainer-selected public display copies. Each has
+its own saved OCR ads and eight generated setting combinations, each with two
+or four templates and a real saved evaluation of that entire applicant set. Boston sharing was explicitly approved on 19 November 2026;
+Chicago 1970 and Birmingham 2000 were requested as additions on 22 November.
+Third-party newspaper content is not relicensed as MIT. Chicago's ProQuest
+reproduction notice is preserved; dates for Chicago and Birmingham are visible
+on the scans, while Boston's remains filename-inferred. Source notices are
+recorded in the data and asset README. The earlier public archive excerpt bundle is
+retained as `website/data/archive-newspapers.json` for tests and source credits;
+it is not the deployed default.
+
+On loopback hosts only, an optional ignored `website/local/newspapers.json`
+can replace the public bundle for local research previews. A missing file (404)
+falls back to the approved public Boston bundle; malformed data and other failures
+display an error instead of silently substituting sources. Public hosts never request
+the local bundle. The Boston example uses a 1990 scan and all 59
+unedited results from a saved AuditKit OCR run. Administrative Assistant,
+Operations Staff, and Travel Reservationist remain the three featured images.
+All records now have manually located or approximate source-image areas.
+Full-page Vision text
+is exported as full-page raw text, not a per-ad excerpt.
+Crop locations remain manually located or approximate, and the filename-derived date is documented.
+The original manual transcriptions are retained locally for comparison.
+
+Unapproved research data and credentials must not enter the Pages artifact.
+Only the selected display copies are tracked; the workflow rejects `website/local`
+and publishes only the static folder from main or the explicit showcase branch.
+This allows a collaborator preview without merging unreviewed code into main.
+Local preview commands do not deploy. See the [website README](../../website/README.md)
+for commands and source credits.
+
+## Implementation and checks
+
+`app.mjs` manages DOM state with text APIs, never HTML evaluation.
+`lib.mjs` provides search, selection, CSV safety, crop coordinates, date/URL
+handling and bundle selection. No third-party browser scripts or analytics.
+Native controls, focus states, a skip link, modal dialog, responsive layout,
+reduced-motion support and a live result count support keyboard inspection.
+
+Offline JS tests cover the pure helpers and mocked DOM interactions; Python
+tests check asset integrity, target IDs and the publication boundary.

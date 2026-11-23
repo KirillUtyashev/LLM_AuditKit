@@ -54,6 +54,14 @@ use AuditKit's population output in their own EDSL experiment. See the
 
 ## Repository Pipeline Runner
 
+The independent [static website](components/website.md) illustrates scans,
+job rows, an optional editable resume prompt beside its source posting, and
+two or four typeset applications with synthetic names and editable paper address,
+school and recorded-date pools,
+input-bound Role-play/Historian evaluations, emitted-answer probability percentages
+and a downloadable candidate-output table retaining raw log probabilities; the browser
+does not invoke pipeline stages or inference.
+
 [`scripts/run_pipeline.py`](../scripts/run_pipeline.py) composes the existing
 stages from a master YAML referencing their own configurations. `--run` continues
 through configured OCR, templates, population, experiments, and R preparation

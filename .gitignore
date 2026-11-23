@@ -45,6 +45,8 @@ htmlcov/
 /outputs/
 # Private manual-test scans, checkpoints and generated results
 /tests/manual/newspaper_pipeline/local/
+# Research scans and curated website preview data (not published).
+/website/local/
 
 # Generated example outputs
 /examples/output/

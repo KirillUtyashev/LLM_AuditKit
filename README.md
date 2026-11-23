@@ -1,271 +1,76 @@
 # LLM AuditKit
 
-LLM AuditKit audits large language model behavior in hiring experiments. The
-main pipeline is a Python package, while statistical analysis is implemented
-as reproducible R entry points alongside it.
+Build controlled hiring experiments to study how large language models make
+decisions. Generate resume templates, set applicant attributes, run simulations,
+and analyze the results—scaling from a few examples to thousands of simulated
+hiring decisions.
 
-Dataset loading validates local tables and establishes stable scenario IDs.
-Template generation and experiment execution use shared inference to run EDSL
-jobs and save progress to CSV checkpoints. Both accept YAML run configurations.
-Experiment execution also has a command-line entry point.
+[Explore the interactive walkthrough](https://kirillutyashev.github.io/LLM_AuditKit/)
 
-Template generation can use schema-enforced text/field parts with OpenAI
-(`generation.response_mode: parts`), inserting configured placeholders in code
-while retaining generated resume prose. Existing text-mode configs remain supported.
+## Example analysis
 
-[Template population](docs/components/template_population.md) fills each applicant
-template with researcher-supplied values. The [worked example](docs/guides/template_population.md#pass-the-populated-table-to-experiment-execution)
-shows how to pass the populated table directly to experiment execution and keep
-each decision associated with its applicant.
+[![Role-play coefficient estimates with 95% confidence intervals across four models, three cities, and 1950–2020.](website/assets/paper-role-play-coefficients.png)](website/assets/paper-role-play-coefficients.png)
+
+Example from our earlier hiring-audit paper: estimated differences in interview
+callback probability between applicants assigned Black- and White-sounding names
+under role-play prompts.
+This is a research example, not an analysis of the walkthrough's small demo.
+[Figure provenance](website/assets/README.md#paper-coefficient-plot).
+
+## What you can do
+
+- **Prepare data:** load and validate job datasets, optionally extracting ads
+  from newspaper scans with OCR first.
+- **Design controlled applications:** generate multiple resume templates per job
+  and fill names, addresses, education, dates, and other fields using your own
+  assignments or reproducible sampling pools.
+- **Run experiments:** configure models, prompts, and personas in YAML; use sync
+  or async inference with batching and resumable CSV checkpoints.
+- **Analyze decisions:** retain decisions, comments, and requested log
+  probabilities; prepare data and estimate, export, and plot regressions in R.
 
 ## Quickstart
 
-Optional [newspaper OCR preprocessing](docs/guides/newspaper_ocr.md) extracts
-job ads from local scans/PDFs before dataset loading, preserving raw OCR and
-source provenance. It has separate optional dependencies and makes paid Google
-Vision and model calls only when explicitly run.
-
-Install the package from the repository root:
+Use **Python 3.10+**. From a terminal on macOS or Linux:
 
 ```bash
-python -m venv .venv
+git clone https://github.com/KirillUtyashev/LLM_AuditKit.git
+cd LLM_AuditKit
+python3 -m venv .venv
 source .venv/bin/activate
 python -m pip install -e .
-```
-
-To inspect applicant order without credentials or a model call, run the
-[population preview](examples/template_population/preview.py):
-
-```bash
 python examples/template_population/preview.py
 ```
 
-It fills two synthetic job scenarios and prints their candidate IDs,
-names, and experiment questions in presentation order.
+This offline example fills two synthetic job scenarios and prints the applicant
+IDs and experiment prompts. No API key, paid model calls, or R installation is
+needed.
 
-To sample candidate assignments from editable synthetic pools and fill templates
-offline, run:
+For your first model call, follow the
+[shared-inference guide](docs/guides/shared_inference.md#configure-openai-credentials).
+Keep credentials in your local `.env`, never in Git or YAML. Live model calls
+incur provider charges; OCR and regression have additional setup requirements.
 
-```bash
-python examples/template_population/sample_candidates.py --config configs/template_population/sample_candidates.yaml
-```
+## Run your own audit
 
-See the [sampling walkthrough](docs/guides/template_population.md#automatically-sample-an-assignment-table)
-to use generated templates, configure pools and a random seed, and preserve
-candidate identities without preparing assignments manually.
+Start with the [YAML pipeline guide](docs/guides/pipeline.md) to connect stages,
+or use them individually:
 
-For a configured newspaper workflow, run all stages through cleaned experiment
-data without intermediate review pauses:
+- [Dataset loading](docs/guides/dataset_loading.md) and optional
+  [newspaper OCR](docs/guides/newspaper_ocr.md).
+- [Resume template generation](docs/guides/template_generation.md).
+- [Template population and candidate sampling](docs/guides/template_population.md).
+- [Experiment execution](docs/guides/experiment_execution.md).
+- [Regression preparation, estimation, and plotting](examples/regression/README.md).
 
-```bash
-python scripts/run_pipeline.py --config tests/manual/newspaper_pipeline/pipeline.yaml --run
-```
+The Python stages pass DataFrames between stages and save CSV checkpoints.
+Regression uses a separate, locked R environment. Inspect prepared data and set
+your research specification before running estimation; the continuous pipeline
+does not automatically run regressions.
 
-This makes paid OCR/model calls and requires a local source image, credentials
-and an R environment. The current local example uses a copied Chicago Daily
-Tribune page from April 2, 1950, with synthetic candidate pools; the guide
-documents the local-only source and its attribution. It is not a validated research design.
-Regression estimation stays separate; individual `--phase`
-commands remain available. See the [pipeline guide](docs/guides/pipeline.md).
+## Contributing
 
-To make a real OpenAI request using the shared-inference example, copy
-`.env.example` to `.env` and add your key:
-
-```dotenv
-OPENAI_API_KEY=your-key-here
-```
-
-Then run the synchronous example:
-
-```bash
-python examples/shared_inference_sync.py
-```
-
-The example previews the EDSL-rendered prompt, executes it with `gpt-4.1-nano`, and
-prints the normalized result. It makes a paid provider call. An asynchronous example
-is also available:
-
-```bash
-python examples/shared_inference_async.py
-```
-
-Read [Using Shared Inference](docs/guides/shared_inference.md) for configuration,
-request identity, prompt preview, batching, sync and async execution, results,
-failures, and checkpoint integration.
-
-Read [Loading Pipeline Datasets](docs/guides/dataset_loading.md) for local
-sources, supported formats, configurable validation, optional-field warnings, and
-stable scenario IDs.
-
-Read [Generating Resume Templates](docs/guides/template_generation.md) for the
-YAML run format, DataFrame schema, prompt and placeholder contracts, configurable
-template counts, preview, sync and async generation, checkpoints, and resume behavior.
-A complete paid OpenAI configuration example is available at
-[`synthetic_template_generation.yaml`](configs/template_generation/synthetic_template_generation.yaml).
-
-For the higher-level YAML workflow, read
-[Running Hiring Experiments](docs/guides/experiment_execution.md). The guide covers
-dataset and output paths, schema mapping, explicit question and persona templates,
-stable IDs, log probabilities, prompt preview, synchronous and asynchronous execution,
-atomic CSV checkpoints, and resume behavior. A runnable paid OpenAI configuration is available at
-[`synthetic_experiment.yaml`](configs/experiments/synthetic_experiment.yaml).
-
-The R regression stage independently includes a locked environment, separate
-preparation and fixed-effects estimation runners, tidy result export, and
-in-memory or PNG rendering. A public two-audit synthetic walkthrough verifies
-those R entry points together. Set `input_format: auditkit` in preparation
-YAML to read native experiment CSVs directly. Inputs must already be scoped
-to one experiment/persona/model and carry stable candidate IDs, counts,
-city/year, and researcher-supplied covariates.
-
-## Documentation
-
-To run the connected workflow locally, use the
-[YAML-driven pipeline runner](docs/guides/pipeline.md):
-
-```bash
-python scripts/run_pipeline.py --config tests/manual/newspaper_pipeline/pipeline.yaml --check
-```
-
-Use `--run` through prepared data, or its five individual phases when you want
-intermediate review, after configuring inputs and credentials. The runner reuses
-the existing stage configurations and supports starting from a dataset without
-OCR. See the guide for candidate assignments, output paths and resume behavior.
-
-The [package architecture](docs/architecture.md) describes the planned hiring pipeline.
-The [dataset loading component contract](docs/components/dataset_loading.md) and
-[shared inference component contract](docs/components/inference.md) document their
-detailed behavior and boundaries. The
-[experiment execution component contract](docs/components/experiment_execution.md)
-documents the implemented hiring-experiment stage.
-The [template generation component contract](docs/components/template_generation.md)
-documents the implemented resume-template stage.
-
-Contributors should also follow the [engineering workflow](docs/development_workflow.md) for issues, branches, pull requests, and review.
-
-The private [paper reference repository](docs/paper_reference.md) preserves the earlier research code for historical context without making it part of this package.
-
-The [regression integration handoff](docs/integration/regression_analysis.md)
-records the verified public workflow, the private legacy-sample compatibility
-smoke test, and the remaining experiment-writer and CI touchpoints.
-
-To consult the optional pinned implementation used for the earlier paper, run
-`python scripts/sync_reference_repo.py`. It requires authorized GitHub SSH
-access and checks the code out under the ignored `.references/` directory.
-Read the [paper reference guide](docs/paper_reference.md) before using it.
-
-## Regression analysis
-
-For regression-analysis development, restore the repository-local R
-environment and run its tests from the repository root:
-
-```bash
-Rscript -e 'renv::restore(prompt = FALSE)'
-Rscript tests/r/run_tests.R
-```
-
-Run the complete public synthetic regression workflow in its deliberate three
-stages:
-
-```bash
-Rscript scripts/prepare_regression_data.R --config examples/regression/end_to_end/prepare_audit_a.yaml
-Rscript scripts/prepare_regression_data.R --config examples/regression/end_to_end/prepare_audit_b.yaml
-
-# Inspect the two regression-ready CSVs under outputs/regression/end_to_end/.
-
-Rscript scripts/run_regression.R --config examples/regression/end_to_end/regress_audit_a.yaml
-Rscript scripts/run_regression.R --config examples/regression/end_to_end/regress_audit_b.yaml
-Rscript scripts/render_regression_plot.R --config examples/regression/end_to_end/render_audits.yaml
-```
-
-The walkthrough uses invented public data for two separately prepared audits,
-four city-year estimates per audit, and one two-panel PNG. It is a mechanical
-example, not a research result. See the [regression examples](examples/regression/README.md)
-for the inspection checks and expected artifacts.
-
-Prepare CSVs that satisfy the current regression-preparation schema with:
-
-```bash
-Rscript scripts/prepare_regression_data.R --config path/to/preparation.yaml
-```
-
-For native experiment checkpoints, add `input_format: auditkit` to that YAML.
-The loader normalizes pick/logprob/error fields; it does not infer candidate
-identities, research indicators, or audit partitions. See the
-[native checkpoint example](examples/regression/README.md#prepare-native-auditkit-experiments).
-
-The researcher assigns one stable `audit_id` in each preparation config. The
-software never generates or infers it from filenames, model metadata, or other
-IDs. One audit covers one LLM product/version configuration, one persona, and
-one distinguishable execution run or batch. Its configured files may be
-city/year shards. The identifier is retained in the regression-ready data and
-every later coefficient result.
-
-After inspecting and, if desired, slicing that regression-ready CSV, estimate
-the configured model with:
-
-```bash
-Rscript scripts/run_regression.R --config path/to/regression.yaml
-```
-
-The command writes `regression_results.csv`. In an interactive R session,
-`estimate_regressions()` instead returns the same tidy table directly, and
-`write_regression_results()` can save that object later. Every configured
-estimation-group combination is a separate fit, and every requested
-explanatory variable receives its own estimate, standard error, p-value, and
-90%, 95%, and 99% confidence intervals.
-
-The regression YAML contract and tidy result schema are documented in the
-[regression analysis guide](docs/components/regression_analysis.md#2-fixed-effects-estimation).
-The [regression integration handoff](docs/integration/regression_analysis.md)
-records the production mapping and walkthrough evidence. The
-[full-pipeline verification](docs/integration/full_pipeline.md) additionally
-exercises native Python output through R preparation, estimation, and rendering.
-
-For an interactive estimate-and-plot workflow, start R from the repository and
-load the public R interface once:
-
-```r
-source("R/regression/load.R")
-
-results <- estimate_regressions("path/to/regression.yaml")
-plot_config <- regression_plot_config(
-  outcome_variable = "pick_top",
-  term = "black",
-  period_variable = "year",
-  series_variable = "city"
-)
-figure <- plot_regression_results(results, plot_config)
-figure
-```
-
-The loader activates the repository's locked `renv` environment. In the plot
-configuration, `outcome_variable` selects the dependent variable and `term`
-selects the independent-variable coefficient shown on the y-axis. Result CSV
-paths can be passed in place of `results`, and compatible result objects from
-separate audit calls can be supplied as a list with `panel_variable =
-"audit_id"`. For paper-style city/year figures, use `series_variable = "city"`
-and `period_variable = "year"`; distinct audit panels may retain distinct
-`dataset_id` values. The comparison must otherwise use the same explanatory
-variables, controls, fixed effects, clustering, covariance type, estimation
-grouping, inference contract, and preparation settings. The selected
-`panel_variable`, rather than the mere presence of `audit_id`, `dataset_id`, or
-`model_id`, determines the panels.
-
-Render a paper-style PNG from saved numerical results with:
-
-```bash
-Rscript scripts/render_regression_plot.R --config path/to/render.yaml
-```
-
-A runnable four-panel example uses only public, synthetic saved results:
-
-```bash
-Rscript scripts/render_regression_plot.R --config examples/regression/render_synthetic.yaml
-```
-
-It writes `outputs/regression/synthetic_paper_style.png` without needing raw
-data, private-repository access, or an estimation run. See the
-[rendering example](examples/regression/README.md) for configuration and
-interpretation notes. All CSV/YAML paths are resolved relative to the YAML
-file. Generated research outputs under `outputs/` are ignored by Git.
+See [AGENTS.md](AGENTS.md) for setup and test commands,
+the [architecture](docs/architecture.md) for component contracts, and the
+[development workflow](docs/development_workflow.md) for branches, reviews,
+and pull requests.
