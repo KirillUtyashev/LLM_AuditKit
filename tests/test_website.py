@@ -69,7 +69,7 @@ def test_original_newspaper_is_preserved_and_jobs_use_three_columns():
     assert "page-preview" in css and ".job-button" not in css
 
 
-def test_extraction_labels_identify_input_and_output_without_labeling_later_stages():
+def test_extraction_and_generation_labels_identify_their_inputs_and_outputs():
     html = (WEBSITE / "index.html").read_text()
     scan = html.split('id="archive-view"', 1)[1].split("</section>", 1)[0]
     jobs = html.split('id="data-view"', 1)[1].split("</section>", 1)[0]
@@ -77,10 +77,13 @@ def test_extraction_labels_identify_input_and_output_without_labeling_later_stag
     assert '<span>Output</span><span aria-hidden="true">·</span>Extracted text' in jobs
     assert scan.index('class="artifact-label"') < scan.index('id="open-scan"')
     assert jobs.index('class="artifact-label"') < jobs.index('id="job-cards"')
-    assert html.count('class="artifact-label"') == 2
+    resumes = html.split('id="resume-view"', 1)[1].split("</section>", 1)[0]
+    assert '<span>Input</span><span aria-hidden="true">·</span>Job posting + prompt' in resumes
+    assert '<span>Output</span><span aria-hidden="true">·</span>Resume templates' in resumes
+    assert html.count('class="artifact-label"') == 4
     assert "Advertisements from the page." not in jobs
     css = (WEBSITE / "styles.css").read_text()
-    assert "flex-wrap:wrap" in re.search(r"\.stage-heading \.artifact-label\s*\{([^}]+)\}", css).group(1)
+    assert "flex-wrap:wrap" in re.search(r"\.artifact-label\s*\{([^}]+)\}", css).group(1)
 
 
 def test_job_output_explains_text_and_context_images_without_changing_csv_export():
@@ -115,7 +118,8 @@ def test_resume_posting_precedes_editable_prompt_with_adjacent_presets():
     editor = workspace.split('class="prompt-editor"', 1)[1]
     assert editor.index('id="prompt-variants"') < editor.index('<textarea id="variant-prompt"')
     assert 'for="variant-prompt"' in editor
-    assert "readonly" not in editor and "Resume template" not in workspace
+    assert "readonly" not in editor
+    assert 'class="prompt-summary-label" for="variant-prompt">Prompt summary' in editor
     assert 'rows="6"' in editor
     assert editor.index('<textarea id="variant-prompt"') < editor.index('id="generate-resume"')
     button = re.search(r'<button id="generate-resume"([^>]+)>Generate resume</button>', editor)
@@ -191,7 +195,7 @@ def test_final_table_hands_off_to_analysis_without_claiming_regression_results()
     section = html.split('id="results-view"', 1)[1].split("</section>", 1)[0]
     assert "From decisions to data." in section and "Take it from here." in section
     assert section.count('scope="col"') == 5
-    assert all(field in section for field in ["Resume preset", "Candidate", "Decision", "Logprob", "Model"])
+    assert all(field in section for field in ["Resume prompt", "Candidate", "Decision", "Logprob", "Model"])
     assert "not a calibrated hiring probability" in section
     assert "thousands of applications" in section and "own analysis" in section
     assert "Download CSV" in section
@@ -228,9 +232,9 @@ def test_public_boston_scan_and_demo_are_explicitly_approved_and_self_contained(
     assert len(paper["records"]) == 59
     assert paper["imageSrc"] == "./assets/boston-1990-08-05.jpg"
     assert (WEBSITE / paper["imageSrc"]).read_bytes()[:2] == b"\xff\xd8"
-    assert len(paper["resumeDemo"]["variants"]) == 3
+    assert len(paper["resumeDemo"]["variants"]) == 1
     assert all(len(variant["templates"]) == 2 for variant in paper["resumeDemo"]["variants"])
-    assert len(paper["experimentDemo"]["examples"]) == 3
+    assert len(paper["experimentDemo"]["examples"]) == 1
     assert not re.search(r"/Users/|/var/folders/|\.\/local/|BEGIN [A-Z ]*PRIVATE KEY|AIza[0-9A-Za-z_-]{25,}|sk-(?:proj-)?[A-Za-z0-9_-]{25,}", text)
 
 
@@ -244,11 +248,19 @@ def test_additional_papers_have_their_own_scans_sources_and_completed_runs():
         assert len(set(paper["featuredIds"])) == 3
         records = {record["id"]: record for record in paper["records"]}
         assert all(records[ad_id].get("bbox") for ad_id in paper["featuredIds"])
-        assert len(paper["resumeDemo"]["variants"]) == len(paper["experimentDemo"]["examples"]) == 3
+        assert len(paper["resumeDemo"]["variants"]) == len(paper["experimentDemo"]["examples"]) == 1
+        variant = paper["resumeDemo"]["variants"][0]
+        assert variant["promptSource"]["function"] == {"Boston": "prompt_1990", "Chicago": "prompt_1970", "Birmingham": "prompt_2001"}[paper["city"]]
+        assert variant["promptSource"]["revision"] == "c9391854ea55806ec252625cd2f48fb9edb156cd"
+        assert len(variant["prompt"]) > len(variant["promptSummary"])
+        assert paper["city"] in variant["promptSummary"] and paper["date"][:4] in variant["promptSummary"]
+        assert records[paper["resumeDemo"]["jobId"]]["text"] in variant["prompt"]
         for example in paper["experimentDemo"]["examples"]:
             assert example["jobPosting"] == records[example["jobId"]]["text"]
             assert paper["city"] in example["renderedSystemPrompt"]
             assert paper["date"][:4] in example["renderedSystemPrompt"]
+            assert example["generationPrompt"] == variant["prompt"]
+            assert example["generationSystemPrompt"] == variant["systemPrompt"]
         ad_ids.extend(records)
     assert len(ad_ids) == len(set(ad_ids))
     assert "ProQuest" in bundle["newspapers"][1]["sourceNotice"]

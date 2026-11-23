@@ -86,7 +86,8 @@ export function resumeDemo(paper) {
   for (const variant of demo.variants) {
     if (typeof variant.id !== "string" || !variant.id.trim() || ids.has(variant.id)
         || typeof variant.label !== "string" || !variant.label.trim()
-        || typeof variant.prompt !== "string" || !variant.prompt.trim()) return null;
+        || typeof variant.prompt !== "string" || !variant.prompt.trim()
+        || (variant.promptSummary !== undefined && (typeof variant.promptSummary !== "string" || !variant.promptSummary.trim()))) return null;
     ids.add(variant.id);
   }
   return {...demo, jobTitle: job.title};
@@ -98,9 +99,14 @@ export function cropStyle(paper, record) {
     top: "0", transform: `translateY(${-box.top}%)`};
 }
 
+// Summary text is presentation only; full prompts remain bound to saved results.
+export function resumePromptText(variant) {
+  return variant?.promptSummary ?? variant?.prompt ?? "";
+}
+
 export function savedResumeVariant(demo, variantId, prompt) {
   return demo?.variants.find(variant => variant.id === variantId
-    && variant.prompt === prompt && resumeTemplates(variant).length) ?? null;
+    && resumePromptText(variant) === prompt && resumeTemplates(variant).length) ?? null;
 }
 
 export function resumeTemplates(variant) {
@@ -158,6 +164,7 @@ export function experimentExample(paper, variant) {
   const job = paper.records.find(record => record.id === paper.resumeDemo?.jobId);
   if (!job || example.jobId !== job.id || example.jobPosting !== job.text || example.prompt !== demo.prompt
       || example.generationPrompt !== variant.prompt || example.template !== variant.template
+      || (variant.systemPrompt !== undefined && example.generationSystemPrompt !== variant.systemPrompt)
       || !Array.isArray(example.candidates) || example.candidates.length !== DEMO_CANDIDATES.length
       || !Array.isArray(example.decisions) || example.decisions.length !== DEMO_CANDIDATES.length) return null;
   for (const field of ["explanation", "requestId", "scenarioId", "experimentId", "modelConfigId", "model", "provider"])

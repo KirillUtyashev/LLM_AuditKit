@@ -11,9 +11,11 @@ The page presents the scan, then job rows, an optional resume prompt editor
 and synthetic template-population, saved experiment and candidate-output examples
 in normal vertical document flow.
 The city/year selector remains above the original large newspaper preview.
-The extraction section alone has understated artifact labels beside its headings:
+The extraction section has understated artifact labels beside its headings:
 `Input · Newspaper scan` and `Output · Extracted text`. On narrow screens these
-sit below the headings; no additional panels or labels on later stages are added.
+sit below the headings. Generation adds `Input · Job posting + prompt` and
+`Output · Resume templates` beside its heading and Generate button, respectively.
+No new panels or labels on later stages are added.
 A short note explains that postings are stored as text and scan excerpts provide
 context; clicking one reads the extracted text. `Download job text` still exports
 all matching postings as CSV. The later candidate-results CSV label is unchanged.
@@ -61,16 +63,16 @@ CSV exports. They are not shown in an on-page accordion.
 ## Resume prompt editor
 
 A third scroll section appears only when the selected paper includes a valid
-`resumeDemo` bound to an existing job ID. The local Administrative Assistant
-example, approved for public sharing, has three prompt presets: Strong fit, Transferable skills, and More
-detail. The source job image appears on the left, preserving its crop aspect
+`resumeDemo` bound to an existing job ID. Each newspaper now has one year-specific
+job-agency prompt. The source job image appears on the left, preserving its crop aspect
 ratio; clicking enlarges it. Jobs without a source region show extracted text
-instead. On the right, the style buttons sit directly above a labeled editable
-textarea containing the exact variant-instruction paragraph. Shared instructions
-are omitted from the editor. A shorter editor leaves room for a left-aligned
-`Generate resume` button underneath. For an unchanged preset with saved output,
+instead. On the right, a labeled editable `Prompt summary` textarea shows the
+gist, not the full model instructions. A single configured prompt hides the
+variant buttons; bundles with multiple variants still support them. A shorter
+editor leaves room for a left-aligned `Generate resume` button underneath.
+For an unchanged summary with saved output,
 it opens a native dialog labeled `Saved resume example`, with two small template
-buttons for the pair generated jointly for this preset (`N=2`). Each template
+buttons for the pair generated jointly for this prompt (`N=2`). Each template
 describes a distinct fictional applicant. The resume is typeset
 as a document: serif text, centered contact placeholders, small-cap section
 headings with thin rules, paragraphs and real bullet lists. No LaTeX compiler,
@@ -83,17 +85,29 @@ candidate details filled in. Each
 focusable placeholder has an associated tooltip; Escape dismisses that note
 without closing the resume, and focus/hover can reveal it again. This does not
 submit a generation request or modify the saved template.
-Edited prompts and presets without saved output disable the button with an
+Edited summaries and prompts without saved output disable the button with an
 explanatory tooltip rather than presenting an old result as newly generated.
 The two columns stack on mobile. The UI uses plain `resume`, without accents.
 Edits are kept only in page memory, independently for each paper/job/style,
 including intentionally blank drafts. Switching styles or visiting another
 paper and back preserves drafts; reloading the page resets them.
 
-Generation was performed offline through the existing `TemplateGenerator`,
-shared inference adapter and structured parts contract. The local bundle keeps
-the actual request IDs, fingerprints and model identity; prompt files, YAML
-configs and CSV checkpoints remain ignored local artifacts.
+Generation was performed offline through `TemplateGenerator`, shared inference
+and structured parts. Source prompts are `prompt_1990` for Boston, `prompt_1970`
+for Chicago and `prompt_2001` (the 2000–2002 function) for Birmingham, from
+`jobs_to_experiment/prompts.py`, reference revision
+`c9391854ea55806ec252625cd2f48fb9edb156cd`. The agency persona is adapted from
+`jobs_to_experiment/resume_creation.py`. Adaptations are explicit: two instead
+of four templates, canonical name/address fields only, generated example
+dates/school details instead of extra paper placeholders, no SSNs, reserved
+example phone numbers and no anachronistic website references. This is not an
+exact replication. Historian/Role-play were not substituted for generation.
+The public bundle retains full generation user/system prompts, request IDs,
+fingerprints, model identity and source/adaptation provenance. `promptSummary`
+is a separate nonblank string used by the editor; older bundles without it fall
+back to `prompt`. Saving/playing an experiment still requires the full generation
+user prompt and, when supplied, system prompt to match. YAML configs, snapshots
+and CSV checkpoints remain ignored local artifacts under `year-prompts-v1/`.
 Editing and switching variants perform no fetch or inference and do not change
 the saved prompts or outputs. Earlier outputs are previewed only for their exact
 original prompt, not as results of editing. A valid prompt-only demo does not
@@ -145,15 +159,15 @@ as plain text, not a reconstructed or invented answer. The model and button
 tooltips explain that responses are previously recorded; no saved-run suffix or
 response heading is shown. There is no simulated waiting or browser API call.
 
-The Boston examples were rerun for each of the three paired resume presets
+The three newspapers' new year-prompt resume pairs were each rerun
 through `ExperimentRunner` and the shared EDSL adapter, using
 `gpt-4o-2024-08-06`, temperature 0, and token log probabilities. The existing
 runner validated `Yes`/`No` decisions and their emitted-token log probabilities.
 This is illustrative, not an estimate of bias or a reproduction of the paper's
 assignments. Raw checkpoints,
 YAML, persona/system text and full rendered prompts stay in the ignored local
-experiment-pairs directory; earlier one-template runs remain untouched under
-experiment-demo. Saved exports retain request/scenario/experiment IDs,
+year-prompts-v1 directory; earlier style and one-template runs remain untouched.
+Saved exports retain request/scenario/experiment IDs,
 model configuration, exact source text, candidate/template IDs, ordered inputs and logprobs.
 
 An example is available only when its job ID/text, resume-generation prompt,
@@ -168,8 +182,8 @@ papers without experiment payloads hide this section and connector.
 
 ## Final candidate-output table
 
-`From decisions to data.` ends the flow with six candidate-level rows from the
-three validated preset evaluations. The visible columns are resume preset,
+`From decisions to data.` ends the flow with two candidate-level rows from the
+selected newspaper's validated evaluation. The visible columns are resume prompt,
 candidate, Yes/No decision, emitted-answer logprob and model. Logprob is the
 natural log probability of the emitted answer, not a calibrated probability of
 hiring. It is rounded to four significant digits for display; hovering retains
@@ -195,7 +209,7 @@ not expose it. A scrollable semantic table supports smaller screens.
 The closing `Take it from here.` message links to the GitHub repository and invites
 researchers to scale to thousands of applications and take the data into their
 own analysis. The demo does not manufacture a large dataset or draw statistical
-conclusions from the six examples. Regression remains a separate researcher step.
+conclusions from these small examples. Regression remains a separate researcher step.
 
 Beyond fixed synthetic substitution and saved-output playback, no uploads,
 live browser OCR/generation, research sampling, live experiments or regression
@@ -207,8 +221,8 @@ validated research comparison or hiring recommendation.
 
 The default `website/data/newspapers.json` and three newspaper images under
 `website/assets/` are the maintainer-selected public display copies. Each has
-its own saved OCR ads, six fictional resume templates and three real saved model
-evaluations. Boston sharing was explicitly approved on 19 November 2026;
+its own saved OCR ads, two fictional resume templates and one real saved model
+evaluation. Boston sharing was explicitly approved on 19 November 2026;
 Chicago 1970 and Birmingham 2000 were requested as additions on 22 November.
 Third-party newspaper content is not relicensed as MIT. Chicago's ProQuest
 reproduction notice is preserved; dates for Chicago and Birmingham are visible

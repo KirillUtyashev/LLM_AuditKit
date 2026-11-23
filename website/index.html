@@ -6,8 +6,8 @@
 <meta name="description" content="Follow a newspaper scan as it becomes a dataset of job advertisements.">
 <title>LLM AuditKit · Pipeline</title>
 <link rel="icon" href="./assets/mark.svg" type="image/svg+xml">
-<link rel="stylesheet" href="./styles.css?v=extracted-text-19">
-<script type="module" src="./app.mjs?v=extracted-text-19"></script>
+<link rel="stylesheet" href="./styles.css?v=year-prompts-20">
+<script type="module" src="./app.mjs?v=year-prompts-20"></script>
 </head>
 <body>
 <a class="skip-link" href="#main">Skip to pipeline</a>
@@ -33,7 +33,7 @@
 </section>
 <div id="resume-connector" class="flow-connector" aria-hidden="true" hidden><span class="flow-line"></span></div>
 <section id="resume-view" class="flow-stage reveal" aria-labelledby="resume-heading" hidden>
-  <div class="stage-heading"><h2 id="resume-heading">Generate a resume.</h2></div>
+  <div class="stage-heading"><h2 id="resume-heading">Generate a resume.</h2><p class="artifact-label"><span>Input</span><span aria-hidden="true">·</span>Job posting + prompt</p></div>
   <div class="resume-workspace">
     <div class="resume-posting">
       <button id="resume-source" class="source-crop" type="button" aria-label="Enlarge source job posting"><img id="resume-source-image" alt=""></button>
@@ -41,9 +41,9 @@
     </div>
     <div class="prompt-editor">
       <div id="prompt-variants" class="prompt-variants" role="group" aria-label="Prompt variants"></div>
-      <label class="sr-only" for="variant-prompt">Edit resume prompt</label>
+      <label class="prompt-summary-label" for="variant-prompt">Prompt summary</label>
       <textarea id="variant-prompt" rows="6" spellcheck="true" placeholder="Write your resume prompt"></textarea>
-      <div class="prompt-actions"><button id="generate-resume" type="button" disabled>Generate resume</button></div>
+      <div class="prompt-actions"><button id="generate-resume" type="button" disabled>Generate resume</button><p class="artifact-label"><span>Output</span><span aria-hidden="true">·</span>Resume templates</p></div>
     </div>
   </div>
 </section>
@@ -76,7 +76,7 @@
   <div class="stage-heading"><h2 id="results-heading">From decisions to data.</h2></div>
   <div class="results-toolbar"><p id="results-count" class="quiet"></p><button id="download-results" type="button" aria-label="Download candidate results CSV">Download CSV</button></div>
   <div class="results-table-scroll" role="region" aria-label="Candidate results table" tabindex="0">
-    <table class="results-table"><caption class="sr-only">Candidate-level outputs across the three resume presets.</caption><thead><tr><th scope="col">Resume preset</th><th scope="col">Candidate</th><th scope="col">Decision</th><th scope="col">Logprob</th><th scope="col">Model</th></tr></thead><tbody id="final-output-rows"></tbody></table>
+    <table class="results-table"><caption class="sr-only">Candidate-level outputs for the selected newspaper.</caption><thead><tr><th scope="col">Resume prompt</th><th scope="col">Candidate</th><th scope="col">Decision</th><th scope="col">Logprob</th><th scope="col">Model</th></tr></thead><tbody id="final-output-rows"></tbody></table>
   </div>
   <p class="logprob-note">Logprob is the natural log probability of the emitted Yes/No answer—not a calibrated hiring probability. CSV values retain full precision.</p>
   <div class="final-handoff"><h3>Take it from here.</h3><p>Scale the pipeline to thousands of applications, study model behavior, and take the data into your own analysis.</p><a href="https://github.com/KirillUtyashev/LLM_AuditKit">Run your own audit</a></div>

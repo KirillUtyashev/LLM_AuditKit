@@ -122,11 +122,14 @@ h2  {
   color:#737782;
   margin:0
 }
-.stage-heading .artifact-label {
+.artifact-label {
   display:inline-flex;
   align-items:baseline;
   flex-wrap:wrap;
-  gap:.45rem
+  gap:.45rem;
+  font-size:.875rem;
+  color:#737782;
+  margin:0
 }
 .artifact-label span:first-child {
   color:#4b5f9f;
@@ -253,7 +256,16 @@ h2  {
 .prompt-actions {
   display:flex;
   justify-content:flex-start;
+  align-items:center;
+  flex-wrap:wrap;
+  gap:12px;
   margin-top:14px
+}
+.prompt-summary-label {
+  display:block;
+  font-size:.875rem;
+  color:#656b76;
+  margin:0 0 10px
 }
 #generate-resume {
   background:#4057a4;

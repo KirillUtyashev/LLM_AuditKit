@@ -16,12 +16,12 @@ flowchart TD
     J --> T[Click image to open full extracted text dialog]
     T --> E[Close or Escape returns to image grid]
     Q --> C[Download job text: all matching text records as CSV with source IDs]
-    J --> R[Optional resume prompt demo bound to an existing job]
+    J --> R[Generation input - Job posting plus matching year-specific agency prompt]
     R --> I[Left: source posting image with enlargement or text fallback]
-    R --> V1[Right: style buttons above editable prompt window]
+    R --> V1[Right: editable prompt summary, hide selector for one prompt]
     V1 --> V2[Keep per-paper/job/style drafts in page memory only]
-    V2 --> V3{Exact original prompt and saved output?}
-    V3 -->|Yes| V4[Generate resume previews two jointly generated distinct templates]
+    V2 --> V3{Unchanged summary and saved output?}
+    V3 -->|Yes| V4[Output - Resume templates: preview two jointly generated distinct templates]
     V3 -->|No| V5[Disable button: no live generation]
     V4 --> V6[Close or Escape returns to editor; no browser inference]
     V4 --> V7[Highlight placeholders with intentional next-step hover/focus note]
@@ -31,7 +31,7 @@ flowchart TD
     P3 --> P4[Brief changed-value highlight; reduced-motion fallback]
     P3 --> P5[No inference, sampling or template mutation]
     V5 --> P6[Hide population section and clear stale content]
-    P3 --> E1{Exact saved experiment matches current inputs?}
+    P3 --> E1{Saved experiment matches full generation prompts and current inputs?}
     E1 -->|Yes| E2[How does the model decide?]
     E1 -->|No| E3[Hide experiment section and clear stale result]
     E2 --> E4[Review job text and both typeset resumes]
@@ -39,8 +39,8 @@ flowchart TD
     E5 --> E6{Hiring prompt unchanged?}
     E6 -->|Yes| E7[Reveal saved interview decisions and explanation]
     E6 -->|No| E8[Disable playback and clear result; no live request]
-    E6 -->|Original prompt and every preset validates| F1[From decisions to data: six candidate rows]
-    F1 --> F2[Show preset, candidate, decision, logprob and model]
+    E6 -->|Original prompt and saved example validates| F1[From decisions to data: two candidate rows]
+    F1 --> F2[Show resume prompt, candidate, decision, logprob and model]
     F1 --> F3[Download full-precision CSV with stable IDs and explanation]
     F1 --> F4[Take it from here: GitHub repository and researcher-owned analysis]
     E8 --> F5[Hide final table and disable download]

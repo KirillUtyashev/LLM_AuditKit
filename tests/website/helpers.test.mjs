@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import {readFile} from "node:fs/promises";
-import {CSV_COLUMNS, chooseRecord, csvForRecords, filterRecords, formatDate, normalizedBox, stateFromUrl, cropStyle, loadBundle, jobPreview, resumeDemo, savedResumeVariant, resumeBlocks, resumeTextParts, DEMO_CANDIDATES, populateResumeExample, populationExamples, resumeTemplates, experimentExample, finalOutputRows, resultCsv, RESULT_COLUMNS} from "../../website/lib.mjs";
+import {CSV_COLUMNS, chooseRecord, csvForRecords, filterRecords, formatDate, normalizedBox, stateFromUrl, cropStyle, loadBundle, jobPreview, resumeDemo, savedResumeVariant, resumePromptText, resumeBlocks, resumeTextParts, DEMO_CANDIDATES, populateResumeExample, populationExamples, resumeTemplates, experimentExample, finalOutputRows, resultCsv, RESULT_COLUMNS} from "../../website/lib.mjs";
 import {syntheticExperiment, pairedVariant} from "./experiment-fixture.mjs";
 
 const bundle = JSON.parse(await readFile(new URL("../../website/data/archive-newspapers.json", import.meta.url), "utf8"));
@@ -16,17 +16,19 @@ test("published papers each expose their own full pipeline without local assets"
   assert.equal(published.newspapers[0].records.length, 59);
   const jobIds = new Set(), requestIds = new Set(), templateIds = new Set();
   for (const paper of published.newspapers) {
-    assert.equal(finalOutputRows(paper).length, 6);
+    assert.equal(finalOutputRows(paper).length, 2);
     const url = `https://example.org/LLM_AuditKit/?paper=${paper.id}#results`;
     assert.deepEqual(stateFromUrl(url, published.newspapers), {paperId: paper.id, step: "results"});
     assert.ok(paper.imageSrc.startsWith("./assets/"));
     assert.equal(paper.featuredIds.length, 3);
     for (const record of paper.records) if (record.bbox) normalizedBox(paper, record);
     const demo = resumeDemo(paper);
+    assert.equal(demo.variants.length, 1);
     assert.ok(!jobIds.has(demo.jobId)); jobIds.add(demo.jobId);
     assert.ok(paper.featuredIds.includes(demo.jobId));
     for (const variant of demo.variants) {
       assert.equal(resumeTemplates(variant).length, 2);
+      assert.ok(variant.prompt.length > resumePromptText(variant).length);
       const example = experimentExample(paper, variant);
       assert.ok(example);
       assert.ok(!requestIds.has(example.requestId)); requestIds.add(example.requestId);
@@ -304,6 +306,24 @@ test("saved resumes are available only for the selected unchanged preset", () =>
   for (const template of [undefined, "", "   ", {}]) {
     assert.equal(savedResumeVariant({variants: [{...variant, template}]}, "a", variant.prompt), null);
   }
+});
+
+test("prompt summaries are display text, never substitutes for full saved generation inputs", () => {
+  const variant = pairedVariant({id: "year-prompt", label: "Job agency", prompt: "Full generation instructions and source job", promptSummary: "A short gist", systemPrompt: "Agency system instructions", template: "{{name}}\n{{address}}\nQualifications"});
+  const paper = {...papers[0], resumeDemo: {jobId: papers[0].records[0].id, variants: [variant]}};
+  paper.experimentDemo = syntheticExperiment(paper);
+  paper.experimentDemo.examples[0].generationSystemPrompt = variant.systemPrompt;
+  assert.equal(resumePromptText(variant), "A short gist");
+  assert.equal(savedResumeVariant(paper.resumeDemo, variant.id, "A short gist"), variant);
+  assert.equal(savedResumeVariant(paper.resumeDemo, variant.id, variant.prompt), null);
+  assert.equal(savedResumeVariant(paper.resumeDemo, variant.id, "An edited gist"), null);
+  assert.ok(experimentExample(paper, variant));
+  assert.equal(experimentExample(paper, {...variant, prompt: variant.prompt + " changed"}), null);
+  assert.equal(experimentExample(paper, {...variant, systemPrompt: "Other agency instructions"}), null);
+  for (const promptSummary of ["", " ", null, {}]) {
+    assert.equal(resumeDemo({...paper, resumeDemo: {...paper.resumeDemo, variants: [{...variant, promptSummary}]}}), null);
+  }
+  assert.equal(resumePromptText({prompt: "Old-style prompt"}), "Old-style prompt");
 });
 
 test("typesetting preserves resume content, placeholders, sections and bullets", () => {

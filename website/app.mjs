@@ -1,4 +1,4 @@
-import {csvForRecords, jobPreview, cropStyle, stateFromUrl, loadBundle, resumeDemo, savedResumeVariant, resumeBlocks, resumeTextParts, DEMO_CANDIDATES, populationExamples, resumeTemplates, experimentExample, finalOutputRows, resultCsv} from "./lib.mjs?v=extracted-text-19";
+import {csvForRecords, jobPreview, cropStyle, stateFromUrl, loadBundle, resumeDemo, savedResumeVariant, resumePromptText, resumeBlocks, resumeTextParts, DEMO_CANDIDATES, populationExamples, resumeTemplates, experimentExample, finalOutputRows, resultCsv} from "./lib.mjs?v=year-prompts-20";
 
 const $ = id => document.getElementById(id);
 const state = {papers: [], paperId: null, step: "archive", query: "", variantId: null, candidateId: DEMO_CANDIDATES[0].id};
@@ -38,6 +38,7 @@ function renderResumes() {
   if (!demo) {
     state.variantId = null;
     $("prompt-variants").replaceChildren();
+    $("prompt-variants").hidden = true;
     $("variant-prompt").value = "";
     $("resume-source-image").src = "";
     $("resume-source-image").alt = "";
@@ -63,6 +64,7 @@ function renderResumes() {
     $("resume-source-image").src = "";
     $("resume-source-image").alt = "";
   }
+  $("prompt-variants").hidden = demo.variants.length < 2;
   $("prompt-variants").replaceChildren(...demo.variants.map(variant => {
     const button = document.createElement("button");
     button.type = "button"; button.className = "variant-button";
@@ -79,7 +81,7 @@ function renderVariant(demo) {
   for (const button of $("prompt-variants").children) {
     button.setAttribute("aria-pressed", String(button.dataset.variantId === variant.id));
   }
-  $("variant-prompt").value = promptDrafts.get(draftKey(demo, variant.id)) ?? variant.prompt;
+  $("variant-prompt").value = promptDrafts.get(draftKey(demo, variant.id)) ?? resumePromptText(variant);
   updateResumeButton(demo);
 }
 
@@ -87,7 +89,7 @@ function updateResumeButton(demo) {
   const saved = savedResumeVariant(demo, state.variantId, $("variant-prompt").value);
   $("generate-resume").disabled = !saved;
   $("generate-resume").title = saved ? "Open the saved example for this prompt; no live generation."
-    : "Saved examples are available for the original presets only; live generation is not connected.";
+    : "Saved examples are available for the original prompt summary only; live generation is not connected.";
   renderPopulation(saved);
 }
 
@@ -203,7 +205,8 @@ function renderFinalOutput(enabled) {
   $("results-view").hidden = !rows.length;
   $("results-connector").hidden = !rows.length;
   $("download-results").disabled = !rows.length;
-  $("results-count").textContent = rows.length ? `${rows.length} candidate evaluations · ${new Set(rows.map(row => row.variant_id)).size} resume presets` : "";
+  const count = new Set(rows.map(row => row.variant_id)).size;
+  $("results-count").textContent = rows.length ? `${rows.length} candidate evaluations · ${count} resume prompt${count === 1 ? "" : "s"}` : "";
   $("final-output-rows").replaceChildren(...rows.map(row => {
     const tr = document.createElement("tr");
     const values = [row.preset, row.candidate_name, row.answer, row.logprob.toPrecision(4), row.model === "gpt-4o-2024-08-06" ? "GPT-4o" : row.model];
