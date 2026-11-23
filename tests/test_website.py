@@ -233,8 +233,9 @@ def test_final_table_hands_off_to_analysis_without_claiming_regression_results()
     assert all(f'>{field}</th>' in section for field in ["Prompt", "Candidate", "Decision", "Answer probability", "Model", "Comments", "Request ID", "Candidate ID"])
     assert ">Resume prompt</th>" not in section
     assert ">Logprob<" not in section
-    assert "not calibrated confidence that the decision is correct" in section
-    assert "CSV retains raw log probabilities" in section
+    assert "Answer probability measures" not in section
+    assert "CSV retains raw log probabilities" not in section
+    assert 'class="logprob-note"' not in section
     assert "thousands of applications" in section and "own analysis" in section
     assert "Download CSV" in section
     assert '<a href="https://github.com/KirillUtyashev/LLM_AuditKit">Run your own audit</a>' in section

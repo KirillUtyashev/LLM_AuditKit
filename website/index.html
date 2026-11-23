@@ -6,8 +6,8 @@
 <meta name="description" content="Follow a newspaper scan as it becomes a dataset of job advertisements.">
 <title>LLM AuditKit · Pipeline</title>
 <link rel="icon" href="./assets/mark.svg" type="image/svg+xml">
-<link rel="stylesheet" href="./styles.css?v=output-columns-32">
-<script type="module" src="./app.mjs?v=output-columns-32"></script>
+<link rel="stylesheet" href="./styles.css?v=clean-results-33">
+<script type="module" src="./app.mjs?v=clean-results-33"></script>
 </head>
 <body>
 <a class="skip-link" href="#main">Skip to pipeline</a>
@@ -83,7 +83,6 @@
   <div class="results-table-scroll" role="region" aria-label="Candidate results table" tabindex="0">
     <table class="results-table"><caption class="sr-only">Candidate-level outputs for the selected newspaper.</caption><thead><tr><th scope="col">Prompt</th><th scope="col">Candidate</th><th scope="col">Decision</th><th scope="col">Answer probability</th><th scope="col">Model</th><th scope="col">Comments</th><th scope="col">Request ID</th><th scope="col">Candidate ID</th></tr></thead><tbody id="final-output-rows"></tbody></table>
   </div>
-  <p class="logprob-note">Answer probability measures the model’s likelihood of its emitted Yes/No answer—not calibrated confidence that the decision is correct. CSV retains raw log probabilities.</p>
   <div class="final-handoff"><h3>Take it from here.</h3><p>Scale the pipeline to thousands of applications, study model behavior, and take the data into your own analysis.</p><a href="https://github.com/KirillUtyashev/LLM_AuditKit">Run your own audit</a></div>
 </section>
 <footer id="source-footer" hidden><a id="archive-source" target="_blank" rel="noopener">Original source</a></footer>

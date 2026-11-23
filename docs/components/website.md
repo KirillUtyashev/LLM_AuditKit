@@ -282,6 +282,8 @@ values to zero or near-certainty to 100%. Zero logprob displays 100.0% at the
 provider's reported precision. Invalid/nonfinite or positive logprobs do not
 become probabilities. Hover retains full-precision percent; CSV retains both
 `answer_probability_pct` and the original numeric `logprob`.
+The results section has no explanatory probability paragraph beneath the table;
+the interpretation remains documented here and in the existing value tooltips.
 
 The download also includes numeric `decision` (`1`/`0`), variant/candidate/template
 IDs, scenario/request/experiment IDs, model configuration/provider, source ad ID,
