@@ -6,8 +6,8 @@
 <meta name="description" content="Follow a newspaper scan as it becomes a dataset of job advertisements.">
 <title>LLM AuditKit · Pipeline</title>
 <link rel="icon" href="./assets/mark.svg" type="image/svg+xml">
-<link rel="stylesheet" href="./styles.css?v=inline-controls-22">
-<script type="module" src="./app.mjs?v=inline-controls-22"></script>
+<link rel="stylesheet" href="./styles.css?v=inline-controls-23">
+<script type="module" src="./app.mjs?v=inline-controls-23"></script>
 </head>
 <body>
 <a class="skip-link" href="#main">Skip to pipeline</a>
@@ -47,7 +47,6 @@
         <p>Include <label class="inline-setting"><span class="sr-only">Number of job-related skills</span><select id="job-skill-count" class="prompt-token"><option value="2">2 job-related skills</option><option value="4">4 job-related skills</option></select></label> and <label class="inline-setting"><span class="sr-only">Experience level</span><select id="experience-level" class="prompt-token"><option value="entry-level">entry-level experience</option><option value="experienced">an experienced background</option></select></label>.</p>
         <p>Leave <button id="prompt-name" class="placeholder-token" type="button" aria-expanded="false" aria-controls="population-help">name</button> and <button id="prompt-address" class="placeholder-token" type="button" aria-expanded="false" aria-controls="population-help">address</button> for the next step.</p>
         <div id="population-help" class="population-help" hidden>Filled in during template population. <button id="go-to-population" type="button">See the next step</button></div>
-        <p class="prompt-guidance">Counts and experience guide the prompt; saved examples were checked. No live generation.</p>
       </div>
       <textarea id="variant-prompt" rows="6" spellcheck="true" placeholder="Write your resume prompt"></textarea>
       <div class="prompt-actions"><button id="generate-resume" type="button" disabled>Inspect templates</button><p class="artifact-label"><span>Output</span><span aria-hidden="true">·</span>Resume templates</p></div>

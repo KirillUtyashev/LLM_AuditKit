@@ -142,7 +142,8 @@ def test_prompt_controls_are_inline_accessible_and_distinct_from_population_link
     assert "Number of resume templates" in section and "Number of job-related skills" in section
     assert 'aria-controls="population-help"' in section
     assert "Filled in during template population" in section
-    assert "No live generation" in section
+    assert "Counts and experience guide the prompt" not in section
+    assert 'class="prompt-guidance"' not in section
 
 
 def test_saved_resume_uses_a_typeset_document_not_a_text_box():
