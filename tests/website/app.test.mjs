@@ -140,7 +140,8 @@ test(`preview rendering with reveal support ${revealSupported}, failure ${Boolea
     assert.equal(get("results-connector").hidden, false);
     assert.equal(get("results-count").textContent, "6 candidate evaluations · 3 resume prompts");
     assert.equal(get("final-output-rows").children.length, 6);
-    assert.deepEqual(get("final-output-rows").children[0].children.map(node => node.textContent), ["Strong fit", "Alex Morgan", "Yes", "90.5%", "synthetic-test-model"]);
+    assert.deepEqual(get("final-output-rows").children[0].children.map(node => node.textContent), ["Strong fit", "Alex Morgan", "Yes", "90.5%", "synthetic-test-model", "…", "…", "…"]);
+    assert.ok(get("final-output-rows").children[0].children.slice(5).every(node => node.attributes["aria-label"].includes("full value available in the CSV")));
     assert.equal(get("final-output-rows").children[1].children[2].textContent, "No");
     let downloadBlob;
     const createUrl = URL.createObjectURL;
@@ -517,7 +518,8 @@ test(`preview rendering with reveal support ${revealSupported}, failure ${Boolea
     assert.match(get("experiment-explanation").textContent, /controls-4-4-experienced/);
     assert.equal(get("final-output-rows").children.length, 4);
     assert.equal(get("experiment-decisions").children.length, 4);
-    assert.equal(get("final-output-rows").children[0].children[0].textContent, "controls-4-4-experienced");
+    assert.equal(get("final-output-rows").children[0].children[0].textContent, "Role-play");
+    assert.equal(get("results-count").textContent, "4 candidate evaluations · Role-play");
     URL.createObjectURL = blob => {downloadBlob = blob; return createUrl(blob);};
     try {get("download-results").fire("click");} finally {URL.createObjectURL = createUrl;}
     const selectedCsv = await downloadBlob.text();
@@ -542,6 +544,9 @@ test(`preview rendering with reveal support ${revealSupported}, failure ${Boolea
     assert.equal(get("experiment-result").hidden, true);
     assert.equal(get("final-output-rows").children[0].children[2].textContent, "No");
     assert.equal(get("final-output-rows").children[0].children[3].textContent, "20.0%");
+    assert.equal(get("final-output-rows").children[0].children[0].textContent, "Historian");
+    assert.equal(get("results-count").textContent, "4 candidate evaluations · Historian");
+    assert.ok(get("final-output-rows").children.every(row => row.children.length === 8 && row.children.slice(5).every(cell => cell.textContent === "…")));
     get("run-experiment").fire("click");
     assert.match(get("experiment-explanation").textContent, /Perspective: historian/);
     get("experiment-prompt").value = "Edited historian prompt";
@@ -561,6 +566,10 @@ test(`preview rendering with reveal support ${revealSupported}, failure ${Boolea
     const historianCsv = await downloadBlob.text();
     assert.ok(historianCsv.includes('"Historian"') && historianCsv.includes('"answer_probability_pct"'));
     assert.ok(!historianCsv.includes('"Role-play"'));
+    assert.ok(historianCsv.includes('"synthetic-candidate-4"'));
+    assert.ok(historianCsv.includes('"synthetic-request-controls-4-4-experienced-historian"'));
+    assert.ok(historianCsv.includes("Perspective: historian"));
+    assert.ok(!historianCsv.includes("…"));
     get("prompt-name").fire("click");
     assert.equal(get("population-help").hidden, false);
     assert.equal(get("prompt-name").attributes["aria-expanded"], "true");

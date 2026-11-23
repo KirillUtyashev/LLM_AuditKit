@@ -265,8 +265,14 @@ papers without experiment payloads hide this section and connector.
 ## Final candidate-output table
 
 `From decisions to data.` ends the flow with two or four candidate-level rows from the
-selected newspaper and settings' validated evaluation. The visible columns are resume prompt,
-candidate, Yes/No decision, `Answer probability` and model. The percentage is
+selected newspaper and settings' validated evaluation. The first column is
+`Prompt`, showing the selected `Role-play` or `Historian` label, not the resume
+generation settings. Legacy bundles fall back to their preset label. Candidate,
+Yes/No decision, `Answer probability` and model follow. `Comments`, `Request ID`
+and `Candidate ID` preview additional exported fields with `…` placeholders;
+titles and accessible labels explain that full values are in the CSV. Those
+placeholders do not replace actual exported values or mean missing data. The
+toolbar shows the selected perspective beside the candidate count. The percentage is
 `100 * exp(logprob)` for the emitted answer-token span, not calibrated confidence
 that the decision is correct or the applicant should be hired. It is not a
 self-reported LLM confidence score. No answers are not inverted into hire
@@ -286,6 +292,8 @@ are escaped for spreadsheet safety without turning negative numeric logprobs
 into text. This is a simplified candidate-level analysis view, not the native
 wide experiment checkpoint or an R-preparation export: no `audit_id`, substantive
 covariates or regression outputs are inferred.
+CSV `preset` still records generation settings separately from `prompt_style`;
+comments and stable request/candidate IDs retain their real saved values.
 
 The table and CSV contain only the selected combination and perspective, never the other seven
 settings. Unknown selections clear the table and disable download. The default

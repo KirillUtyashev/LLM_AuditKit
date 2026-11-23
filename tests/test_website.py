@@ -229,8 +229,9 @@ def test_final_table_hands_off_to_analysis_without_claiming_regression_results()
     assert html.index('id="experiment-view"') < html.index('id="results-connector"') < html.index('id="results-view"')
     section = html.split('id="results-view"', 1)[1].split("</section>", 1)[0]
     assert "From decisions to data." in section and "Take it from here." in section
-    assert section.count('scope="col"') == 5
-    assert all(field in section for field in ["Resume prompt", "Candidate", "Decision", "Answer probability", "Model"])
+    assert section.count('scope="col"') == 8
+    assert all(f'>{field}</th>' in section for field in ["Prompt", "Candidate", "Decision", "Answer probability", "Model", "Comments", "Request ID", "Candidate ID"])
+    assert ">Resume prompt</th>" not in section
     assert ">Logprob<" not in section
     assert "not calibrated confidence that the decision is correct" in section
     assert "CSV retains raw log probabilities" in section

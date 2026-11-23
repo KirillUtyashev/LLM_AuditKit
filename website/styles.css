@@ -633,6 +633,9 @@ h2  {
   font-variant-numeric:tabular-nums;
   font-family:ui-monospace,SFMono-Regular,Consolas,monospace
 }
+.results-table .preview-placeholder {
+  color:#737782
+}
 .logprob-note {
   color:#737782;
   font-size:.875rem;

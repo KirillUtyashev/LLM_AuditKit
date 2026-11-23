@@ -1,4 +1,4 @@
-import {csvForRecords, jobPreview, cropStyle, stateFromUrl, loadBundle, resumeDemo, savedResumeVariant, resumePromptText, inlineResumeVariant, resumeBlocks, resumeTextParts, populationExamples, resumeTemplates, experimentExample, experimentPerspectives, experimentPromptText, formatAnswerProbability, finalOutputRows, resultCsv, candidateFieldPresets, replaceCandidateFields} from "./lib.mjs?v=prompt-summary-31";
+import {csvForRecords, jobPreview, cropStyle, stateFromUrl, loadBundle, resumeDemo, savedResumeVariant, resumePromptText, inlineResumeVariant, resumeBlocks, resumeTextParts, populationExamples, resumeTemplates, experimentExample, experimentPerspectives, experimentPromptText, formatAnswerProbability, finalOutputRows, resultCsv, candidateFieldPresets, replaceCandidateFields} from "./lib.mjs?v=output-columns-32";
 
 const $ = id => document.getElementById(id);
 const state = {papers: [], paperId: null, step: "archive", query: "", variantId: null, perspectiveId: null};
@@ -287,16 +287,22 @@ function renderFinalOutput(enabled) {
   $("results-connector").hidden = !rows.length;
   $("download-results").disabled = !rows.length;
   const count = new Set(rows.map(row => row.variant_id)).size;
-  $("results-count").textContent = rows.length ? `${rows.length} candidate evaluations · ${count} resume prompt${count === 1 ? "" : "s"}` : "";
+  const context = rows[0]?.prompt_style || `${count} resume prompt${count === 1 ? "" : "s"}`;
+  $("results-count").textContent = rows.length ? `${rows.length} candidate evaluations · ${context}` : "";
   $("final-output-rows").replaceChildren(...rows.map(row => {
     const tr = document.createElement("tr");
-    const values = [row.preset, row.candidate_name, row.answer, formatAnswerProbability(row.logprob), row.model === "gpt-4o-2024-08-06" ? "GPT-4o" : row.model];
+    const values = [row.prompt_style || row.preset, row.candidate_name, row.answer, formatAnswerProbability(row.logprob), row.model === "gpt-4o-2024-08-06" ? "GPT-4o" : row.model];
     values.forEach((value, index) => {
       const td = document.createElement("td"); td.textContent = value;
       if (index === 3) {td.className = "numeric"; td.title = `${row.answer_probability_pct}% likelihood of the emitted ${row.answer} answer tokens`;}
       if (index === 4) td.title = row.model;
       tr.append(td);
     });
+    for (const field of ["Comments", "Request ID", "Candidate ID"]) {
+      const td = document.createElement("td"); td.textContent = "…"; td.className = "preview-placeholder";
+      td.title = `${field}: full value available in the CSV`;
+      td.setAttribute("aria-label", td.title); tr.append(td);
+    }
     return tr;
   }));
   if (!rows.length && state.step === "results") {
@@ -478,7 +484,7 @@ function setupScrollFlow() {
 
 async function start() {
   const bundle = await loadBundle(fetch, location.hostname,
-    new URL("./data/newspapers.json?v=prompt-summary-31", import.meta.url), new URL("./local/newspapers.json", import.meta.url));
+    new URL("./data/newspapers.json?v=output-columns-32", import.meta.url), new URL("./local/newspapers.json", import.meta.url));
   state.papers = bundle.newspapers;
   Object.assign(state, stateFromUrl(location.href, state.papers));
   $("paper-select").replaceChildren(...state.papers.map(item => {

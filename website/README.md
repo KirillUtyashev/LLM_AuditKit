@@ -297,6 +297,11 @@ zero logprob displays `100.0%` at reported precision.
 `Download CSV` retains full-precision `answer_probability_pct` and raw `logprob`,
 numeric decisions, explanations, perspective/persona identity and stable
 candidate/template/request/model IDs. Only the selected perspective is exported.
+The visible `Prompt` column shows `Role-play` or `Historian`. Three additional
+preview columns—Comments, Request ID and Candidate ID—show `…`; their titles
+identify full values as available in CSV. Downloads retain actual comments/IDs,
+not placeholders, and preserve the generation `preset` separately from the
+hiring `prompt_style`.
 
 This candidate-level convenience export is not an R-ready regression dataset.
 It does not infer audit IDs, demographic indicators or research specifications.
