@@ -305,9 +305,12 @@ hiring `prompt_style`.
 
 This candidate-level convenience export is not an R-ready regression dataset.
 It does not infer audit IDs, demographic indicators or research specifications.
-The final message links to the GitHub repository so researchers can scale the
-workflow to thousands of applications and continue with their own analysis.
-No regression or statistical conclusion is presented for this small demo.
+The final message invites researchers to scale to thousands of simulated hiring
+decisions and analyze variation across applicants, places and time. An unchanged
+role-play coefficient plot from the paper follows, captioned as a separate paper
+example rather than results from this small demo. Clicking opens the full-size
+PNG. The GitHub-only `Run your own audit` link remains below it. No regression
+runs in the browser; no statistical conclusion is inferred from the demo rows.
 
 ## Archive fixtures and Pages
 

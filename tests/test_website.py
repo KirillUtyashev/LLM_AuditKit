@@ -247,10 +247,34 @@ def test_final_table_hands_off_to_analysis_without_claiming_regression_results()
     toolbar_style = re.search(r"\.stage-heading\.results-toolbar\s*\{([^}]+)\}", css).group(1)
     assert "display:flex" in toolbar_style and "flex-wrap:wrap" in toolbar_style
     assert "justify-content:space-between" in re.search(r"\.stage-heading\s*\{([^}]+)\}", css).group(1)
-    assert "thousands of applications" in section and "own analysis" in section
+    assert "thousands of simulated hiring decisions" in section
     assert "Download CSV" in section
     assert '<a href="https://github.com/KirillUtyashev/LLM_AuditKit">Run your own audit</a>' in section
     assert "overflow-x:auto" in (WEBSITE / "styles.css").read_text()
+
+
+def test_closing_paper_plot_is_distinct_from_demo_results_and_opens_full_size():
+    html = (WEBSITE / "index.html").read_text()
+    section = html.split('id="results-view"', 1)[1].split("</section>", 1)[0]
+    assert section.index('id="final-output-rows"') < section.index('class="final-handoff"')
+    assert "easily analyze how model behavior varies across applicants, places, and time" in section
+    figure = re.search(r'<figure class="paper-example">(.*?)</figure>', section, re.S).group(1)
+    assert "Example analysis from our paper" in figure
+    assert "Role-play coefficients with 95% confidence intervals" in figure
+    asset = "./assets/paper-role-play-coefficients.png"
+    assert f'href="{asset}" target="_blank" rel="noopener"' in figure
+    assert f'src="{asset}" width="1820" height="1348" loading="lazy"' in figure
+    assert "Black versus White applicants" in figure
+    assert "Gemini 1.5 Flash, GPT-4o, Grok-2, and Llama 3.1 405B" in figure
+    image = (WEBSITE / "assets/paper-role-play-coefficients.png").read_bytes()
+    assert image[:8] == b"\x89PNG\r\n\x1a\n"
+    assert int.from_bytes(image[16:20], "big") == 1820
+    assert int.from_bytes(image[20:24], "big") == 1348
+    css = (WEBSITE / "styles.css").read_text()
+    image_style = re.search(r"\.paper-example img\s*\{([^}]+)\}", css).group(1)
+    assert "width:100%" in image_style and "height:auto" in image_style
+    handoff = re.search(r"\.final-handoff\s*\{([^}]+)\}", css).group(1)
+    assert "max-width:650px" not in handoff
 
 
 def test_public_archive_bundle_has_local_images_and_no_research_payloads():

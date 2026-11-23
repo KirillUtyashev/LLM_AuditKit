@@ -26,6 +26,23 @@ These are unmodified display copies. Neither scan is covered by the repository's
 MIT license; confirm applicable permissions before further redistribution.
 Raw run directories and other research material remain excluded.
 
+## Paper coefficient plot
+
+`paper-role-play-coefficients.png` is an unchanged copy of `figures/f04.png`
+from the maintainer's `LLM_Paper_Yanuo_Zhou_after_MS` manuscript, explicitly
+approved for this website on 23 November 2026. Its caption source is
+`figures/f04_caption.tex`: estimated coefficients for Black applicants by city
+and year under role-play prompts, with 95% confidence intervals and separate
+Gemini 1.5 Flash, GPT-4o, Grok-2 and Llama 3.1 405B panels.
+
+The 1820 × 1348 PNG has SHA-256
+`3d7f64d21b68ee01c9005edb6933f8850ba325920d7a12eae861ece463f9fc69`.
+It illustrates the earlier paper's analysis, not a regression fitted to the
+website demo rows or a new result produced by AuditKit. Only this approved
+figure is included; no manuscript, private research data or regression inputs
+were copied. The figure retains the paper authors' rights and is not relicensed
+under the repository's MIT license.
+
 ## Retained provider icons
 
 Retained provider assets; the current page does not display these icons.

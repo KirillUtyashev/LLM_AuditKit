@@ -631,8 +631,7 @@ h2  {
   color:#737782
 }
 .final-handoff {
-  max-width:650px;
-  margin:64px auto 0;
+  margin:40px auto 0;
   text-align:center
 }
 .final-handoff h3 {
@@ -642,13 +641,31 @@ h2  {
   letter-spacing:-.025em
 }
 .final-handoff p {
-  margin:0;
+  max-width:650px;
+  margin:0 auto;
   color:#626773;
   line-height:1.75
 }
-.final-handoff a {
+.final-handoff > a {
   display:inline-block;
   margin-top:20px
+}
+.paper-example {
+  margin:28px 0 0
+}
+.paper-example a {
+  display:block;
+  cursor:zoom-in
+}
+.paper-example img {
+  display:block;
+  width:100%;
+  height:auto
+}
+.paper-example figcaption {
+  margin-top:12px;
+  color:#737782;
+  font-size:.875rem
 }
 @keyframes candidate-update {
   from {background:#e3eafa}

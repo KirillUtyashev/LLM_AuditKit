@@ -310,10 +310,15 @@ download. The table describes the original saved presets, not unsent drafts.
 `#results` bookmarks this section; papers without completed examples do
 not expose it. A scrollable semantic table supports smaller screens.
 
-The closing `Take it from here.` message links to the GitHub repository and invites
-researchers to scale to thousands of applications and take the data into their
-own analysis. The demo does not manufacture a large dataset or draw statistical
-conclusions from these small examples. Regression remains a separate researcher step.
+The closing `Take it from here.` message invites researchers to scale to thousands
+of simulated hiring decisions and analyze variation across applicants, places and
+time. Beneath it, the maintainer-approved, unchanged role-play coefficient plot
+from the earlier paper illustrates analysis at research scale. It is explicitly
+captioned `Example analysis from our paper`, not presented as a regression on the
+website's few candidates. The responsive image opens its original full-size PNG
+in a new tab; the GitHub-only `Run your own audit` handoff follows the plot.
+See [asset provenance](../../website/assets/README.md#paper-coefficient-plot).
+No regression runs in the browser. Regression remains a separate researcher step.
 
 Beyond synthetic preset substitution and saved-output playback, no uploads,
 live browser OCR/generation, research sampling, live experiments or regression
