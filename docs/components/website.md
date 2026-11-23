@@ -273,7 +273,9 @@ Yes/No decision, `Answer probability` and model follow. `Comments`, `Request ID`
 and `Candidate ID` preview additional exported fields with `…` placeholders;
 titles and accessible labels explain that full values are in the CSV. Those
 placeholders do not replace actual exported values or mean missing data. The
-toolbar contains only the CSV button, with no evaluation-count caption. The percentage is
+CSV button shares the heading row (wrapping on narrow screens), with no
+evaluation-count caption or extra toolbar row. Short continuous connectors and
+consistent section margins keep the scroll flow compact. The percentage is
 `100 * exp(logprob)` for the emitted answer-token span, not calibrated confidence
 that the decision is correct or the applicant should be hired. It is not a
 self-reported LLM confidence score. No answers are not inverted into hire

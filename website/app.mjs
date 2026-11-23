@@ -1,4 +1,4 @@
-import {csvForRecords, jobPreview, cropStyle, stateFromUrl, loadBundle, resumeDemo, savedResumeVariant, resumePromptText, inlineResumeVariant, resumeBlocks, resumeTextParts, populationExamples, resumeTemplates, experimentExample, experimentPerspectives, experimentPromptText, formatAnswerProbability, finalOutputRows, resultCsv, candidateFieldPresets, replaceCandidateFields} from "./lib.mjs?v=minimal-results-34";
+import {csvForRecords, jobPreview, cropStyle, stateFromUrl, loadBundle, resumeDemo, savedResumeVariant, resumePromptText, inlineResumeVariant, resumeBlocks, resumeTextParts, populationExamples, resumeTemplates, experimentExample, experimentPerspectives, experimentPromptText, formatAnswerProbability, finalOutputRows, resultCsv, candidateFieldPresets, replaceCandidateFields} from "./lib.mjs?v=compact-spacing-35";
 
 const $ = id => document.getElementById(id);
 const state = {papers: [], paperId: null, step: "archive", query: "", variantId: null, perspectiveId: null};
@@ -481,7 +481,7 @@ function setupScrollFlow() {
 
 async function start() {
   const bundle = await loadBundle(fetch, location.hostname,
-    new URL("./data/newspapers.json?v=minimal-results-34", import.meta.url), new URL("./local/newspapers.json", import.meta.url));
+    new URL("./data/newspapers.json?v=compact-spacing-35", import.meta.url), new URL("./local/newspapers.json", import.meta.url));
   state.papers = bundle.newspapers;
   Object.assign(state, stateFromUrl(location.href, state.papers));
   $("paper-select").replaceChildren(...state.papers.map(item => {

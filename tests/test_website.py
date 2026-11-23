@@ -204,8 +204,10 @@ def test_scan_connects_to_jobs_with_one_continuous_line_without_icons_or_caption
     assert "align-items:center" in connector
     assert "flex-direction:column" in connector
     assert "gap:" not in connector
+    assert "margin:16px auto 0" in connector
     line = re.search(r"\.flow-line\s*\{([^}]+)\}", css).group(1)
-    assert "height:84px" in line
+    assert "height:56px" in line
+    assert "margin:24px 0 24px" in re.search(r"#resume-view\s*\{([^}]+)\}", css).group(1)
 
 
 def test_experiment_section_has_editable_prompt_inputs_and_explicit_saved_response():
@@ -239,7 +241,12 @@ def test_final_table_hands_off_to_analysis_without_claiming_regression_results()
     assert "CSV retains raw log probabilities" not in section
     assert 'class="logprob-note"' not in section
     assert "results-count" not in section
-    assert "justify-content:flex-end" in re.search(r"\.results-toolbar\s*\{([^}]+)\}", (WEBSITE / "styles.css").read_text()).group(1)
+    toolbar = re.search(r'<div class="stage-heading results-toolbar">(.*?)</div>', section).group(1)
+    assert 'id="results-heading"' in toolbar and 'id="download-results"' in toolbar
+    css = (WEBSITE / "styles.css").read_text()
+    toolbar_style = re.search(r"\.stage-heading\.results-toolbar\s*\{([^}]+)\}", css).group(1)
+    assert "display:flex" in toolbar_style and "flex-wrap:wrap" in toolbar_style
+    assert "justify-content:space-between" in re.search(r"\.stage-heading\s*\{([^}]+)\}", css).group(1)
     assert "thousands of applications" in section and "own analysis" in section
     assert "Download CSV" in section
     assert '<a href="https://github.com/KirillUtyashev/LLM_AuditKit">Run your own audit</a>' in section
