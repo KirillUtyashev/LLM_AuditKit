@@ -24,6 +24,20 @@ export function syntheticExperiment(paper) {
   }))};
 }
 
+export function withHiringPerspectives(paper) {
+  const demo = syntheticExperiment(paper);
+  const perspectives = ["role-play", "historian"].map(id => ({id, label: id === "role-play" ? "Role-play" : "Historian",
+    personaId: `synthetic-${id}-persona`, trait: `Synthetic ${id} trait`, instruction: `Synthetic ${id} instruction`,
+    prompts: {"2": `Synthetic ${id} prompt for two applicants`, "4": `Synthetic ${id} prompt for four applicants`}}));
+  return {...demo, perspectives, examples: perspectives.flatMap(p => demo.examples.map(original => ({...structuredClone(original),
+    perspectiveId: p.id, personaId: p.personaId, personaTrait: p.trait, personaInstruction: p.instruction,
+    prompt: p.prompts[String(original.candidates.length)], requestId: `${original.requestId}-${p.id}`,
+    explanation: `${original.explanation} Perspective: ${p.id}`,
+    decisions: original.decisions.map((decision, index) => p.id === "historian" && index === 0
+      ? {...decision, invite: false, logprob: Math.log(0.2)} : decision),
+  })))};
+}
+
 export function inlineVariants(prefix = "controls") {
   return [2, 4].flatMap(resumes => [2, 4].flatMap(jobSkills => ["entry-level", "experienced"].map(experience => {
     const id = `${prefix}-${resumes}-${jobSkills}-${experience}`;

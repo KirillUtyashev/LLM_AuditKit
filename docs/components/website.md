@@ -207,10 +207,15 @@ artifacts remain local.
 
 `How does the model decide?` follows population with the same continuous-line
 connector. Small input-review buttons open the exact job text and all two or four typeset
-candidate resumes. A labeled editable hiring-prompt window and one `Run
-experiment` button sit below. Only the fixed model name is shown beside it.
+candidate resumes. `Role-play` and `Historian` buttons select two authored hiring
+perspectives above the editable prompt. Role-play acts as a period hiring manager;
+Historian predicts an employer's period decision from a descriptive viewpoint.
+Both use the supplied advertisement/resumes and prohibit invented applicant facts
+or later events. These are reasonable website prompts, not verbatim paper prompts.
+An `Inspect model decisions` button sits below. Only the fixed model name is shown beside it.
 Clicking reveals the matching number of saved interview decisions and the original explanation
-as plain text, not a reconstructed or invented answer. The model and button
+as plain text, not a reconstructed or invented answer. Each decision also shows
+its emitted-answer probability as a percentage. The model and button
 tooltips explain that responses are previously recorded; no saved-run suffix or
 response heading is shown. There is no simulated waiting or browser API call.
 
@@ -221,21 +226,27 @@ runner validated `Yes`/`No` decisions and their emitted-token log probabilities.
 This is illustrative, not an estimate of bias or a reproduction of the paper's
 assignments. Raw checkpoints,
 YAML, persona/system text and full rendered prompts stay in the ignored local
-paper-values-v1 directory, split into experiment-2 and experiment-4;
+hiring-perspectives-v1 directory, split by newspaper/perspective and experiment-2/4;
 earlier year, style and paired-only four-template runs remain untouched.
-Four-applicant evaluations have new experiment identities and prompt files
-listing all four resumes; they do not reuse paired decisions or logprobs.
+Every setting/perspective has a new evaluated experiment identity, persona and
+prompt, including all selected resumes. There are 48 interviews and 144 candidate
+observations across the three papers. No earlier outcomes are relabeled.
 Saved exports retain request/scenario/experiment IDs,
 model configuration, exact source text, candidate/template IDs, ordered inputs and logprobs.
 
 An example is available only when its job ID/text, resume-generation prompt,
 templates and their assignments, ordered candidate IDs/names/addresses/resumes, hiring prompt, complete
-decisions and provenance match. Prompt edits disable `Run experiment` and clear
+decisions and provenance match. Prompt edits disable `Inspect model decisions` and clear
 the previous result; they are not submitted. Generation edits, changed source
 data, missing results or a paper/preset change cannot reuse a stale response.
-The expected hiring prompt may be declared per variant through `experimentPrompt`,
-falling back to the demo's default prompt for legacy data. It must exactly match
-the evaluated prompt. Hiring-prompt drafts are scoped to paper/job/variant in page
+`experimentDemo.perspectives` declares unique IDs, labels, persona IDs, effective
+traits/instructions and prompts keyed by applicant count. Matching additionally
+requires the selected `perspectiveId`, persona ID, trait and instruction. A missing,
+duplicate or incompatible example cannot fall back to another perspective.
+Legacy bundles without perspectives retain their `experimentPrompt`/default-prompt
+contract. Selection persists per paper/job in page memory across generation
+settings. Switching perspectives clears prior decisions/table and selects only
+the matching saved output. Hiring-prompt drafts are scoped to paper/job/variant/perspective in page
 memory only. `#experiment` and scroll bookmarks follow the same optional-stage
 rules as population. The published Boston bundle includes these examples;
 papers without experiment payloads hide this section and connector.
@@ -244,14 +255,20 @@ papers without experiment payloads hide this section and connector.
 
 `From decisions to data.` ends the flow with two or four candidate-level rows from the
 selected newspaper and settings' validated evaluation. The visible columns are resume prompt,
-candidate, Yes/No decision, emitted-answer logprob and model. Logprob is the
-natural log probability of the emitted answer, not a calibrated probability of
-hiring. It is rounded to four significant digits for display; hovering retains
-the exact numeric value, and CSV export preserves full precision.
+candidate, Yes/No decision, `Answer probability` and model. The percentage is
+`100 * exp(logprob)` for the emitted answer-token span, not calibrated confidence
+that the decision is correct or the applicant should be hired. It is not a
+self-reported LLM confidence score. No answers are not inverted into hire
+probabilities, and alternatives are not renormalized. Display uses one decimal;
+values below 0.1% or above 99.9% use inequalities to avoid rounding small nonzero
+values to zero or near-certainty to 100%. Zero logprob displays 100.0% at the
+provider's reported precision. Invalid/nonfinite or positive logprobs do not
+become probabilities. Hover retains full-precision percent; CSV retains both
+`answer_probability_pct` and the original numeric `logprob`.
 
 The download also includes numeric `decision` (`1`/`0`), variant/candidate/template
 IDs, scenario/request/experiment IDs, model configuration/provider, source ad ID,
-address and the run-level explanation. `(request_id, candidate_id)` distinguishes
+address, `prompt_style`, `persona_id` and the run-level explanation. `(request_id, candidate_id)` distinguishes
 candidate rows across presets. Values come from validated saved results, never
 from a new model call or fabricated probabilities. Formula-like string cells
 are escaped for spreadsheet safety without turning negative numeric logprobs
@@ -259,10 +276,11 @@ into text. This is a simplified candidate-level analysis view, not the native
 wide experiment checkpoint or an R-preparation export: no `audit_id`, substantive
 covariates or regression outputs are inferred.
 
-The table and CSV contain only the selected combination, never the other seven
+The table and CSV contain only the selected combination and perspective, never the other seven
 settings. Unknown selections clear the table and disable download. The default
 all-variant helper remains available for validation; the browser passes the
-selected variant ID for inline-control bundles. Editing
+selected variant ID and perspective ID for inline-control bundles. Filenames
+include the perspective ID. Editing
 the active generation/hiring prompt also hides and clears the table and disables
 download. The table describes the original saved presets, not unsent drafts.
 `#results` bookmarks this section; papers without completed examples do

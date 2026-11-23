@@ -213,7 +213,8 @@ def test_experiment_section_has_editable_prompt_inputs_and_explicit_saved_respon
     assert "How does the model decide?" in section
     assert '<textarea id="experiment-prompt"' in section and 'for="experiment-prompt"' in section
     assert all(f'id="experiment-{field}"' in section for field in ["job", "candidates"])
-    assert "Saved model response" not in section and "Run experiment" in section
+    assert "Saved model response" not in section and "Inspect model decisions" in section
+    assert 'id="experiment-perspectives"' in section and 'aria-label="Hiring perspective"' in section
     assert 'id="experiment-result" aria-live="polite" hidden' in section
 
 
@@ -223,8 +224,10 @@ def test_final_table_hands_off_to_analysis_without_claiming_regression_results()
     section = html.split('id="results-view"', 1)[1].split("</section>", 1)[0]
     assert "From decisions to data." in section and "Take it from here." in section
     assert section.count('scope="col"') == 5
-    assert all(field in section for field in ["Resume prompt", "Candidate", "Decision", "Logprob", "Model"])
-    assert "not a calibrated hiring probability" in section
+    assert all(field in section for field in ["Resume prompt", "Candidate", "Decision", "Answer probability", "Model"])
+    assert ">Logprob<" not in section
+    assert "not calibrated confidence that the decision is correct" in section
+    assert "CSV retains raw log probabilities" in section
     assert "thousands of applications" in section and "own analysis" in section
     assert "Download CSV" in section
     assert '<a href="https://github.com/KirillUtyashev/LLM_AuditKit">Run your own audit</a>' in section
@@ -262,7 +265,7 @@ def test_public_boston_scan_and_demo_are_explicitly_approved_and_self_contained(
     assert (WEBSITE / paper["imageSrc"]).read_bytes()[:2] == b"\xff\xd8"
     assert len(paper["resumeDemo"]["variants"]) == 8
     assert all(len(variant["templates"]) == variant["settings"]["resumes"] for variant in paper["resumeDemo"]["variants"])
-    assert len(paper["experimentDemo"]["examples"]) == 8
+    assert len(paper["experimentDemo"]["examples"]) == 16
     assert not re.search(r"/Users/|/var/folders/|\.\/local/|BEGIN [A-Z ]*PRIVATE KEY|AIza[0-9A-Za-z_-]{25,}|sk-(?:proj-)?[A-Za-z0-9_-]{25,}", text)
 
 
@@ -276,7 +279,8 @@ def test_additional_papers_have_their_own_scans_sources_and_completed_runs():
         assert len(set(paper["featuredIds"])) == 3
         records = {record["id"]: record for record in paper["records"]}
         assert all(records[ad_id].get("bbox") for ad_id in paper["featuredIds"])
-        assert len(paper["resumeDemo"]["variants"]) == len(paper["experimentDemo"]["examples"]) == 8
+        assert len(paper["resumeDemo"]["variants"]) == 8
+        assert len(paper["experimentDemo"]["examples"]) == 16
         variant = paper["resumeDemo"]["variants"][0]
         assert variant["promptSource"]["function"] == {"Boston": "prompt_1990", "Chicago": "prompt_1970", "Birmingham": "prompt_2001"}[paper["city"]]
         assert variant["promptSource"]["revision"] == "c9391854ea55806ec252625cd2f48fb9edb156cd"
@@ -328,8 +332,9 @@ def test_saved_school_and_dates_are_controlled_fields_with_exact_populated_input
                 assert set(re.findall(r"\{\{([a-z_]+)\}\}", text)) == fields
             example = next(e for e in paper["experimentDemo"]["examples"] if e["variantId"] == variant["id"])
             assert len(example["candidates"]) == len(example["decisions"]) == variant["settings"]["resumes"]
-            assert example["experimentId"].endswith(f"paper-values-{variant['settings']['resumes']}-v1")
-            assert example["prompt"] == variant.get("experimentPrompt", paper["experimentDemo"]["prompt"])
+            assert example["experimentId"].endswith(f"{example['perspectiveId']}-{variant['settings']['resumes']}-v1")
+            perspective = next(p for p in paper["experimentDemo"]["perspectives"] if p["id"] == example["perspectiveId"])
+            assert example["prompt"] == perspective["prompts"][str(variant["settings"]["resumes"])]
             pools = variant["populationPools"]
             assert len(pools["addresses"]) == 4
             assert variant["populationSource"]["codePath"] == "jobs_to_experiment/experiment_setup.py"
@@ -366,6 +371,33 @@ def test_published_replacements_use_original_paper_institution_pools_not_fiction
         for variant in paper["resumeDemo"]["variants"]:
             assert set(variant["populationPools"]["schools"]) == schools[paper["city"]]
             assert all(not any(word in a for word in ("Example", "Sample", "Practice", "Demo")) for a in variant["populationPools"]["addresses"])
+
+
+def test_both_hiring_perspectives_have_independent_complete_saved_runs():
+    bundle = json.loads((WEBSITE / "data/newspapers.json").read_text())
+    request_ids = set()
+    observations = 0
+    for paper in bundle["newspapers"]:
+        demo = paper["experimentDemo"]
+        assert [(p["id"], p["label"]) for p in demo["perspectives"]] == [("role-play", "Role-play"), ("historian", "Historian")]
+        assert {(e["variantId"], e["perspectiveId"]) for e in demo["examples"]} == {
+            (v["id"], p["id"]) for v in paper["resumeDemo"]["variants"] for p in demo["perspectives"]}
+        for example in demo["examples"]:
+            perspective = next(p for p in demo["perspectives"] if p["id"] == example["perspectiveId"])
+            n = len(example["candidates"])
+            assert example["prompt"] == perspective["prompts"][str(n)]
+            assert example["personaId"] == perspective["personaId"]
+            assert example["personaTrait"] == perspective["trait"]
+            assert example["personaInstruction"] == perspective["instruction"]
+            assert perspective["trait"] in example["renderedSystemPrompt"]
+            assert perspective["instruction"] in example["renderedSystemPrompt"]
+            assert example["prompt"] in example["renderedUserPrompt"]
+            assert len(example["decisions"]) == n
+            assert example["requestId"] not in request_ids
+            request_ids.add(example["requestId"])
+            observations += n
+    assert len(request_ids) == 48
+    assert observations == 144
 
 
 @pytest.mark.skipif(not shutil.which("node"), reason="Node.js is required for the offline website JS tests")

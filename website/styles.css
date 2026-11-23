@@ -595,6 +595,11 @@ h2  {
 .experiment-decisions p {
   margin:0
 }
+.experiment-decisions .decision-probability {
+  margin-top:6px;
+  color:#737782;
+  font-size:.875rem
+}
 .experiment-explanation {
   white-space:pre-wrap;
   line-height:1.75;

@@ -1,11 +1,51 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import {readFile} from "node:fs/promises";
-import {CSV_COLUMNS, chooseRecord, csvForRecords, filterRecords, formatDate, normalizedBox, stateFromUrl, cropStyle, loadBundle, jobPreview, resumeDemo, savedResumeVariant, resumePromptText, inlineResumeVariant, resumeBlocks, resumeTextParts, DEMO_CANDIDATES, populateResumeExample, populationExamples, resumeTemplates, experimentExample, finalOutputRows, resultCsv, RESULT_COLUMNS, candidateFieldPresets, replaceCandidateFields} from "../../website/lib.mjs";
-import {syntheticExperiment, pairedVariant, inlineVariants, withControlledFields, withPopulationPools} from "./experiment-fixture.mjs";
+import {CSV_COLUMNS, chooseRecord, csvForRecords, filterRecords, formatDate, normalizedBox, stateFromUrl, cropStyle, loadBundle, jobPreview, resumeDemo, savedResumeVariant, resumePromptText, inlineResumeVariant, resumeBlocks, resumeTextParts, DEMO_CANDIDATES, populateResumeExample, populationExamples, resumeTemplates, experimentExample, experimentPerspectives, answerProbabilityPercent, formatAnswerProbability, finalOutputRows, resultCsv, RESULT_COLUMNS, candidateFieldPresets, replaceCandidateFields} from "../../website/lib.mjs";
+import {syntheticExperiment, pairedVariant, inlineVariants, withControlledFields, withPopulationPools, withHiringPerspectives} from "./experiment-fixture.mjs";
 
 const bundle = JSON.parse(await readFile(new URL("../../website/data/archive-newspapers.json", import.meta.url), "utf8"));
 const papers = bundle.newspapers;
+
+test("answer percentages invert natural log probabilities, without claiming correctness or complementing No", () => {
+  assert.equal(answerProbabilityPercent(0), 100);
+  assert.ok(Math.abs(answerProbabilityPercent(Math.log(0.2)) - 20) < 1e-12);
+  assert.equal(formatAnswerProbability(-0.1), "90.5%");
+  assert.equal(formatAnswerProbability(0), "100.0%");
+  assert.equal(formatAnswerProbability(-1e-20), ">99.9%");
+  assert.equal(formatAnswerProbability(-1000), "<0.1%");
+  for (const value of [undefined, null, "-0.1", NaN, Infinity, -Infinity, 0.1]) {
+    assert.equal(answerProbabilityPercent(value), null);
+    assert.equal(formatAnswerProbability(value), "Unavailable");
+  }
+});
+
+test("hiring perspectives bind actual prompts and personas and cannot reuse another perspective", () => {
+  const variant = inlineVariants()[0];
+  const paper = {...papers[0], resumeDemo: {jobId: papers[0].records[0].id, variants: [variant]}};
+  paper.experimentDemo = withHiringPerspectives(paper);
+  assert.equal(experimentPerspectives(paper).length, 2);
+  const role = experimentExample(paper, variant, "role-play");
+  const historian = experimentExample(paper, variant, "historian");
+  assert.notEqual(role.requestId, historian.requestId);
+  assert.notEqual(role.prompt, historian.prompt);
+  assert.equal(experimentExample(paper, variant).perspectiveId, "role-play");
+  assert.equal(experimentExample(paper, variant, "unknown"), null);
+  assert.equal(finalOutputRows(paper, variant.id, "historian")[0].answer, "No");
+  assert.ok(Math.abs(finalOutputRows(paper, variant.id, "historian")[0].answer_probability_pct - 20) < 1e-12);
+  assert.equal(finalOutputRows(paper, variant.id, "historian")[0].prompt_style, "Historian");
+  assert.equal(finalOutputRows(paper, variant.id, "historian")[0].persona_id, historian.personaId);
+  for (const mutate of [
+    p => {p.experimentDemo.examples = p.experimentDemo.examples.filter(e => e.perspectiveId !== "historian");},
+    p => {p.experimentDemo.perspectives[1].trait += " changed";},
+    p => {p.experimentDemo.perspectives[1].instruction += " changed";},
+    p => {p.experimentDemo.perspectives[1].prompts["2"] += " changed";},
+    p => {p.experimentDemo.examples[1].personaId = role.personaId;},
+    p => {p.experimentDemo.examples.push(structuredClone(p.experimentDemo.examples[1]));},
+    p => {p.experimentDemo.perspectives.push(structuredClone(p.experimentDemo.perspectives[1]));},
+    p => {p.experimentDemo.perspectives[1].prompts = [];},
+  ]) {const changed = structuredClone(paper); mutate(changed); assert.equal(experimentExample(changed, variant, "historian"), null);}
+});
 
 test("declared replacement pools bind default addresses and offer only recorded date presets", () => {
   const variant = withPopulationPools(withControlledFields(inlineVariants()[0]));

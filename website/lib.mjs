@@ -3,7 +3,7 @@ export const CSV_COLUMNS = Object.freeze([
   "ad_id", "Text", "raw_text", "city", "year", "publication_date", "source_page", "source_url", "review_required",
 ]);
 export const RESULT_COLUMNS = Object.freeze([
-  "preset", "candidate_name", "decision", "answer", "logprob", "model",
+  "preset", "candidate_name", "decision", "answer", "answer_probability_pct", "logprob", "model", "prompt_style", "persona_id",
   "variant_id", "candidate_id", "template_id", "scenario_id", "request_id",
   "experiment_id", "model_config_id", "provider", "source_ad_id", "address", "explanation",
 ]);
@@ -246,16 +246,46 @@ export function replaceCandidateFields(candidate, changes) {
   return resume === null ? null : {...result, resume};
 }
 
-export function experimentExample(paper, variant) {
+export function experimentPerspectives(paper) {
+  const perspectives = paper.experimentDemo?.perspectives;
+  if (!Array.isArray(perspectives) || !perspectives.length || perspectives.some(p => !p
+      || ["id", "label", "personaId", "trait", "instruction"].some(key => typeof p[key] !== "string" || !p[key].trim())
+      || !p.prompts || typeof p.prompts !== "object" || Array.isArray(p.prompts)
+      || ["2", "4"].some(key => typeof p.prompts[key] !== "string" || !p.prompts[key].trim()))
+      || new Set(perspectives.map(p => p.id)).size !== perspectives.length
+      || new Set(perspectives.map(p => p.personaId)).size !== perspectives.length) return [];
+  return perspectives;
+}
+
+// Probability of the emitted answer token span, not decision correctness.
+export function answerProbabilityPercent(logprob) {
+  return typeof logprob === "number" && Number.isFinite(logprob) && logprob <= 0 ? 100 * Math.exp(logprob) : null;
+}
+
+export function formatAnswerProbability(logprob) {
+  const percent = answerProbabilityPercent(logprob);
+  if (percent === null) return "Unavailable";
+  if (logprob < 0 && percent < 0.1) return "<0.1%";
+  if (logprob < 0 && percent > 99.9) return ">99.9%";
+  return `${percent.toFixed(1)}%`;
+}
+
+export function experimentExample(paper, variant, perspectiveId) {
   const demo = paper.experimentDemo;
   const population = populationExamples(variant);
   if (!population || !demo || typeof demo.prompt !== "string" || !demo.prompt.trim()
       || !Array.isArray(demo.examples)) return null;
-  const matches = demo.examples.filter(example => example?.variantId === variant.id);
+  const perspectives = experimentPerspectives(paper);
+  const perspective = perspectives.find(p => p.id === (perspectiveId ?? perspectives[0]?.id));
+  if ((demo.perspectives !== undefined && !perspective) || (demo.perspectives === undefined && perspectiveId != null)) return null;
+  const matches = demo.examples.filter(example => example?.variantId === variant.id
+    && (!perspective || example.perspectiveId === perspective.id));
   if (matches.length !== 1) return null;
   const example = matches[0];
   const job = paper.records.find(record => record.id === paper.resumeDemo?.jobId);
-  const expectedPrompt = variant.experimentPrompt ?? demo.prompt;
+  const expectedPrompt = perspective ? perspective.prompts[String(population.length)] : variant.experimentPrompt ?? demo.prompt;
+  if (perspective && (example.personaId !== perspective.personaId || example.personaTrait !== perspective.trait
+    || example.personaInstruction !== perspective.instruction)) return null;
   if (!job || example.jobId !== job.id || example.jobPosting !== job.text || example.prompt !== expectedPrompt
       || example.generationPrompt !== variant.prompt || example.template !== variant.template
       || (variant.systemPrompt !== undefined && example.generationSystemPrompt !== variant.systemPrompt)
@@ -271,21 +301,23 @@ export function experimentExample(paper, variant) {
         || input.resume === null || decision.candidateId !== candidate.id
         || typeof decision.invite !== "boolean" || !Number.isFinite(decision.logprob) || decision.logprob > 0) return null;
   }
-  return example;
+  return perspective ? {...example, perspectiveLabel: perspective.label} : example;
 }
 
-export function finalOutputRows(paper, variantId) {
+export function finalOutputRows(paper, variantId, perspectiveId) {
   const demo = resumeDemo(paper);
   if (!demo) return [];
   const variants = variantId === undefined ? demo.variants : demo.variants.filter(variant => variant.id === variantId);
   if (!variants.length) return [];
-  const examples = variants.map(variant => experimentExample(paper, variant));
+  const examples = variants.map(variant => experimentExample(paper, variant, perspectiveId));
   if (examples.some(example => !example)) return [];
   return examples.flatMap((example, presetIndex) => example.decisions.map((decision, index) => ({
     preset: variants[presetIndex].label,
     candidate_name: example.candidates[index].name,
     decision: decision.invite ? 1 : 0, answer: decision.invite ? "Yes" : "No",
+    answer_probability_pct: answerProbabilityPercent(decision.logprob),
     logprob: decision.logprob, model: example.model, variant_id: example.variantId,
+    prompt_style: example.perspectiveLabel ?? "", persona_id: example.personaId ?? "",
     candidate_id: decision.candidateId, template_id: example.candidates[index].templateId,
     scenario_id: example.scenarioId, request_id: example.requestId,
     experiment_id: example.experimentId, model_config_id: example.modelConfigId,

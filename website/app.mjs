@@ -1,17 +1,19 @@
-import {csvForRecords, jobPreview, cropStyle, stateFromUrl, loadBundle, resumeDemo, savedResumeVariant, resumePromptText, inlineResumeVariant, resumeBlocks, resumeTextParts, populationExamples, resumeTemplates, experimentExample, finalOutputRows, resultCsv, candidateFieldPresets, replaceCandidateFields} from "./lib.mjs?v=clean-applications-28";
+import {csvForRecords, jobPreview, cropStyle, stateFromUrl, loadBundle, resumeDemo, savedResumeVariant, resumePromptText, inlineResumeVariant, resumeBlocks, resumeTextParts, populationExamples, resumeTemplates, experimentExample, experimentPerspectives, formatAnswerProbability, finalOutputRows, resultCsv, candidateFieldPresets, replaceCandidateFields} from "./lib.mjs?v=perspectives-29";
 
 const $ = id => document.getElementById(id);
-const state = {papers: [], paperId: null, step: "archive", query: "", variantId: null};
+const state = {papers: [], paperId: null, step: "archive", query: "", variantId: null, perspectiveId: null};
 const promptDrafts = new Map();
 const experimentDrafts = new Map();
 const selectedSettings = new Map();
+const selectedPerspectives = new Map();
 const candidateEdits = new Map();
 const fieldTriggers = new Map();
 let activeFieldTrigger = null;
 let placeholderTrigger = null;
 const paper = () => state.papers.find(item => item.id === state.paperId);
 const draftKey = (demo, variantId) => JSON.stringify([state.paperId, demo.jobId, variantId]);
-const experimentDraftKey = () => JSON.stringify([state.paperId, paper().resumeDemo?.jobId, state.variantId]);
+const perspectiveKey = () => JSON.stringify([state.paperId, paper().resumeDemo?.jobId]);
+const experimentDraftKey = () => JSON.stringify([state.paperId, paper().resumeDemo?.jobId, state.variantId, state.perspectiveId]);
 
 function syncUrl(push = false) {
   const url = new URL(location.href);
@@ -35,6 +37,8 @@ function render() {
 
 function renderResumes() {
   candidateEdits.clear(); $("candidate-field-dialog").close();
+  const perspectives = experimentPerspectives(paper());
+  state.perspectiveId = selectedPerspectives.get(perspectiveKey()) ?? perspectives[0]?.id ?? null;
   $("resume-dialog").close();
   $("resume-document").replaceChildren();
   $("resume-template-options").replaceChildren();
@@ -221,7 +225,7 @@ function openCandidateField(saved, candidateId, field, trigger) {
 
 function currentExperiment() {
   const saved = savedResumeVariant(resumeDemo(paper()), state.variantId, $("variant-prompt").value);
-  const example = experimentExample(paper(), saved);
+  const example = experimentExample(paper(), saved, state.perspectiveId);
   const population = currentPopulation(saved);
   return example && population?.every((candidate, index) => candidate.resume === example.candidates[index].resume) ? example : null;
 }
@@ -233,6 +237,17 @@ function clearExperimentResult() {
 }
 
 function renderExperiment(saved) {
+  const perspectives = experimentPerspectives(paper());
+  $("experiment-perspectives").hidden = !perspectives.length;
+  $("experiment-perspectives").replaceChildren(...perspectives.map(perspective => {
+    const button = document.createElement("button"); button.type = "button"; button.className = "variant-button";
+    button.textContent = perspective.label; button.dataset.perspectiveId = perspective.id;
+    button.setAttribute("aria-pressed", String(state.perspectiveId === perspective.id));
+    button.addEventListener("click", () => {
+      state.perspectiveId = perspective.id; selectedPerspectives.set(perspectiveKey(), perspective.id);
+      renderExperiment(saved);
+    }); return button;
+  }));
   const example = saved ? currentExperiment() : null;
   $("experiment-candidates").replaceChildren();
   $("experiment-view").hidden = !example;
@@ -281,10 +296,10 @@ function renderFinalOutput(enabled) {
   $("results-count").textContent = rows.length ? `${rows.length} candidate evaluations · ${count} resume prompt${count === 1 ? "" : "s"}` : "";
   $("final-output-rows").replaceChildren(...rows.map(row => {
     const tr = document.createElement("tr");
-    const values = [row.preset, row.candidate_name, row.answer, row.logprob.toPrecision(4), row.model === "gpt-4o-2024-08-06" ? "GPT-4o" : row.model];
+    const values = [row.preset, row.candidate_name, row.answer, formatAnswerProbability(row.logprob), row.model === "gpt-4o-2024-08-06" ? "GPT-4o" : row.model];
     values.forEach((value, index) => {
       const td = document.createElement("td"); td.textContent = value;
-      if (index === 3) {td.className = "numeric"; td.title = String(row.logprob);}
+      if (index === 3) {td.className = "numeric"; td.title = `${row.answer_probability_pct}% likelihood of the emitted ${row.answer} answer tokens`;}
       if (index === 4) td.title = row.model;
       tr.append(td);
     });
@@ -297,7 +312,7 @@ function renderFinalOutput(enabled) {
 }
 
 function currentResultRows() {
-  return currentExperiment() ? finalOutputRows(paper(), resumeDemo(paper())?.inlineControls ? state.variantId : undefined) : [];
+  return currentExperiment() ? finalOutputRows(paper(), resumeDemo(paper())?.inlineControls ? state.variantId : undefined, state.perspectiveId) : [];
 }
 
 function showExperimentResult() {
@@ -307,7 +322,9 @@ function showExperimentResult() {
     const row = document.createElement("div");
     const name = document.createElement("h4"); name.textContent = `${example.candidates[index].label} · ${example.candidates[index].name}`;
     const answer = document.createElement("p"); answer.textContent = decision.invite ? "Invite to interview" : "Do not invite";
-    row.append(name, answer); return row;
+    const probability = document.createElement("p"); probability.className = "decision-probability";
+    probability.textContent = `${formatAnswerProbability(decision.logprob)} answer probability`;
+    row.append(name, answer, probability); return row;
   }));
   $("experiment-explanation").textContent = example.explanation;
   $("experiment-result").hidden = false;
@@ -474,7 +491,7 @@ function setupScrollFlow() {
 
 async function start() {
   const bundle = await loadBundle(fetch, location.hostname,
-    new URL("./data/newspapers.json?v=clean-applications-28", import.meta.url), new URL("./local/newspapers.json", import.meta.url));
+    new URL("./data/newspapers.json?v=perspectives-29", import.meta.url), new URL("./local/newspapers.json", import.meta.url));
   state.papers = bundle.newspapers;
   Object.assign(state, stateFromUrl(location.href, state.papers));
   $("paper-select").replaceChildren(...state.papers.map(item => {
@@ -524,7 +541,7 @@ async function start() {
     if (!rows.length) return;
     const blob = new Blob([resultCsv(rows)], {type: "text/csv;charset=utf-8"});
     const url = URL.createObjectURL(blob); const link = document.createElement("a");
-    link.href = url; link.download = `${paper().id}-candidate-results.csv`; link.click();
+    link.href = url; link.download = `${paper().id}${state.perspectiveId ? "-" + state.perspectiveId : ""}-candidate-results.csv`; link.click();
     setTimeout(() => URL.revokeObjectURL(url), 1000);
   });
   $("reset-candidates").addEventListener("click", () => {

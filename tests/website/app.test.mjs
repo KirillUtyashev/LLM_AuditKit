@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import {readFile} from "node:fs/promises";
-import {syntheticExperiment, pairedVariant, inlineVariants, withControlledFields, withPopulationPools} from "./experiment-fixture.mjs";
+import {syntheticExperiment, pairedVariant, inlineVariants, withControlledFields, withPopulationPools, withHiringPerspectives} from "./experiment-fixture.mjs";
 
 class Element {
   constructor() {
@@ -65,7 +65,7 @@ test(`preview rendering with reveal support ${revealSupported}, failure ${Boolea
   const controlledPaper = structuredClone(secondDemo);
   controlledPaper.id = "synthetic-inline-paper";
   controlledPaper.resumeDemo = {jobId: controlledPaper.records[0].id, inlineControls: true, variants: inlineVariants().map(withControlledFields).map(withPopulationPools)};
-  controlledPaper.experimentDemo = syntheticExperiment(controlledPaper);
+  controlledPaper.experimentDemo = withHiringPerspectives(controlledPaper);
   bundle.newspapers.push(controlledPaper);
   const nodes = new Map([...html.matchAll(/id="([^"]+)"/g)].map(match => [match[1], new Element()]));
   const downloadLinks = [];
@@ -140,7 +140,7 @@ test(`preview rendering with reveal support ${revealSupported}, failure ${Boolea
     assert.equal(get("results-connector").hidden, false);
     assert.equal(get("results-count").textContent, "6 candidate evaluations · 3 resume prompts");
     assert.equal(get("final-output-rows").children.length, 6);
-    assert.deepEqual(get("final-output-rows").children[0].children.map(node => node.textContent), ["Strong fit", "Alex Morgan", "Yes", "-0.1000", "synthetic-test-model"]);
+    assert.deepEqual(get("final-output-rows").children[0].children.map(node => node.textContent), ["Strong fit", "Alex Morgan", "Yes", "90.5%", "synthetic-test-model"]);
     assert.equal(get("final-output-rows").children[1].children[2].textContent, "No");
     let downloadBlob;
     const createUrl = URL.createObjectURL;
@@ -173,6 +173,7 @@ test(`preview rendering with reveal support ${revealSupported}, failure ${Boolea
     assert.equal(get("experiment-result").hidden, false);
     assert.equal(get("experiment-decisions").children.length, 2);
     assert.equal(get("experiment-decisions").children[0].children[1].textContent, "Invite to interview");
+    assert.equal(get("experiment-decisions").children[0].children[2].textContent, "90.5% answer probability");
     assert.equal(get("experiment-decisions").children[1].children[1].textContent, "Do not invite");
     assert.equal(get("experiment-explanation").textContent, bundle.newspapers[0].experimentDemo.examples[0].explanation);
     get("experiment-prompt").value = "Edited hiring prompt";
@@ -472,6 +473,8 @@ test(`preview rendering with reveal support ${revealSupported}, failure ${Boolea
     assert.equal(get("resume-count").value, "2");
     assert.equal(get("job-skill-count").value, "2");
     assert.equal(get("experience-level").value, "entry-level");
+    assert.deepEqual(get("experiment-perspectives").children.map(node => node.textContent), ["Role-play", "Historian"]);
+    assert.equal(get("experiment-prompt").value, "Synthetic role-play prompt for two applicants");
     get("generate-resume").fire("click");
     assert.equal(get("resume-template-options").children.length, 2);
     assert.match(resumeText(get("resume-document")), /\{\{university\}\}/);
@@ -532,6 +535,31 @@ test(`preview rendering with reveal support ${revealSupported}, failure ${Boolea
     get("reset-candidates").fire("click");
     assert.match(resumeText(resume(3)), /June 1988–July 1990/);
     assert.equal(get("final-output-rows").children.length, 4);
+    get("experiment-perspectives").children[1].fire("click");
+    assert.equal(get("experiment-perspectives").children[1].attributes["aria-pressed"], "true");
+    assert.equal(get("experiment-prompt").value, "Synthetic historian prompt for four applicants");
+    assert.equal(get("experiment-result").hidden, true);
+    assert.equal(get("final-output-rows").children[0].children[2].textContent, "No");
+    assert.equal(get("final-output-rows").children[0].children[3].textContent, "20.0%");
+    get("run-experiment").fire("click");
+    assert.match(get("experiment-explanation").textContent, /Perspective: historian/);
+    get("experiment-prompt").value = "Edited historian prompt";
+    get("experiment-prompt").fire("input", "Edited historian prompt");
+    assert.equal(get("results-view").hidden, true);
+    get("experiment-perspectives").children[0].fire("click");
+    assert.equal(get("run-experiment").disabled, false);
+    assert.equal(get("experiment-prompt").value, "Synthetic role-play prompt for four applicants");
+    get("experiment-perspectives").children[1].fire("click");
+    assert.equal(get("run-experiment").disabled, true);
+    assert.equal(get("experiment-prompt").value, "Edited historian prompt");
+    get("experiment-prompt").value = "Synthetic historian prompt for four applicants";
+    get("experiment-prompt").fire("input", get("experiment-prompt").value);
+    URL.createObjectURL = blob => {downloadBlob = blob; return createUrl(blob);};
+    try {get("download-results").fire("click");} finally {URL.createObjectURL = createUrl;}
+    assert.match(downloadLinks.at(-1).download, /-historian-candidate-results.csv$/);
+    const historianCsv = await downloadBlob.text();
+    assert.ok(historianCsv.includes('"Historian"') && historianCsv.includes('"answer_probability_pct"'));
+    assert.ok(!historianCsv.includes('"Role-play"'));
     get("prompt-name").fire("click");
     assert.equal(get("population-help").hidden, false);
     assert.equal(get("prompt-name").attributes["aria-expanded"], "true");
@@ -557,6 +585,7 @@ test(`preview rendering with reveal support ${revealSupported}, failure ${Boolea
     assert.equal(get("resume-count").value, "4");
     assert.equal(get("job-skill-count").value, "4");
     assert.equal(get("experience-level").value, "experienced");
+    assert.equal(get("experiment-perspectives").children[1].attributes["aria-pressed"], "true");
     get("resume-count").value = "999";
     get("resume-count").fire("change", "999");
     assert.equal(get("generate-resume").disabled, true);
@@ -569,6 +598,7 @@ test(`preview rendering with reveal support ${revealSupported}, failure ${Boolea
     assert.equal(get("experiment-candidates").children.length, 2);
     assert.equal(get("final-output-rows").children.length, 2);
     assert.equal(get("experiment-decisions").children.length, 0);
+    assert.equal(get("experiment-prompt").value, "Synthetic historian prompt for two applicants");
     assert.equal(fetches, 1); // All supported choices are local saved examples.
     bundle.newspapers[0].resumeDemo.jobId = "hidden-job-2";
     globalThis.location.href = "https://example.org/kit/?paper=" + bundle.newspapers[0].id + "#resumes";

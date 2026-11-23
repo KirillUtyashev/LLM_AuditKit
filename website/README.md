@@ -240,18 +240,28 @@ optional section; the published Boston bundle includes the complete examples.
 ## How does the model decide?
 
 Continue scrolling or open <http://127.0.0.1:8765/#experiment>. Review the posting
-or any candidate's exact resume using the input buttons. `Run experiment`
+or any candidate's exact resume using the input buttons. Choose `Role-play`
+(a period hiring manager) or `Historian` (a descriptive prediction of an employer's
+period decisions). The displayed prompt is the actual saved question, not a gist;
+these two versions were authored for the website, not copied verbatim from the paper.
+`Inspect model decisions`
 reveals the saved interview decisions and original model explanation for the
 unchanged prompt. Editing the hiring prompt disables playback and clears the
 result; this static site cannot run a new model request.
 
-Each newspaper's eight selected applicant sets were actually run through `ExperimentRunner`
+Each newspaper's eight selected applicant sets were actually run under both
+perspectives through `ExperimentRunner`
 and shared inference with `gpt-4o-2024-08-06`, temperature 0 and log probabilities.
 These small synthetic examples are not evidence
 of bias or a replication of the paper. No browser inference runs.
 
 YAML, fixed source snapshots, prompt/persona files and CSV checkpoints live under
-ignored `website/local/paper-values-v1/<paper>/experiment-2/` and `experiment-4/`.
+ignored `website/local/hiring-perspectives-v1/<paper>/<perspective>/experiment-2/`
+and `experiment-4/`. The two personas have distinct stable IDs and standard EDSL
+trait/instruction rendering through the existing adapter. All 48 interviews
+(144 candidate observations) have actual saved responses. Switching perspectives
+clears stale decisions and changes the table/CSV; prompt drafts are scoped to
+paper, generation setting and perspective. Choices are remembered per paper until reload.
 All templates derive from genuine generation, with explicit date-label projections
 and fresh prompts, decisions and log probabilities for the changed populated
 resumes—not earlier outcomes. Earlier one-template
@@ -259,7 +269,7 @@ and style-comparison runs remain untouched in their old directories and are not
 reused for the new resumes. To explicitly execute a pending Boston evaluation (paid):
 
 ```bash
-EDSL_DATABASE_PATH=sqlite:///website/local/paper-values-v1/boston-cache.db PYTHONPATH=src .venv/bin/python website/local/paper_values_demo.py boston-1990
+EDSL_DATABASE_PATH=sqlite:///website/local/hiring-perspectives-v1/boston-cache.db PYTHONPATH=src .venv/bin/python website/local/perspective_demo.py boston-1990
 ```
 
 Exported examples preserve exact input bindings, original rendered prompts,
@@ -272,9 +282,15 @@ is public; other research runs and local directories remain excluded.
 
 Open <http://127.0.0.1:8765/#results> or continue scrolling. The final table shows
 the selected newspaper and settings' two or four candidate evaluations: candidate, decision,
-emitted-answer logprob and model. `Download CSV` preserves full-precision logprobs,
-numeric decisions, explanations and stable candidate/template/request/model IDs.
-The displayed logprob is rounded; it is not a calibrated hiring probability.
+answer probability (%) and model. The percentage is `100 * exp(logprob)` for
+the emitted Yes/No answer tokens—not calibrated confidence in correctness or
+a probability of hiring. A `No` percentage describes that No answer; it is not
+inverted into a Yes probability. It is not a self-reported confidence score.
+Percentages display to one decimal, with `<0.1%`/`>99.9%` for extremes;
+zero logprob displays `100.0%` at reported precision.
+`Download CSV` retains full-precision `answer_probability_pct` and raw `logprob`,
+numeric decisions, explanations, perspective/persona identity and stable
+candidate/template/request/model IDs. Only the selected perspective is exported.
 
 This candidate-level convenience export is not an R-ready regression dataset.
 It does not infer audit IDs, demographic indicators or research specifications.

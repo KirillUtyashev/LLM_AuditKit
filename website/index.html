@@ -6,8 +6,8 @@
 <meta name="description" content="Follow a newspaper scan as it becomes a dataset of job advertisements.">
 <title>LLM AuditKit · Pipeline</title>
 <link rel="icon" href="./assets/mark.svg" type="image/svg+xml">
-<link rel="stylesheet" href="./styles.css?v=clean-applications-28">
-<script type="module" src="./app.mjs?v=clean-applications-28"></script>
+<link rel="stylesheet" href="./styles.css?v=perspectives-29">
+<script type="module" src="./app.mjs?v=perspectives-29"></script>
 </head>
 <body>
 <a class="skip-link" href="#main">Skip to pipeline</a>
@@ -65,9 +65,10 @@
   <div class="stage-heading"><h2 id="experiment-heading">How does the model decide?</h2></div>
   <div class="experiment-workspace">
     <div class="experiment-inputs" role="group" aria-label="Review experiment inputs"><span>Review inputs</span><button id="experiment-job" type="button">Job posting</button><div id="experiment-candidates" class="experiment-candidates"></div></div>
+    <div id="experiment-perspectives" class="prompt-variants" role="group" aria-label="Hiring perspective" hidden></div>
     <label class="sr-only" for="experiment-prompt">Hiring prompt</label>
     <textarea id="experiment-prompt" rows="4" spellcheck="true"></textarea>
-    <div class="experiment-actions"><button id="run-experiment" type="button" disabled>Run experiment</button><span id="experiment-model" class="quiet"></span></div>
+    <div class="experiment-actions"><button id="run-experiment" type="button" disabled>Inspect model decisions</button><span id="experiment-model" class="quiet"></span></div>
     <p id="experiment-status" class="quiet" role="status"></p>
     <div id="experiment-result" aria-live="polite" hidden>
       <div id="experiment-decisions" class="experiment-decisions"></div>
@@ -80,9 +81,9 @@
   <div class="stage-heading"><h2 id="results-heading">From decisions to data.</h2></div>
   <div class="results-toolbar"><p id="results-count" class="quiet"></p><button id="download-results" type="button" aria-label="Download candidate results CSV">Download CSV</button></div>
   <div class="results-table-scroll" role="region" aria-label="Candidate results table" tabindex="0">
-    <table class="results-table"><caption class="sr-only">Candidate-level outputs for the selected newspaper.</caption><thead><tr><th scope="col">Resume prompt</th><th scope="col">Candidate</th><th scope="col">Decision</th><th scope="col">Logprob</th><th scope="col">Model</th></tr></thead><tbody id="final-output-rows"></tbody></table>
+    <table class="results-table"><caption class="sr-only">Candidate-level outputs for the selected newspaper.</caption><thead><tr><th scope="col">Resume prompt</th><th scope="col">Candidate</th><th scope="col">Decision</th><th scope="col">Answer probability</th><th scope="col">Model</th></tr></thead><tbody id="final-output-rows"></tbody></table>
   </div>
-  <p class="logprob-note">Logprob is the natural log probability of the emitted Yes/No answer—not a calibrated hiring probability. CSV values retain full precision.</p>
+  <p class="logprob-note">Answer probability measures the model’s likelihood of its emitted Yes/No answer—not calibrated confidence that the decision is correct. CSV retains raw log probabilities.</p>
   <div class="final-handoff"><h3>Take it from here.</h3><p>Scale the pipeline to thousands of applications, study model behavior, and take the data into your own analysis.</p><a href="https://github.com/KirillUtyashev/LLM_AuditKit">Run your own audit</a></div>
 </section>
 <footer id="source-footer" hidden><a id="archive-source" target="_blank" rel="noopener">Original source</a></footer>
