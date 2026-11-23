@@ -122,13 +122,26 @@ def test_resume_posting_precedes_editable_prompt_with_adjacent_presets():
     assert 'class="prompt-summary-label" for="variant-prompt">Prompt summary' in editor
     assert 'rows="6"' in editor
     assert editor.index('<textarea id="variant-prompt"') < editor.index('id="generate-resume"')
-    button = re.search(r'<button id="generate-resume"([^>]+)>Generate resume</button>', editor)
+    button = re.search(r'<button id="generate-resume"([^>]+)>Inspect templates</button>', editor)
     assert button and "disabled" in button.group(1)  # Enabled only for a matching saved result.
     css = (WEBSITE / "styles.css").read_text()
     assert "max-width:860px" not in re.search(r"\.resume-workspace\s*\{([^}]+)\}", css).group(1)
     assert "max-width:380px" in re.search(r"\.resume-posting\s*\{([^}]+)\}", css).group(1)
     assert "min-height:200px" in re.search(r"#variant-prompt\s*\{([^}]+)\}", css).group(1)
     assert "justify-content:flex-start" in re.search(r"\.prompt-actions\s*\{([^}]+)\}", css).group(1)
+
+
+def test_prompt_controls_are_inline_accessible_and_distinct_from_population_links():
+    html = (WEBSITE / "index.html").read_text()
+    section = html.split('id="interactive-prompt"', 1)[1].split('<textarea id="variant-prompt"', 1)[0]
+    assert 'role="group" aria-labelledby="prompt-summary-label"' in section
+    assert all(f'id="{name}"' in section for name in ("resume-count", "job-skill-count", "experience-level"))
+    assert 'value="2">2 resumes' in section and 'value="4">4 resumes' in section
+    assert 'value="2">2 job-related skills' in section and 'value="4">4 job-related skills' in section
+    assert "Number of resume templates" in section and "Number of job-related skills" in section
+    assert 'aria-controls="population-help"' in section
+    assert "Filled in during template population" in section
+    assert "No live generation" in section
 
 
 def test_saved_resume_uses_a_typeset_document_not_a_text_box():
@@ -232,9 +245,9 @@ def test_public_boston_scan_and_demo_are_explicitly_approved_and_self_contained(
     assert len(paper["records"]) == 59
     assert paper["imageSrc"] == "./assets/boston-1990-08-05.jpg"
     assert (WEBSITE / paper["imageSrc"]).read_bytes()[:2] == b"\xff\xd8"
-    assert len(paper["resumeDemo"]["variants"]) == 1
-    assert all(len(variant["templates"]) == 2 for variant in paper["resumeDemo"]["variants"])
-    assert len(paper["experimentDemo"]["examples"]) == 1
+    assert len(paper["resumeDemo"]["variants"]) == 8
+    assert all(len(variant["templates"]) == variant["settings"]["resumes"] for variant in paper["resumeDemo"]["variants"])
+    assert len(paper["experimentDemo"]["examples"]) == 8
     assert not re.search(r"/Users/|/var/folders/|\.\/local/|BEGIN [A-Z ]*PRIVATE KEY|AIza[0-9A-Za-z_-]{25,}|sk-(?:proj-)?[A-Za-z0-9_-]{25,}", text)
 
 
@@ -248,7 +261,7 @@ def test_additional_papers_have_their_own_scans_sources_and_completed_runs():
         assert len(set(paper["featuredIds"])) == 3
         records = {record["id"]: record for record in paper["records"]}
         assert all(records[ad_id].get("bbox") for ad_id in paper["featuredIds"])
-        assert len(paper["resumeDemo"]["variants"]) == len(paper["experimentDemo"]["examples"]) == 1
+        assert len(paper["resumeDemo"]["variants"]) == len(paper["experimentDemo"]["examples"]) == 8
         variant = paper["resumeDemo"]["variants"][0]
         assert variant["promptSource"]["function"] == {"Boston": "prompt_1990", "Chicago": "prompt_1970", "Birmingham": "prompt_2001"}[paper["city"]]
         assert variant["promptSource"]["revision"] == "c9391854ea55806ec252625cd2f48fb9edb156cd"
@@ -256,6 +269,7 @@ def test_additional_papers_have_their_own_scans_sources_and_completed_runs():
         assert paper["city"] in variant["promptSummary"] and paper["date"][:4] in variant["promptSummary"]
         assert records[paper["resumeDemo"]["jobId"]]["text"] in variant["prompt"]
         for example in paper["experimentDemo"]["examples"]:
+            variant = next(item for item in paper["resumeDemo"]["variants"] if item["id"] == example["variantId"])
             assert example["jobPosting"] == records[example["jobId"]]["text"]
             assert paper["city"] in example["renderedSystemPrompt"]
             assert paper["date"][:4] in example["renderedSystemPrompt"]
@@ -264,6 +278,21 @@ def test_additional_papers_have_their_own_scans_sources_and_completed_runs():
         ad_ids.extend(records)
     assert len(ad_ids) == len(set(ad_ids))
     assert "ProQuest" in bundle["newspapers"][1]["sourceNotice"]
+
+
+def test_saved_skill_counts_and_all_inline_combinations_are_inspected():
+    bundle = json.loads((WEBSITE / "data/newspapers.json").read_text())
+    for paper in bundle["newspapers"]:
+        variants = paper["resumeDemo"]["variants"]
+        assert paper["resumeDemo"]["inlineControls"] is True
+        assert {(v["settings"]["resumes"], v["settings"]["jobSkills"], v["settings"]["experience"]) for v in variants} == {
+            (n, skills, experience) for n in (2, 4) for skills in (2, 4) for experience in ("entry-level", "experienced")}
+        for variant in variants:
+            assert variant["inspectedJobSkillCount"] is True
+            assert len(variant["assignments"]) == 2
+            for template in variant["templates"]:
+                section = re.split(r"(?m)^JOB[- ]RELATED SKILLS:?\s*$", template["text"])[1]
+                assert len(re.findall(r"(?m)^- ", section)) == variant["settings"]["jobSkills"]
 
 
 @pytest.mark.skipif(not shutil.which("node"), reason="Node.js is required for the offline website JS tests")

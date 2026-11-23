@@ -1,8 +1,8 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import {readFile} from "node:fs/promises";
-import {CSV_COLUMNS, chooseRecord, csvForRecords, filterRecords, formatDate, normalizedBox, stateFromUrl, cropStyle, loadBundle, jobPreview, resumeDemo, savedResumeVariant, resumePromptText, resumeBlocks, resumeTextParts, DEMO_CANDIDATES, populateResumeExample, populationExamples, resumeTemplates, experimentExample, finalOutputRows, resultCsv, RESULT_COLUMNS} from "../../website/lib.mjs";
-import {syntheticExperiment, pairedVariant} from "./experiment-fixture.mjs";
+import {CSV_COLUMNS, chooseRecord, csvForRecords, filterRecords, formatDate, normalizedBox, stateFromUrl, cropStyle, loadBundle, jobPreview, resumeDemo, savedResumeVariant, resumePromptText, inlineResumeVariant, resumeBlocks, resumeTextParts, DEMO_CANDIDATES, populateResumeExample, populationExamples, resumeTemplates, experimentExample, finalOutputRows, resultCsv, RESULT_COLUMNS} from "../../website/lib.mjs";
+import {syntheticExperiment, pairedVariant, inlineVariants} from "./experiment-fixture.mjs";
 
 const bundle = JSON.parse(await readFile(new URL("../../website/data/archive-newspapers.json", import.meta.url), "utf8"));
 const papers = bundle.newspapers;
@@ -16,18 +16,20 @@ test("published papers each expose their own full pipeline without local assets"
   assert.equal(published.newspapers[0].records.length, 59);
   const jobIds = new Set(), requestIds = new Set(), templateIds = new Set();
   for (const paper of published.newspapers) {
-    assert.equal(finalOutputRows(paper).length, 2);
+    assert.equal(finalOutputRows(paper).length, 16);
     const url = `https://example.org/LLM_AuditKit/?paper=${paper.id}#results`;
     assert.deepEqual(stateFromUrl(url, published.newspapers), {paperId: paper.id, step: "results"});
     assert.ok(paper.imageSrc.startsWith("./assets/"));
     assert.equal(paper.featuredIds.length, 3);
     for (const record of paper.records) if (record.bbox) normalizedBox(paper, record);
     const demo = resumeDemo(paper);
-    assert.equal(demo.variants.length, 1);
+    assert.equal(demo.inlineControls, true);
+    assert.equal(demo.variants.length, 8);
     assert.ok(!jobIds.has(demo.jobId)); jobIds.add(demo.jobId);
     assert.ok(paper.featuredIds.includes(demo.jobId));
     for (const variant of demo.variants) {
-      assert.equal(resumeTemplates(variant).length, 2);
+      assert.equal(resumeTemplates(variant).length, variant.settings.resumes);
+      assert.equal(finalOutputRows(paper, variant.id).length, 2);
       assert.ok(variant.prompt.length > resumePromptText(variant).length);
       const example = experimentExample(paper, variant);
       assert.ok(example);
@@ -224,6 +226,30 @@ test("population uses explicit candidate/template IDs and never duplicates one t
     assert.equal(populationExamples(changed), null);
   }
   assert.equal(resumeTemplates(variant).length, 2);
+});
+
+test("inline settings resolve one complete saved combination and never invent outputs", () => {
+  const variants = inlineVariants("settings-test");
+  const paper = {...papers[0], resumeDemo: {jobId: papers[0].records[0].id, inlineControls: true, variants}};
+  paper.experimentDemo = syntheticExperiment(paper);
+  const demo = resumeDemo(paper);
+  assert.ok(demo);
+  for (const variant of variants) {
+    assert.equal(inlineResumeVariant(demo, variant.settings), variant);
+    assert.equal(resumeTemplates(variant).length, variant.settings.resumes);
+    assert.equal(populationExamples(variant).length, 2); // Two explicit assignments, even for four templates.
+    assert.equal(finalOutputRows(paper, variant.id).length, 2);
+    assert.ok(finalOutputRows(paper, variant.id).every(row => row.variant_id === variant.id));
+  }
+  assert.equal(finalOutputRows(paper).length, 16);
+  assert.deepEqual(finalOutputRows(paper, "unknown-combination"), []);
+  for (const settings of [{resumes: 3, jobSkills: 2, experience: "entry-level"}, {resumes: 2, jobSkills: "2", experience: "entry-level"}, {resumes: 2, jobSkills: 2, experience: "unknown"}]) {
+    assert.equal(inlineResumeVariant(demo, settings), null);
+  }
+  assert.equal(resumeDemo({...paper, resumeDemo: {...demo, variants: variants.slice(1)}}), null);
+  assert.equal(resumeDemo({...paper, resumeDemo: {...demo, variants: [...variants.slice(1), variants[1]]}}), null);
+  const broken = structuredClone(variants); broken[0].settings.resumes = 4;
+  assert.equal(resumeDemo({...paper, resumeDemo: {...demo, variants: broken}}), null);
 });
 
 test("experiment examples must match the exact prompt, job, template and ordered candidates", () => {

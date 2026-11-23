@@ -90,7 +90,28 @@ export function resumeDemo(paper) {
         || (variant.promptSummary !== undefined && (typeof variant.promptSummary !== "string" || !variant.promptSummary.trim()))) return null;
     ids.add(variant.id);
   }
+  if (demo.inlineControls === true) {
+    const keys = new Set();
+    for (const variant of demo.variants) {
+      const settings = variant.settings;
+      if (!validResumeSettings(settings) || resumeTemplates(variant).length !== settings.resumes) return null;
+      keys.add(JSON.stringify([settings.resumes, settings.jobSkills, settings.experience]));
+    }
+    if (demo.variants.length !== 8 || keys.size !== 8) return null;
+  }
   return {...demo, jobTitle: job.title};
+}
+
+function validResumeSettings(settings) {
+  return settings && [2, 4].includes(settings.resumes) && [2, 4].includes(settings.jobSkills)
+    && ["entry-level", "experienced"].includes(settings.experience);
+}
+
+export function inlineResumeVariant(demo, settings) {
+  if (!demo?.inlineControls || !validResumeSettings(settings)) return null;
+  const matches = demo.variants.filter(variant => variant.settings?.resumes === settings.resumes
+    && variant.settings?.jobSkills === settings.jobSkills && variant.settings?.experience === settings.experience);
+  return matches.length === 1 ? matches[0] : null;
 }
 
 export function cropStyle(paper, record) {
@@ -125,7 +146,7 @@ export function resumeTemplates(variant) {
 export function populationExamples(variant) {
   const templates = resumeTemplates(variant);
   const assignments = variant?.assignments;
-  if (templates.length !== DEMO_CANDIDATES.length || !Array.isArray(assignments)
+  if (templates.length < DEMO_CANDIDATES.length || !Array.isArray(assignments)
       || assignments.length !== DEMO_CANDIDATES.length || assignments.some(assignment => !assignment)
       || new Set(assignments.map(item => item.candidateId)).size !== DEMO_CANDIDATES.length
       || new Set(assignments.map(item => item.templateId)).size !== DEMO_CANDIDATES.length) return null;
@@ -180,13 +201,15 @@ export function experimentExample(paper, variant) {
   return {...example, prompt: demo.prompt};
 }
 
-export function finalOutputRows(paper) {
+export function finalOutputRows(paper, variantId) {
   const demo = resumeDemo(paper);
   if (!demo) return [];
-  const examples = demo.variants.map(variant => experimentExample(paper, variant));
+  const variants = variantId === undefined ? demo.variants : demo.variants.filter(variant => variant.id === variantId);
+  if (!variants.length) return [];
+  const examples = variants.map(variant => experimentExample(paper, variant));
   if (examples.some(example => !example)) return [];
   return examples.flatMap((example, presetIndex) => example.decisions.map((decision, index) => ({
-    preset: demo.variants[presetIndex].label,
+    preset: variants[presetIndex].label,
     candidate_name: example.candidates[index].name,
     decision: decision.invite ? 1 : 0, answer: decision.invite ? "Yes" : "No",
     logprob: decision.logprob, model: example.model, variant_id: example.variantId,

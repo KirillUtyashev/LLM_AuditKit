@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import {readFile} from "node:fs/promises";
-import {syntheticExperiment, pairedVariant} from "./experiment-fixture.mjs";
+import {syntheticExperiment, pairedVariant, inlineVariants} from "./experiment-fixture.mjs";
 
 class Element {
   constructor() {
@@ -18,6 +18,7 @@ class Element {
   getBoundingClientRect() {return {top: this.top};}
   showModal() {this.open = true;}
   close() {this.open = false;}
+  focus() {this.focused = true;}
   click() {this.clicked = true;}
   fire(name, value) {return this.events[name]?.({target: {value}});}
 }
@@ -61,6 +62,11 @@ test(`preview rendering with reveal support ${revealSupported}, failure ${Boolea
   secondDemo.resumeDemo.variants = secondDemo.resumeDemo.variants.slice(0, 1).map(variant => ({...variant, prompt: `Other paper full instructions: ${variant.prompt}`, promptSummary: "Other paper: a short prompt summary"}));
   secondDemo.experimentDemo = syntheticExperiment(secondDemo);
   bundle.newspapers.push(secondDemo);
+  const controlledPaper = structuredClone(secondDemo);
+  controlledPaper.id = "synthetic-inline-paper";
+  controlledPaper.resumeDemo = {jobId: controlledPaper.records[0].id, inlineControls: true, variants: inlineVariants()};
+  controlledPaper.experimentDemo = syntheticExperiment(controlledPaper);
+  bundle.newspapers.push(controlledPaper);
   const nodes = new Map([...html.matchAll(/id="([^"]+)"/g)].map(match => [match[1], new Element()]));
   const downloadLinks = [];
   const scroll = new Element();
@@ -199,7 +205,7 @@ test(`preview rendering with reveal support ${revealSupported}, failure ${Boolea
     assert.match(get("candidate-status").textContent, /Candidate 2: Jordan Taylor/);
     get("candidate-options").children[0].fire("click");
     assert.equal(qualifications(get("populated-document")), firstQualifications);
-    assert.match(get("generate-resume").title, /saved example/);
+    assert.match(get("generate-resume").title, /previously generated templates/);
     get("generate-resume").fire("click");
     assert.equal(get("resume-dialog").open, true);
     const blocks = get("resume-document").children;
@@ -431,6 +437,68 @@ test(`preview rendering with reveal support ${revealSupported}, failure ${Boolea
     assert.equal(get("variant-prompt").value, draft); // Drafts never leak to the second paper.
     assert.equal(get("generate-resume").disabled, true);
     assert.equal(fetches, 1);
+    get("paper-select").fire("change", controlledPaper.id);
+    assert.equal(get("interactive-prompt").hidden, false);
+    assert.equal(get("variant-prompt").hidden, true);
+    assert.equal(get("prompt-variants").hidden, true);
+    assert.equal(get("resume-count").value, "2");
+    assert.equal(get("job-skill-count").value, "2");
+    assert.equal(get("experience-level").value, "entry-level");
+    get("generate-resume").fire("click");
+    assert.equal(get("resume-template-options").children.length, 2);
+    get("job-skill-count").value = "4";
+    get("job-skill-count").fire("change", "4");
+    assert.equal(get("resume-dialog").open, false);
+    assert.equal(get("experiment-result").hidden, true);
+    assert.equal(get("variant-prompt").value, "Summary for controls-2-4-entry-level");
+    get("resume-count").value = "4";
+    get("resume-count").fire("change", "4");
+    get("experience-level").value = "experienced";
+    get("experience-level").fire("change", "experienced");
+    get("generate-resume").fire("click");
+    assert.equal(get("resume-template-options").children.length, 4);
+    get("resume-template-options").children[3].fire("click");
+    assert.match(resumeText(get("resume-document")), /Fourth distinct background/);
+    get("close-resume-dialog").fire("click");
+    assert.equal(get("candidate-options").children.length, 2);
+    assert.match(get("population-caption").textContent, /Two assigned templates/);
+    get("run-experiment").fire("click");
+    assert.match(get("experiment-explanation").textContent, /controls-4-4-experienced/);
+    assert.equal(get("final-output-rows").children.length, 2);
+    assert.equal(get("final-output-rows").children[0].children[0].textContent, "controls-4-4-experienced");
+    URL.createObjectURL = blob => {downloadBlob = blob; return createUrl(blob);};
+    try {get("download-results").fire("click");} finally {URL.createObjectURL = createUrl;}
+    const selectedCsv = await downloadBlob.text();
+    assert.ok(selectedCsv.includes('"controls-4-4-experienced"'));
+    assert.ok(!selectedCsv.includes('"controls-2-2-entry-level"'));
+    get("prompt-name").fire("click");
+    assert.equal(get("population-help").hidden, false);
+    assert.equal(get("prompt-name").attributes["aria-expanded"], "true");
+    get("interactive-prompt").events.keydown({key: "Escape"});
+    assert.equal(get("population-help").hidden, true);
+    assert.equal(get("prompt-name").focused, true);
+    get("prompt-address").fire("click");
+    get("go-to-population").fire("click");
+    assert.equal(new URL(globalThis.location.href).hash, "#population");
+    assert.equal(get("population-heading").focused, true);
+    get("paper-select").fire("change", secondDemo.id);
+    assert.equal(get("interactive-prompt").hidden, true);
+    assert.equal(get("variant-prompt").hidden, false);
+    assert.equal(get("experiment-result").hidden, true);
+    globalThis.location.href = `https://example.org/kit/?paper=${controlledPaper.id}#resumes`;
+    windowEvents.popstate();
+    assert.equal(get("resume-count").value, "4");
+    assert.equal(get("job-skill-count").value, "4");
+    assert.equal(get("experience-level").value, "experienced");
+    get("resume-count").value = "999";
+    get("resume-count").fire("change", "999");
+    assert.equal(get("generate-resume").disabled, true);
+    assert.equal(get("experiment-view").hidden, true);
+    assert.equal(get("results-view").hidden, true);
+    get("resume-count").value = "2";
+    get("resume-count").fire("change", "2");
+    assert.equal(get("generate-resume").disabled, false);
+    assert.equal(fetches, 1); // All supported choices are local saved examples.
     bundle.newspapers[0].resumeDemo.jobId = "hidden-job-2";
     globalThis.location.href = "https://example.org/kit/?paper=" + bundle.newspapers[0].id + "#resumes";
     windowEvents.popstate();

@@ -23,3 +23,16 @@ export function syntheticExperiment(paper) {
     model: "synthetic-test-model", provider: "test",
   }))};
 }
+
+export function inlineVariants(prefix = "controls") {
+  return [2, 4].flatMap(resumes => [2, 4].flatMap(jobSkills => ["entry-level", "experienced"].map(experience => {
+    const id = `${prefix}-${resumes}-${jobSkills}-${experience}`;
+    const variant = pairedVariant({id, label: id, prompt: `Full instructions for ${id}`,
+      promptSummary: `Summary for ${id}`, settings: {resumes, jobSkills, experience},
+      template: `{{name}}\n{{address}}\nBackground for ${id}`});
+    if (resumes === 4) variant.templates.push(
+      {id: `${id}-third`, text: `{{name}}\n{{address}}\nThird distinct background for ${id}`},
+      {id: `${id}-fourth`, text: `{{name}}\n{{address}}\nFourth distinct background for ${id}`});
+    return variant;
+  })));
+}

@@ -238,6 +238,60 @@ h2  {
 .prompt-editor {
   min-width:0
 }
+.interactive-prompt {
+  padding:22px 24px;
+  border:1px solid #e1e3e8;
+  border-radius:8px;
+  line-height:2;
+  color:#333844
+}
+.interactive-prompt p {
+  margin:0 0 12px
+}
+.interactive-prompt p:last-child {
+  margin-bottom:0
+}
+.inline-setting {
+  display:inline
+}
+.prompt-token,.placeholder-token {
+  font:inherit;
+  color:#4057a4;
+  background-color:#f0f3fc;
+  border:0;
+  border-bottom:1px dashed #9aaad6;
+  border-radius:3px;
+  padding:2px 6px;
+  cursor:pointer;
+  max-width:100%
+}
+.prompt-token {
+  appearance:none;
+  padding-right:22px;
+  background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='7'%3E%3Cpath d='m1 1 4 4 4-4' fill='none' stroke='%234057a4'/%3E%3C/svg%3E");
+  background-position:right 6px center;
+  background-repeat:no-repeat
+}
+.placeholder-token {
+  background-color:#f7f3e8;
+  border-bottom-color:#b8aa80;
+  color:#75632d
+}
+.population-help,.interactive-prompt .prompt-guidance {
+  font-size:.875rem;
+  line-height:1.5;
+  color:#656b76
+}
+.population-help {
+  margin:0 0 12px
+}
+.population-help button {
+  border:0;
+  padding:0;
+  text-decoration:underline;
+  text-underline-offset:3px;
+  background:transparent
+}
 #variant-prompt {
   display:block;
   box-sizing:border-box;

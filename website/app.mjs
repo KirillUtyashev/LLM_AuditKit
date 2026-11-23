@@ -1,9 +1,11 @@
-import {csvForRecords, jobPreview, cropStyle, stateFromUrl, loadBundle, resumeDemo, savedResumeVariant, resumePromptText, resumeBlocks, resumeTextParts, DEMO_CANDIDATES, populationExamples, resumeTemplates, experimentExample, finalOutputRows, resultCsv} from "./lib.mjs?v=year-prompts-20";
+import {csvForRecords, jobPreview, cropStyle, stateFromUrl, loadBundle, resumeDemo, savedResumeVariant, resumePromptText, inlineResumeVariant, resumeBlocks, resumeTextParts, DEMO_CANDIDATES, populationExamples, resumeTemplates, experimentExample, finalOutputRows, resultCsv} from "./lib.mjs?v=inline-controls-21";
 
 const $ = id => document.getElementById(id);
 const state = {papers: [], paperId: null, step: "archive", query: "", variantId: null, candidateId: DEMO_CANDIDATES[0].id};
 const promptDrafts = new Map();
 const experimentDrafts = new Map();
+const selectedSettings = new Map();
+let placeholderTrigger = null;
 const paper = () => state.papers.find(item => item.id === state.paperId);
 const draftKey = (demo, variantId) => JSON.stringify([state.paperId, demo.jobId, variantId]);
 const experimentDraftKey = () => JSON.stringify([state.paperId, paper().resumeDemo?.jobId]);
@@ -33,6 +35,9 @@ function renderResumes() {
   $("resume-document").replaceChildren();
   $("resume-template-options").replaceChildren();
   const demo = resumeDemo(paper());
+  closePopulationHelp();
+  $("interactive-prompt").hidden = !demo?.inlineControls;
+  $("variant-prompt").hidden = Boolean(demo?.inlineControls);
   $("resume-view").hidden = !demo;
   $("resume-connector").hidden = !demo;
   if (!demo) {
@@ -64,7 +69,8 @@ function renderResumes() {
     $("resume-source-image").src = "";
     $("resume-source-image").alt = "";
   }
-  $("prompt-variants").hidden = demo.variants.length < 2;
+  $("prompt-variants").hidden = Boolean(demo.inlineControls) || demo.variants.length < 2;
+  if (demo.inlineControls) state.variantId = selectedSettings.get(JSON.stringify([state.paperId, demo.jobId])) ?? null;
   $("prompt-variants").replaceChildren(...demo.variants.map(variant => {
     const button = document.createElement("button");
     button.type = "button"; button.className = "variant-button";
@@ -76,8 +82,17 @@ function renderResumes() {
 }
 
 function renderVariant(demo) {
-  const variant = demo.variants.find(item => item.id === state.variantId) || demo.variants[0];
+  const key = JSON.stringify([state.paperId, demo.jobId]);
+  const variant = demo.variants.find(item => item.id === state.variantId)
+    || (demo.inlineControls && demo.variants.find(item => item.id === selectedSettings.get(key))) || demo.variants[0];
   state.variantId = variant.id;
+  if (demo.inlineControls) {
+    selectedSettings.set(key, variant.id);
+    $("resume-count").value = String(variant.settings.resumes);
+    $("job-skill-count").value = String(variant.settings.jobSkills);
+    $("experience-level").value = variant.settings.experience;
+    $("prompt-location").textContent = `${paper().city}, ${paper().date.slice(0, 4)}`;
+  }
   for (const button of $("prompt-variants").children) {
     button.setAttribute("aria-pressed", String(button.dataset.variantId === variant.id));
   }
@@ -85,10 +100,30 @@ function renderVariant(demo) {
   updateResumeButton(demo);
 }
 
+function changeInlineSettings() {
+  const demo = resumeDemo(paper());
+  const variant = inlineResumeVariant(demo, {resumes: Number($("resume-count").value),
+    jobSkills: Number($("job-skill-count").value), experience: $("experience-level").value});
+  closePopulationHelp();
+  $("resume-dialog").close(); $("resume-document").replaceChildren(); $("resume-template-options").replaceChildren();
+  state.candidateId = DEMO_CANDIDATES[0].id;
+  if (!variant) {
+    state.variantId = null; $("variant-prompt").value = ""; $("generate-resume").disabled = true;
+    renderPopulation(null); return;
+  }
+  state.variantId = variant.id; renderVariant(demo);
+}
+
+function closePopulationHelp() {
+  $("population-help").hidden = true;
+  $("prompt-name").setAttribute("aria-expanded", "false");
+  $("prompt-address").setAttribute("aria-expanded", "false");
+}
+
 function updateResumeButton(demo) {
   const saved = savedResumeVariant(demo, state.variantId, $("variant-prompt").value);
   $("generate-resume").disabled = !saved;
-  $("generate-resume").title = saved ? "Open the saved example for this prompt; no live generation."
+  $("generate-resume").title = saved ? "Inspect previously generated templates for these settings; no live generation."
     : "Saved examples are available for the original prompt summary only; live generation is not connected.";
   renderPopulation(saved);
 }
@@ -118,6 +153,10 @@ function showResume() {
 
 function renderPopulation(saved) {
   const available = populationExamples(saved) !== null;
+  $("go-to-population").disabled = !available;
+  $("population-caption").textContent = saved?.templates?.length > DEMO_CANDIDATES.length
+    ? "Two assigned templates become candidates. The others remain available to inspect."
+    : "Different resumes. Ready for review.";
   $("population-view").hidden = !available;
   $("population-connector").hidden = !available;
   renderExperiment(available ? saved : null);
@@ -201,7 +240,7 @@ function updateExperimentButton() {
 }
 
 function renderFinalOutput(enabled) {
-  const rows = enabled ? finalOutputRows(paper()) : [];
+  const rows = enabled ? currentResultRows() : [];
   $("results-view").hidden = !rows.length;
   $("results-connector").hidden = !rows.length;
   $("download-results").disabled = !rows.length;
@@ -222,6 +261,10 @@ function renderFinalOutput(enabled) {
     state.step = !$("experiment-view").hidden ? "experiment" : !$("population-view").hidden ? "population" : !$("resume-view").hidden ? "resumes" : "archive";
     syncUrl();
   }
+}
+
+function currentResultRows() {
+  return finalOutputRows(paper(), resumeDemo(paper())?.inlineControls ? state.variantId : undefined);
 }
 
 function showExperimentResult() {
@@ -408,6 +451,24 @@ async function start() {
     }
   });
   $("generate-resume").addEventListener("click", showResume);
+  for (const id of ["resume-count", "job-skill-count", "experience-level"])
+    $(id).addEventListener("change", changeInlineSettings);
+  for (const id of ["prompt-name", "prompt-address"]) $(id).addEventListener("click", () => {
+    placeholderTrigger = $(id);
+    const open = $("population-help").hidden;
+    closePopulationHelp(); $("population-help").hidden = !open;
+    if (open) $(id).setAttribute("aria-expanded", "true");
+  });
+  $("interactive-prompt").addEventListener("keydown", event => {
+    if (event.key === "Escape" && !$("population-help").hidden) {
+      closePopulationHelp(); placeholderTrigger?.focus();
+    }
+  });
+  $("go-to-population").addEventListener("click", () => {
+    if ($("population-view").hidden) return;
+    closePopulationHelp(); state.step = "population"; syncUrl(true); scrollToStep();
+    $("population-heading").focus({preventScroll: true});
+  });
   $("experiment-prompt").addEventListener("input", event => {
     experimentDrafts.set(experimentDraftKey(), event.target.value); updateExperimentButton();
   });
@@ -415,7 +476,7 @@ async function start() {
   $("download-results").addEventListener("click", () => {
     const example = currentExperiment();
     if (!example || $("experiment-prompt").value !== example.prompt) return;
-    const rows = finalOutputRows(paper());
+    const rows = currentResultRows();
     if (!rows.length) return;
     const blob = new Blob([resultCsv(rows)], {type: "text/csv;charset=utf-8"});
     const url = URL.createObjectURL(blob); const link = document.createElement("a");

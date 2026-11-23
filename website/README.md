@@ -48,9 +48,11 @@ Only the website directory is served, never the repository root or its credentia
 ## Published newspaper examples
 
 The selector offers **Boston, 1990**, **Chicago, 1970**, and **Birmingham, 2000**.
-Each has its own scan and actual AuditKit OCR output. Each also has one matching
-year-specific job-agency prompt, two distinct generated resume templates, and a
-real evaluation of that pair. Switching papers changes the complete
+Each has its own scan and actual AuditKit OCR output. Each also has a matching
+year-specific job-agency prompt with eight saved setting combinations: 2/4
+templates, 2/4 job-related skills, and entry-level/experienced backgrounds.
+Every combination has genuine generated templates and a real evaluation of two
+explicitly assigned candidates. Switching papers changes the complete
 walkthrough, not just its opening image. Candidate names/addresses remain the
 same fixed fictional demonstration profiles; work histories and model outcomes
 belong to each newspaper's selected job.
@@ -65,10 +67,10 @@ The original Chicago ProQuest reproduction notice is retained. See
 [asset provenance](assets/README.md); third-party material is not MIT-licensed.
 
 The additional runs use the same generation/evaluation settings as Boston:
-AuditKit structured parts, two templates per prompt, gpt-5.5 medium generation,
+AuditKit structured parts, two or four templates per prompt, gpt-5.5 medium generation,
 and gpt-4o-2024-08-06 evaluation with temperature 0 and log probabilities.
 Maintainer-local YAML, checkpoints and curation commands are under ignored
-`website/local/year-prompts-v1/` and `website/local/year_prompt_demo.py`.
+`website/local/inline-controls-v1/` and `website/local/inline_controls_demo.py`.
 Earlier OCR/style runs remain under their existing ignored directories.
 The public site needs none of those local files and
 makes no live model requests. These runs use EDSL's own configured local cache,
@@ -112,16 +114,24 @@ Continue scrolling below the jobs, or open <http://127.0.0.1:8765/#resumes>.
 The Boston example uses the Administrative Assistant ad and the paper's 1990
 job-agency generation prompt. Chicago uses `prompt_1970`; Birmingham 2000 uses
 the paper's `prompt_2001` function, which also covers 2000–2002.
-The source posting image is on the left. The editable `Prompt summary` on the
-right shows only the gist, not the full instructions or source posting. One
-prompt is configured per paper, so the old style buttons are hidden. Drafts
-are scoped to paper/job/prompt and reset on page reload. For an unchanged
-summary, `Generate resume` opens the two jointly generated templates as typeset documents with
+The source posting image is on the left. On the right, `Prompt summary` embeds
+three highlighted native dropdowns directly in its sentences: resume count,
+job-related skill count and experience. Clicking a phrase opens its menu;
+keyboard selection works without a custom menu implementation. The old style
+buttons and free-text editor are hidden for these controlled examples.
+Choices are remembered independently per paper/job until reload. The summary
+shows the gist, not the full instructions. `Inspect templates` opens the selected
+combination's two or four jointly generated templates as typeset documents with
 serif text, centered contact placeholders and restrained section headings.
-Small `Template 1` / `Template 2` buttons switch the preview. Each template has
+Small `Template 1` … `Template N` buttons switch the preview. Each template has
 a distinct fictional background, not just a different name. The dialog is
-explicitly labeled as a saved example. Edited summaries or prompts
-without saved output disable the button: this static demo does not run inference.
+explicitly labeled as a saved example. Invalid or unavailable settings cannot
+show another combination's output. This static demo does not run inference.
+Names and addresses have differently highlighted buttons: clicking explains
+that they are filled during population and offers a link to that next step.
+Escape dismisses the explanation and restores focus to its trigger.
+Switching settings clears open documents and model responses, then updates
+population, evaluation and the final table/CSV to the exact saved selection.
 Highlighted placeholders explain on hover or keyboard focus that candidate
 details are intentionally filled in next; Escape dismisses the explanation.
 The UI uses plain `resume` without accents.
@@ -131,15 +141,16 @@ bump all three together when changing their DOM/data contract. Local JSON is
 revalidated on reload. Startup rendering errors show a visible reload message
 instead of leaving empty resume panels.
 
-Paired outputs were generated through AuditKit's template-generation API with
-`templates_per_scenario: 2` and
+Saved outputs were generated through AuditKit's template-generation API with
+`templates_per_scenario: 2` or `4` and
 shared inference using gpt-5.5, medium reasoning, and structured parts mode.
 Name and address remain literal placeholders for the later population stage.
 The source is `jobs_to_experiment/prompts.py` plus the job-agency persona from
 `jobs_to_experiment/resume_creation.py`, pinned reference revision
 `c9391854ea55806ec252625cd2f48fb9edb156cd`.
-The year-specific content guidance is retained, but this demo uses two templates
-instead of four, structured parts, and only canonical name/address placeholders.
+The year-specific content guidance is retained, but explicit control settings
+override template/skill counts and entry-level versus experienced backgrounds.
+The demo uses structured parts and only canonical name/address placeholders.
 Dates and school details formerly controlled by other paper placeholders are
 generated example background here. SSNs are omitted, phone numbers use reserved
 example ranges, and anachronistic job-website references are omitted from the
@@ -149,13 +160,18 @@ Full generation user/system prompts, reference path/function/revision and the
 adaptation list are retained in each public saved variant; `promptSummary` is
 separate presentation text. Evaluation matching uses the full generation inputs,
 never the summary. Editing the summary cannot submit a new model request.
+Template count is schema-constrained; skill count and experience are prompt
+guidance, not general package guarantees. Job-related skill bullet counts were
+checked for the saved examples before publication. Each complete combination
+was actually generated, not assembled by trimming or duplicating another resume.
 Generation commands below are maintainer-local: the ignored run artifacts are
 not included in a fresh checkout and are not needed to view the published demo.
 YAML settings, CSV checkpoints and source snapshots stay under
-`website/local/year-prompts-v1/`. To explicitly regenerate pending Boston outputs (paid):
+`website/local/inline-controls-v1/`. Earlier year-prompt runs remain preserved.
+To explicitly generate pending Boston setting combinations (paid):
 
 ```bash
-EDSL_DATABASE_PATH=sqlite:///website/local/year-prompts-v1/boston-cache.db PYTHONPATH=src .venv/bin/python website/local/year_prompt_demo.py boston-1990 generate
+EDSL_DATABASE_PATH=sqlite:///website/local/inline-controls-v1/boston-cache.db PYTHONPATH=src .venv/bin/python website/local/inline_controls_demo.py boston-1990 generate
 ```
 
 The browser makes no generation requests. Each saved output retains its real
@@ -169,15 +185,18 @@ includes the saved examples; other local research artifacts are not published.
 Scroll below the editor or open <http://127.0.0.1:8765/#population>.
 Two explicitly synthetic profiles fill name and address in their own assigned
 templates. Stable candidate IDs map to content-derived template IDs; no template
-is reused for both. Candidate buttons switch the document, including its distinct
+is reused for both. For four-template generation, exactly two are explicitly
+assigned for this paired hiring demonstration; all four remain inspectable.
+A caption makes this distinction visible. Candidate buttons switch the document, including its distinct
 generated work history. A short highlight marks the populated personal details.
 The prose within each original template stays unchanged. Motion is disabled for
 reduced-motion preferences. This is not a controlled same-qualification comparison.
 
 These are fixed local presentation examples, not the paper's sampling procedure
 or research assignments. No inference or extra fetch runs when switching.
-Editing a prompt summary hides the filled example until the original summary is
-restored. Saved templates are never modified; unsupported placeholders
+Selecting unsupported settings hides downstream output rather than reusing a
+stale result. Legacy free-text summaries still disable playback when edited.
+Saved templates are never modified; unsupported placeholders
 are not silently left unfilled. Bundles without saved resume outputs hide this
 optional section; the published Boston bundle includes the complete examples.
 
@@ -189,18 +208,18 @@ reveals the saved interview decisions and original model explanation for the
 unchanged prompt. Editing the hiring prompt disables playback and clears the
 result; this static site cannot run a new model request.
 
-Each newspaper's new resume pair was actually run through `ExperimentRunner`
+Each newspaper's eight selected resume pairs were actually run through `ExperimentRunner`
 and shared inference with `gpt-4o-2024-08-06`, temperature 0 and log probabilities.
 These small synthetic examples are not evidence
 of bias or a replication of the paper. No browser inference runs.
 
 YAML, fixed source snapshots, prompt/persona files and CSV checkpoints live under
-ignored `website/local/year-prompts-v1/<paper>/experiment/`. Earlier one-template
+ignored `website/local/inline-controls-v1/<paper>/experiment/`. Earlier one-template
 and style-comparison runs remain untouched in their old directories and are not
 reused for the new resumes. To explicitly execute a pending Boston evaluation (paid):
 
 ```bash
-EDSL_DATABASE_PATH=sqlite:///website/local/year-prompts-v1/boston-cache.db PYTHONPATH=src .venv/bin/python website/local/year_prompt_demo.py boston-1990 experiments
+EDSL_DATABASE_PATH=sqlite:///website/local/inline-controls-v1/boston-cache.db PYTHONPATH=src .venv/bin/python website/local/inline_controls_demo.py boston-1990 experiments
 ```
 
 Exported examples preserve exact input bindings, original rendered prompts,
@@ -212,7 +231,7 @@ is public; other research runs and local directories remain excluded.
 ## From decisions to data
 
 Open <http://127.0.0.1:8765/#results> or continue scrolling. The final table shows
-the selected newspaper's two candidate evaluations: candidate, decision,
+the selected newspaper and settings' two candidate evaluations: candidate, decision,
 emitted-answer logprob and model. `Download CSV` preserves full-precision logprobs,
 numeric decisions, explanations and stable candidate/template/request/model IDs.
 The displayed logprob is rounded; it is not a calibrated hiring probability.
