@@ -6,8 +6,8 @@
 <meta name="description" content="Follow a newspaper scan as it becomes a dataset of job advertisements.">
 <title>LLM AuditKit · Pipeline</title>
 <link rel="icon" href="./assets/mark.svg" type="image/svg+xml">
-<link rel="stylesheet" href="./styles.css?v=extraction-labels-18">
-<script type="module" src="./app.mjs?v=extraction-labels-18"></script>
+<link rel="stylesheet" href="./styles.css?v=extracted-text-19">
+<script type="module" src="./app.mjs?v=extracted-text-19"></script>
 </head>
 <body>
 <a class="skip-link" href="#main">Skip to pipeline</a>
@@ -24,8 +24,9 @@
 </section>
 <div class="flow-connector" aria-hidden="true"><span class="flow-line"></span></div>
 <section id="data-view" class="flow-stage reveal" aria-labelledby="jobs-heading" hidden>
-<div class="stage-heading"><h2 id="jobs-heading" tabindex="-1">A scan becomes rows.</h2><p class="artifact-label"><span>Output</span><span aria-hidden="true">·</span>Job postings</p></div>
-<div class="jobs-toolbar"><label><span class="sr-only">Search all jobs</span><input id="search-input" type="search" placeholder="Search all jobs"></label><button id="download-button" type="button" title="Download all matching jobs, not just the three previews">Download CSV</button></div>
+<div class="stage-heading"><h2 id="jobs-heading" tabindex="-1">A scan becomes rows.</h2><p class="artifact-label"><span>Output</span><span aria-hidden="true">·</span>Extracted text</p></div>
+<p class="extraction-note">Each posting is stored as text. Scan excerpts are shown for context—click one to read the extracted text.</p>
+<div class="jobs-toolbar"><label><span class="sr-only">Search all jobs</span><input id="search-input" type="search" placeholder="Search all jobs"></label><button id="download-button" type="button" title="Download all matching job postings as CSV, not just the three previews">Download job text</button></div>
 <p id="results-summary" class="quiet" aria-live="polite"></p>
 <div id="job-cards" class="jobs-view"></div>
 <p id="empty-state" hidden>No jobs match your search.</p>

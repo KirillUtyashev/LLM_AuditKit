@@ -74,13 +74,27 @@ def test_extraction_labels_identify_input_and_output_without_labeling_later_stag
     scan = html.split('id="archive-view"', 1)[1].split("</section>", 1)[0]
     jobs = html.split('id="data-view"', 1)[1].split("</section>", 1)[0]
     assert '<span>Input</span><span aria-hidden="true">·</span>Newspaper scan' in scan
-    assert '<span>Output</span><span aria-hidden="true">·</span>Job postings' in jobs
+    assert '<span>Output</span><span aria-hidden="true">·</span>Extracted text' in jobs
     assert scan.index('class="artifact-label"') < scan.index('id="open-scan"')
     assert jobs.index('class="artifact-label"') < jobs.index('id="job-cards"')
     assert html.count('class="artifact-label"') == 2
     assert "Advertisements from the page." not in jobs
     css = (WEBSITE / "styles.css").read_text()
     assert "flex-wrap:wrap" in re.search(r"\.stage-heading \.artifact-label\s*\{([^}]+)\}", css).group(1)
+
+
+def test_job_output_explains_text_and_context_images_without_changing_csv_export():
+    html = (WEBSITE / "index.html").read_text()
+    jobs = html.split('id="data-view"', 1)[1].split("</section>", 1)[0]
+    note = "Each posting is stored as text. Scan excerpts are shown for context—click one to read the extracted text."
+    assert note in jobs
+    assert jobs.index(note) < jobs.index('id="job-cards"')
+    button = re.search(r'<button id="download-button"([^>]+)>([^<]+)</button>', jobs)
+    assert button.group(2) == "Download job text"
+    assert "as CSV" in button.group(1) and "all matching" in button.group(1)
+    assert 'id="job-cards" class="jobs-view"' in jobs
+    # The later candidate-results download keeps its own CSV label.
+    assert '>Download CSV</button>' in html.split('id="results-view"', 1)[1]
 
 
 def test_changed_resume_assets_have_matching_cache_versions():

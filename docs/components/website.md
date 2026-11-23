@@ -12,8 +12,11 @@ and synthetic template-population, saved experiment and candidate-output example
 in normal vertical document flow.
 The city/year selector remains above the original large newspaper preview.
 The extraction section alone has understated artifact labels beside its headings:
-`Input · Newspaper scan` and `Output · Job postings`. On narrow screens these
+`Input · Newspaper scan` and `Output · Extracted text`. On narrow screens these
 sit below the headings; no additional panels or labels on later stages are added.
+A short note explains that postings are stored as text and scan excerpts provide
+context; clicking one reads the extracted text. `Download job text` still exports
+all matching postings as CSV. The later candidate-results CSV label is unchanged.
 Enlarging it displays the complete newspaper page. The jobs section below shows
 at most three job previews in desktop columns (stacked on mobile), while search
 always considers every available record for the selected newspaper.
