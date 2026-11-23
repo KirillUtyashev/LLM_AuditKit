@@ -7,21 +7,37 @@ import {syntheticExperiment, pairedVariant} from "./experiment-fixture.mjs";
 const bundle = JSON.parse(await readFile(new URL("../../website/data/archive-newspapers.json", import.meta.url), "utf8"));
 const papers = bundle.newspapers;
 
-test("published Boston bundle exposes the full reviewed pipeline without local assets", async () => {
+test("published papers each expose their own full pipeline without local assets", async () => {
   const published = JSON.parse(await readFile(new URL("../../website/data/newspapers.json", import.meta.url), "utf8"));
   assert.equal(published.mode, "saved-auditkit-pipeline-showcase");
   assert.equal(published.publication.maintainerApproved, true);
-  assert.equal(published.newspapers.length, 1);
-  const paper = published.newspapers[0];
-  assert.equal(paper.city, "Boston");
-  assert.equal(paper.records.length, 59);
-  assert.equal(finalOutputRows(paper).length, 6);
-  assert.equal(stateFromUrl("https://example.org/LLM_AuditKit/#results", [paper]).step, "results");
-  assert.ok(paper.imageSrc.startsWith("./assets/"));
-  for (const record of paper.records) normalizedBox(paper, record);
-  for (const variant of resumeDemo(paper).variants) {
-    assert.equal(resumeTemplates(variant).length, 2);
-    assert.ok(experimentExample(paper, variant));
+  assert.deepEqual(published.newspapers.map(paper => [paper.city, paper.date.slice(0, 4)]),
+    [["Boston", "1990"], ["Chicago", "1970"], ["Birmingham", "2000"]]);
+  assert.equal(published.newspapers[0].records.length, 59);
+  const jobIds = new Set(), requestIds = new Set(), templateIds = new Set();
+  for (const paper of published.newspapers) {
+    assert.equal(finalOutputRows(paper).length, 6);
+    const url = `https://example.org/LLM_AuditKit/?paper=${paper.id}#results`;
+    assert.deepEqual(stateFromUrl(url, published.newspapers), {paperId: paper.id, step: "results"});
+    assert.ok(paper.imageSrc.startsWith("./assets/"));
+    assert.equal(paper.featuredIds.length, 3);
+    for (const record of paper.records) if (record.bbox) normalizedBox(paper, record);
+    const demo = resumeDemo(paper);
+    assert.ok(!jobIds.has(demo.jobId)); jobIds.add(demo.jobId);
+    assert.ok(paper.featuredIds.includes(demo.jobId));
+    for (const variant of demo.variants) {
+      assert.equal(resumeTemplates(variant).length, 2);
+      const example = experimentExample(paper, variant);
+      assert.ok(example);
+      assert.ok(!requestIds.has(example.requestId)); requestIds.add(example.requestId);
+      assert.ok(example.renderedSystemPrompt.includes(paper.city));
+      assert.ok(example.renderedSystemPrompt.includes(paper.date.slice(0, 4)));
+      for (const template of variant.templates) {
+        assert.ok(!templateIds.has(template.id)); templateIds.add(template.id);
+      }
+    }
+    const otherPaper = published.newspapers.find(other => other.id !== paper.id);
+    assert.equal(experimentExample({...paper, experimentDemo: otherPaper.experimentDemo}, demo.variants[0]), null);
   }
   assert.ok(!JSON.stringify(published).includes("./local/"));
 });

@@ -206,6 +206,26 @@ def test_public_boston_scan_and_demo_are_explicitly_approved_and_self_contained(
     assert not re.search(r"/Users/|/var/folders/|\.\/local/|BEGIN [A-Z ]*PRIVATE KEY|AIza[0-9A-Za-z_-]{25,}|sk-(?:proj-)?[A-Za-z0-9_-]{25,}", text)
 
 
+def test_additional_papers_have_their_own_scans_sources_and_completed_runs():
+    bundle = json.loads((WEBSITE / "data/newspapers.json").read_text())
+    assert [(paper["city"], paper["date"][:4]) for paper in bundle["newspapers"]] == [
+        ("Boston", "1990"), ("Chicago", "1970"), ("Birmingham", "2000")]
+    ad_ids = []
+    for paper in bundle["newspapers"]:
+        assert (WEBSITE / paper["imageSrc"]).read_bytes()[:2] == b"\xff\xd8"
+        assert len(set(paper["featuredIds"])) == 3
+        records = {record["id"]: record for record in paper["records"]}
+        assert all(records[ad_id].get("bbox") for ad_id in paper["featuredIds"])
+        assert len(paper["resumeDemo"]["variants"]) == len(paper["experimentDemo"]["examples"]) == 3
+        for example in paper["experimentDemo"]["examples"]:
+            assert example["jobPosting"] == records[example["jobId"]]["text"]
+            assert paper["city"] in example["renderedSystemPrompt"]
+            assert paper["date"][:4] in example["renderedSystemPrompt"]
+        ad_ids.extend(records)
+    assert len(ad_ids) == len(set(ad_ids))
+    assert "ProQuest" in bundle["newspapers"][1]["sourceNotice"]
+
+
 @pytest.mark.skipif(not shutil.which("node"), reason="Node.js is required for the offline website JS tests")
 def test_offline_javascript_website_helpers():
     result = subprocess.run(["node", "--test", *map(str, sorted((ROOT / "tests/website").glob("*.test.mjs")))],

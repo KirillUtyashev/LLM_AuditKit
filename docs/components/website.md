@@ -17,7 +17,11 @@ always considers every available record for the selected newspaper.
 Clearing search restores the explicit `featuredIds` order, falling back to the
 bundle's order when absent. Counts show total matches and previews shown.
 Reviewed crops preserve their complete aspect ratios at compact sizes.
-The Boston bundle includes source-image areas for all 59 results.
+The public selector includes Boston 1990 (59 OCR ads), Chicago 1970 (118), and
+Birmingham 2000 (86). Each paper has independent generation and evaluation
+examples bound to one of its own ads; switching never substitutes Boston results.
+Chicago and Birmingham dates are visible on the scans; Birmingham is 2000, not
+2001. The Boston bundle includes source-image areas for all 59 results.
 Six regions were previously located manually. The remainder were matched from
 saved Vision word coordinates and adjusted locally; `cropMethod` distinguishes
 these approximate previews. Hover text and alt text identify approximate areas,
@@ -195,12 +199,15 @@ validated research comparison or hiring recommendation.
 
 ## Data boundary
 
-The default `website/data/newspapers.json` and Boston image under
-`website/assets/` are the maintainer-approved public display copy of the full
-Boston demo: 59 saved OCR ads, six fictional resume templates and three real
-saved model evaluations. Public sharing was explicitly approved on 19 November
-2026. Third-party newspaper content is not relicensed as MIT, and the source
-date remains filename-inferred. The earlier public archive excerpt bundle is
+The default `website/data/newspapers.json` and three newspaper images under
+`website/assets/` are the maintainer-selected public display copies. Each has
+its own saved OCR ads, six fictional resume templates and three real saved model
+evaluations. Boston sharing was explicitly approved on 19 November 2026;
+Chicago 1970 and Birmingham 2000 were requested as additions on 22 November.
+Third-party newspaper content is not relicensed as MIT. Chicago's ProQuest
+reproduction notice is preserved; dates for Chicago and Birmingham are visible
+on the scans, while Boston's remains filename-inferred. Source notices are
+recorded in the data and asset README. The earlier public archive excerpt bundle is
 retained as `website/data/archive-newspapers.json` for tests and source credits;
 it is not the deployed default.
 
@@ -218,7 +225,7 @@ Crop locations remain manually located or approximate, and the filename-derived 
 The original manual transcriptions are retained locally for comparison.
 
 Unapproved research data and credentials must not enter the Pages artifact.
-Only the approved display copy is tracked; the workflow rejects `website/local`
+Only the selected display copies are tracked; the workflow rejects `website/local`
 and publishes only the static folder from main or the explicit showcase branch.
 This allows a collaborator preview without merging unreviewed code into main.
 Local preview commands do not deploy. See the [website README](../../website/README.md)

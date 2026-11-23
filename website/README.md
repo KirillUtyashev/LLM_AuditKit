@@ -17,8 +17,8 @@ down to the jobs. Search the jobs, inspect their source excerpts, or download th
 filtered CSV. Source notes and raw OCR remain in the data, not in a UI accordion.
 The stages stay in the document, without tabs or stage-navigation controls.
 The newspaper remains one large preview, with full-page enlargement and zoom.
-Search covers every available job for the selected newspaper (59 in the local
-Boston example), but displays at most three matches side by side on desktop,
+Search covers every available job for the selected newspaper (59 Boston,
+118 Chicago, or 86 Birmingham ads), but displays at most three matches side by side on desktop,
 stacked on mobile. Clearing search restores the three featured images.
 The result count shows the full match count, not just the previews.
 CSV download exports all matching jobs, not only the three shown.
@@ -39,9 +39,42 @@ the viewport, with reduced-motion and no-animation-API fallbacks.
 
 Only the website directory is served, never the repository root or its credentials.
 
-## Published Boston 1990 example
+## Published newspaper examples
 
-The public `website/data/newspapers.json` and
+The selector offers **Boston, 1990**, **Chicago, 1970**, and **Birmingham, 2000**.
+Each has its own scan and actual AuditKit OCR output. Each also has three saved
+prompt variants, two distinct generated resume templates per variant, and three
+real evaluations of those resume pairs. Switching papers changes the complete
+walkthrough, not just its opening image. Candidate names/addresses remain the
+same fixed fictional demonstration profiles; work histories and model outcomes
+belong to each newspaper's selected job.
+
+Chicago uses the *Chicago Tribune*, 31 May 1970, page D8. Birmingham uses
+*The Birmingham News*, 2 April 2000, page 4G—not 2001. Both dates are visible
+on their scans. Their resume examples use the hospital Stationary Engineer and
+Payroll Specialist ads respectively. Three featured source regions per paper
+were located for display; other crops are approximate OCR-text alignments.
+OCR can omit, split or merge material; these are not verified complete transcripts.
+The original Chicago ProQuest reproduction notice is retained. See
+[asset provenance](assets/README.md); third-party material is not MIT-licensed.
+
+The additional runs use the same generation/evaluation settings as Boston:
+AuditKit structured parts, two templates per preset, gpt-5.5 medium generation,
+and gpt-4o-2024-08-06 evaluation with temperature 0 and log probabilities.
+Maintainer-local YAML, checkpoints and curation commands are under ignored
+`website/local/chicago-1970/`, `website/local/birmingham-2000/`, and
+`website/local/extend_demo.py`. The public site needs none of those files and
+makes no live model requests. These runs use EDSL's own configured local cache,
+not a website-side inference cache.
+
+Birmingham's final question explicitly requests a JSON object rather than a
+bullet list. Its earlier malformed-response run is preserved locally; the
+published examples come from a new prompt/run with fresh checkpoints, not an
+edited or relabeled model answer.
+
+### Boston 1990
+
+The Boston entry in public `website/data/newspapers.json` and
 `website/assets/boston-1990-08-05.jpg` contain the maintainer-approved Boston
 scan and all 59 saved pipeline results, with the full resume/experiment flow.
 On loopback hosts only, an optional ignored `website/local/newspapers.json`
@@ -65,7 +98,7 @@ The maintainer explicitly approved public sharing of the Boston scan and its
 saved synthetic resumes/results on 19 November 2026. Only the reviewed display
 bundle and scan were copied into the public assets. The rest of `website/local/`
 stays ignored: do not force-add research directories, raw checkpoints or secrets.
-A fresh checkout now contains the complete Boston demonstration.
+A fresh checkout contains all three complete demonstrations.
 
 ## Resume prompt demo
 
@@ -138,7 +171,7 @@ reveals the saved interview decisions and original model explanation for the
 unchanged prompt. Editing the hiring prompt disables playback and clears the
 result; this static site cannot run a new model request.
 
-The three local preset examples were actually run through `ExperimentRunner`
+Each newspaper's three preset examples were actually run through `ExperimentRunner`
 and shared inference with `gpt-4o-2024-08-06`, temperature 0 and log probabilities.
 These small synthetic examples are not evidence
 of bias or a replication of the paper. No browser inference runs.
@@ -163,7 +196,7 @@ is public; other research runs and local directories remain excluded.
 ## From decisions to data
 
 Open <http://127.0.0.1:8765/#results> or continue scrolling. The final table shows
-the six candidate evaluations across the three presets: candidate, decision,
+the selected newspaper's six candidate evaluations across the three presets: candidate, decision,
 emitted-answer logprob and model. `Download CSV` preserves full-precision logprobs,
 numeric decisions, explanations and stable candidate/template/request/model IDs.
 The displayed logprob is rounded; it is not a calibrated hiring probability.
